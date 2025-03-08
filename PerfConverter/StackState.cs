@@ -2,20 +2,47 @@
 
 public class ThreadState
 {
-    class StackInfo
+    public class StackInfo
     {
-
+        public string? SymbolName { get; set; }
+        public ulong Address { get; set; }
+        public ulong Time { get; set; }
+        public ulong InstrCount { get; set; }
+        public ulong CycleCount { get; set; }
+        
+        public StackInfo(string? symbolName, ulong address, ulong time, ulong instrCount, ulong cycleCount)
+        {
+            SymbolName = symbolName;
+            Address = address;
+            Time = time;
+            InstrCount = instrCount;
+            CycleCount = cycleCount;
+        }
     }
+    
     readonly Stack<StackInfo> _stack = new();
-    public void Call()
+    
+    public void Call(string? symbolName, ulong address, ulong time, ulong instrCount, ulong cycleCount)
     {
-        var stackInfo = new StackInfo();
+        var stackInfo = new StackInfo(symbolName, address, time, instrCount, cycleCount);
         _stack.Push(stackInfo);
     }
 
-    public void Return()
+    public StackInfo? Return()
     {
-        _stack.Pop();
+        if (_stack.Count > 0)
+        {
+            return _stack.Pop();
+        }
+        return null;
+    }
+    
+    public int StackDepth => _stack.Count;
+    
+    public StackInfo? CurrentFrame => _stack.Count > 0 ? _stack.Peek() : null;
+    
+    public IEnumerable<StackInfo> GetStackFrames()
+    {
+        return _stack.ToArray().Reverse();
     }
 }
-
