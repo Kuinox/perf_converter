@@ -54,12 +54,11 @@ public unsafe class PerfDlFilter
         if (sample->addr_correlates_sym != 0)
         {
             var dlfilter_fns = get_perf_dlfilter_fns();
-            state.Writer.WriteLine($"{(IntPtr)dlfilter_fns}");
-            //var al = get_perf_dlfilter_fns()->resolve_ip(sample->addr);
-            //if (al != null)
-            //{
-            //    //state.Writer.WriteLine($"Resolved address size {al->size}");
-            //}
+            var al = get_perf_dlfilter_fns()->resolve_ip(ctx);
+            if (al != null)
+            {
+                state.Writer.WriteLine($"Resolved address size {al->size}");
+            }
         }
     }
 
