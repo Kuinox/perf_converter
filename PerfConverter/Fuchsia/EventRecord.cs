@@ -14,6 +14,7 @@ public class EventRecord : Record
     private readonly string? _inlineCategory;
     private readonly string? _inlineName;
     private readonly RecordArgument[] _arguments;
+    private readonly ulong? _endTimestamp; // For DurationComplete events
 
     public EventRecord(
         EventType type,
@@ -24,7 +25,8 @@ public class EventRecord : Record
         RecordArgument[]? arguments = null,
         (ulong, ulong)? inlineThread = null,
         string? inlineCategory = null,
-        string? inlineName = null)
+        string? inlineName = null,
+        ulong? endTimestamp = null)
     {
         _eventType = type;
         _timestamp = timestamp;
@@ -36,6 +38,7 @@ public class EventRecord : Record
         _inlineThread = inlineThread;
         _inlineCategory = inlineCategory;
         _inlineName = inlineName;
+        _endTimestamp = endTimestamp;
 
         if (_argumentCount > 15)
             throw new ArgumentException("Maximum 15 arguments allowed per event");
@@ -60,6 +63,10 @@ public class EventRecord : Record
         // Add arguments size
         foreach (var arg in _arguments)
             size += arg.GetSizeInWords();
+            
+        // Add end timestamp for DurationComplete events
+        if (_endTimestamp.HasValue)
+            size += 1;
 
         return size;
     }
@@ -94,5 +101,9 @@ public class EventRecord : Record
         // Write arguments
         foreach (var arg in _arguments)
             arg.Write(writer);
+            
+        // Write end timestamp for DurationComplete events
+        if (_endTimestamp.HasValue)
+            writer.Write(_endTimestamp.Value);
     }
 }

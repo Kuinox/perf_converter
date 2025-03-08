@@ -4,10 +4,10 @@ namespace PerfConverter.Fuchsia;
 
 public abstract class Record
 {
-    protected const int WORD_SIZE = 8;  // 64 bits = 8 bytes
+    public const int WORD_SIZE = 8;  // 64 bits = 8 bytes
 
     // Every record must be 8-byte aligned
-    protected static int AlignTo8Bytes(int size) => (size + 7) & ~7;
+    public static int AlignTo8Bytes(int size) => (size + 7) & ~7;
 
     // Gets total size in 8-byte words
     protected abstract int GetRecordSizeInWords();

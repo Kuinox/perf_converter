@@ -3,162 +3,60 @@ using System.Runtime.InteropServices;
 
 namespace PerfConverter;
 
+// Main entry point for the application
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        Console.WriteLine("PerfConverter - C# Performance Trace Converter");
+        Console.WriteLine("Usage: This library is meant to be loaded by perf as a dlfilter");
+    }
+}
+
+/// <summary>
+/// Time units that can be used for trace events
+/// </summary>
+public enum TimestampMode
+{
+    Time,       // Wall clock time
+    Cycles,     // CPU cycles
+    Instructions // Instruction count
+}
+
+/// <summary>
+/// Main class that implements the perf dlfilter interface
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public unsafe class PerfDlFilter
 {
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
     public static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    private class State : IDisposable
-    {
-        public StreamWriter Writer { get; set; } = null!;
-        public HashSet<string> Events { get; set; } = null!;
-        public Dictionary<IntPtr, string?> SymbolCache { get; set; } = new Dictionary<IntPtr, string>();
-        public Dictionary<int, ThreadState> Threads { get; set; } = new Dictionary<int, ThreadState>();
-        public long EventCount { get; set; }
-
-        public void Dispose()
-        {
-            Writer?.Dispose();
-        }
-    }
-
+    // Unmanaged exports for perf dlfilter
     [UnmanagedCallersOnly(EntryPoint = "start")]
     public static int Start(void** data, void* ctx)
     {
         try
         {
-            var state = new State
-            {
-                Writer = new StreamWriter(File.Create("output.txt")),
-                EventCount = 0,
-                Events = new(),
-                SymbolCache = new(),
-                Threads = new()
-            };
-
-            // Write header
-            state.Writer.WriteLine("Event#\tTime\tPID\tTID\tInstructions\tCycles\tEvent Type");
-            state.Writer.WriteLine("--------------------------------------------------------");
-            state.Writer.Flush();
-
-            *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
-            return 0;
+            return PerfTraceConverter.Instance.Start(data, ctx);
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"Error in Start: {ex.Message}");
             return -1;
         }
-    }
-
-    static string? InternString(State state, IntPtr intPtr)
-    {
-        if(intPtr == IntPtr.Zero) return null;
-        if (state.SymbolCache.TryGetValue(intPtr, out var cachedSymbol))
-        {
-            return cachedSymbol;
-        }
-        var str = Marshal.PtrToStringUTF8(intPtr);
-        state.SymbolCache[intPtr] = str;
-        return str;
-    }
-
-    static string? ResolveAddress(State state, PerfDlFilterSample* sample, void* ctx)
-    {
-        if (sample->addr_correlates_sym != 0)
-        {
-            var addr = (IntPtr)sample->addr;
-            var dlfilter_fns = get_perf_dlfilter_fns();
-            var al = dlfilter_fns->resolve_ip(ctx);
-            
-            if (al != null)
-            {
-                var symbolName = InternString(state, al->sym);
-                return symbolName;
-            }
-        }
-        return null;
     }
 
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
-        var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-        var state = (State)handle.Target!;
-
         try
         {
-            state.EventCount++;
-            // extract info from the event.
-            string eventType = InternString(state, sample->@event)!;
-            var splitted = eventType.Split(":");
-            var eventName = splitted[0];
-            var flag = sample->flags;
-            var isCall = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0;
-            var isBranch = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_BRANCH) != 0;
-            var isReturn = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0;
-            
-            // Get thread ID
-            int tid = sample->tid;
-            
-            // Get or create thread state
-            if (!state.Threads.TryGetValue(tid, out var threadState))
-            {
-                threadState = new ThreadState();
-                state.Threads[tid] = threadState;
-                state.Writer.WriteLine($"New thread tracked: {tid}");
-            }
-            
-            // Resolve symbol if needed
-            string? symbolName = null;
-            if (sample->addr_correlates_sym != 0)
-            {
-                symbolName = ResolveAddress(state, sample, ctx);
-            }
-            
-            // Update thread stack
-            if (isCall)
-            {
-                threadState.Call(symbolName, sample->ip, sample->time, sample->insn_cnt, sample->cyc_cnt);
-                state.Writer.WriteLine($"[{state.EventCount}] T{tid}: CALL {symbolName ?? "0x" + sample->ip.ToString("X")} (depth: {threadState.StackDepth})");
-            }
-            else if (isReturn)
-            {
-                var frame = threadState.Return();
-                if (frame != null)
-                {
-                    var duration = sample->time - frame.Time;
-                    var instrDelta = sample->insn_cnt - frame.InstrCount;
-                    var cycleDelta = sample->cyc_cnt - frame.CycleCount;
-                    
-                    state.Writer.WriteLine($"[{state.EventCount}] T{tid}: RETURN from {frame.SymbolName ?? "0x" + frame.Address.ToString("X")} " +
-                                           $"(duration: {duration}ns, instr: {instrDelta}, cycles: {cycleDelta}, depth: {threadState.StackDepth})");
-                }
-                else
-                {
-                    state.Writer.WriteLine($"[{state.EventCount}] T{tid}: RETURN with empty stack");
-                }
-            }
-            else if (isBranch)
-            {
-                // Skip branch events as requested
-                threadState.LastBranchIp = sample->ip;
-                return 0;
-            }
-            
-            // Periodically flush
-            if (state.EventCount % 100 == 0)
-            {
-                state.Writer.Flush();
-            }
-
-            return 0;
+            return PerfTraceConverter.Instance.FilterEventEarly(rawState, sample, ctx);
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            state.Writer.WriteLine("Error processing event");
-            state.Writer.WriteLine(e);
-            state.Writer.Flush();
+            Console.Error.WriteLine($"Error in FilterEventEarly: {ex.Message}");
             return -1;
         }
     }
@@ -168,33 +66,331 @@ public unsafe class PerfDlFilter
     {
         try
         {
-            var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-            var state = (State)handle.Target!;
-
-            state.Writer.WriteLine("\nTotal events processed: " + state.EventCount);
-            
-            // Output statistics for each thread
-            state.Writer.WriteLine("\nThread Stack Summaries:");
-            foreach (var (tid, threadState) in state.Threads)
-            {
-                state.Writer.WriteLine($"Thread {tid}: {threadState.StackDepth} frames remaining");
-                if (threadState.StackDepth > 0)
-                {
-                    state.Writer.WriteLine("Current stack:");
-                    foreach (var frame in threadState.GetStackFrames())
-                    {
-                        state.Writer.WriteLine($"  {frame.SymbolName ?? "0x" + frame.Address.ToString("X")}");
-                    }
-                }
-            }
-            
-            state.Dispose();
-            handle.Free();
-            return 0;
+            return PerfTraceConverter.Instance.Stop(rawState, ctx);
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"Error in Stop: {ex.Message}");
             return -1;
         }
+    }
+}
+
+/// <summary>
+/// Main implementation of the performance trace converter
+/// </summary>
+public unsafe class PerfTraceConverter
+{
+    private static readonly PerfTraceConverter _instance = new();
+    public static PerfTraceConverter Instance => _instance;
+
+    private readonly SymbolResolver _symbolResolver = new();
+    private readonly Dictionary<TimestampMode, string> _timeUnitNames = new()
+    {
+        { TimestampMode.Time, "Time" },
+        { TimestampMode.Cycles, "Cycles" },
+        { TimestampMode.Instructions, "Instructions" }
+    };
+
+    // Parses command line arguments to get output filename and timestamp mode
+    private (string filename, TimestampMode mode) ParseArgs(void* ctx)
+    {
+        var fns = PerfDlFilter.get_perf_dlfilter_fns();
+        int argc = 0;
+        IntPtr argv = fns->args(ctx, &argc);
+        var args = new string[argc];
+        
+        for (int i = 0; i < argc; i++)
+        {
+            var argPtr = Marshal.ReadIntPtr(argv, i * IntPtr.Size);
+            args[i] = Marshal.PtrToStringUTF8(argPtr) ?? string.Empty;
+        }
+
+        var filename = args.Length >= 1 ? args[0] : "out.ftf";
+        var mode = TimestampMode.Instructions; // Default mode
+        
+        if (args.Length >= 2)
+        {
+            mode = args[1] switch
+            {
+                "t" => TimestampMode.Time,
+                "c" => TimestampMode.Cycles,
+                "i" => TimestampMode.Instructions,
+                _ => TimestampMode.Instructions
+            };
+        }
+        
+        return (filename, mode);
+    }
+
+    public int Start(void** data, void* ctx)
+    {
+        var (filename, mode) = ParseArgs(ctx);
+        
+        // Create the trace state with an appropriate frame handler
+        var frameHandler = CreateFrameHandler(filename);
+        var state = new TraceState(frameHandler, mode);
+
+        // Store the state in the GCHandle for later use
+        *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
+        return 0;
+    }
+
+    public int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
+    {
+        var handle = GCHandle.FromIntPtr((IntPtr)rawState);
+        var state = (TraceState)handle.Target!;
+
+        state.EventCount++;
+        
+        // Extract info from the event
+        string eventType = _symbolResolver.InternString(state, sample->@event)!;
+        var flag = sample->flags;
+        var isCall = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0;
+        var isBranch = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_BRANCH) != 0;
+        var isReturn = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0;
+        
+        // Get thread ID
+        var pid = (ulong)sample->pid;
+        var tid = (ulong)sample->tid;
+        var pidTid = (pid, tid);
+        
+        // Get or create thread state
+        if (!state.Threads.TryGetValue(tid, out var threadState))
+        {
+            threadState = new ThreadState(pidTid);
+            state.Threads[tid] = threadState;
+        }
+
+        // Update thread state with current event timing
+        threadState.LastSeenTime = sample->time;
+        
+        if (eventType == "b") // 'branches' event
+        {
+            // Update instruction and cycle counts
+            if (!state.HasInstructionEvents)
+            {
+                threadState.InsnCount += sample->insn_cnt;
+            }
+            threadState.CycCount += sample->cyc_cnt;
+            
+            // Handle branch event - if we detect IP changed significantly, consider it a trace break
+            const ulong BadJumpHeuristic = 0x1000;
+            if (sample->ip > threadState.Ip && sample->ip - threadState.Ip > BadJumpHeuristic)
+            {
+                threadState.Ip = 0;
+            }
+            
+            if (threadState.Ip != 0 && sample->ip != 0)
+            {
+                // Normal path - update cache footprint
+                state.CacheTracker.UpdateFootprint(threadState, threadState.Ip, sample->ip);
+            }
+            else
+            {
+                // Trace segment has ended - close all open stack frames
+                while (threadState.StackDepth > 1)
+                {
+                    state.FrameHandler.PopFrame(threadState, state.TimestampMode, ctx);
+                }
+                
+                state.FrameHandler.PushFrame(threadState, sample, state.TimestampMode, ctx);
+            }
+            
+            threadState.Ip = sample->addr;
+            
+            if (isCall)
+            {
+                state.FrameHandler.PushFrame(threadState, sample, state.TimestampMode, ctx);
+            }
+            else if (isReturn)
+            {
+                if (threadState.StackDepth > 2)
+                {
+                    // Return matches a previously seen call
+                    state.FrameHandler.PopFrame(threadState, state.TimestampMode, ctx);
+                }
+                else
+                {
+                    // Return doesn't match a previous call, so trace fragment started inside the frame
+                    state.FrameHandler.PopUnknownFrame(threadState, sample, state.TimestampMode, ctx);
+                }
+            }
+        }
+        else
+        {
+            // This is an 'instructions' event
+            state.HasInstructionEvents = true;
+            threadState.InsnCount++;
+        }
+        
+        return 0;
+    }
+
+    public int Stop(void* rawState, void* ctx)
+    {
+        var handle = GCHandle.FromIntPtr((IntPtr)rawState);
+        var state = (TraceState)handle.Target!;
+
+        // Close all remaining stacks for all threads
+        foreach (var (_, threadState) in state.Threads)
+        {
+            while (threadState.StackDepth > 1)
+            {
+                state.FrameHandler.PopFrame(threadState, state.TimestampMode, ctx);
+            }
+        }
+        
+        // Finalize output and clean up
+        state.FrameHandler.Finish();
+        state.Dispose();
+        handle.Free();
+        
+        return 0;
+    }
+    
+    // Create appropriate frame handler based on output format/filename
+    private ITraceFrameHandler CreateFrameHandler(string filename)
+    {
+        if (filename.EndsWith(".ftf", StringComparison.OrdinalIgnoreCase))
+        {
+            return new FuchsiaFrameHandler(filename);
+        }
+        else if (filename.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return new JsonTraceFrameHandler(filename);
+        }
+        else
+        {
+            // Default to Fuchsia Trace Format
+            return new FuchsiaFrameHandler(filename);
+        }
+    }
+}
+
+/// <summary>
+/// Maintains the state for a single trace processing session
+/// </summary>
+public class TraceState : IDisposable
+{
+    public ITraceFrameHandler FrameHandler { get; }
+    public Dictionary<ulong, ThreadState> Threads { get; } = new Dictionary<ulong, ThreadState>();
+    public Dictionary<IntPtr, string?> SymbolCache { get; } = new Dictionary<IntPtr, string?>();
+    public CacheFootprintTracker CacheTracker { get; } = new CacheFootprintTracker();
+    public long EventCount { get; set; }
+    public bool HasInstructionEvents { get; set; }
+    public TimestampMode TimestampMode { get; }
+    
+    public TraceState(ITraceFrameHandler frameHandler, TimestampMode mode)
+    {
+        FrameHandler = frameHandler;
+        TimestampMode = mode;
+    }
+    
+    public void Dispose()
+    {
+        if (FrameHandler is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+}
+
+/// <summary>
+/// Tracks and manages cache footprint data
+/// </summary>
+public class CacheFootprintTracker
+{
+    private const ulong CacheLineSize = 64;
+    private const ulong CacheLineMask = ~(CacheLineSize - 1);
+    
+    public void UpdateFootprint(ThreadState threadState, ulong startIp, ulong endIp)
+    {
+        var cacheLineStart = startIp & CacheLineMask;
+        var cacheLineEnd = endIp & CacheLineMask;
+        var currentFrame = threadState.CurrentFrame;
+        
+        if (currentFrame == null) return;
+        
+        // Insert cache lines into the footprint set
+        var cacheLine = cacheLineStart;
+        while (cacheLine <= cacheLineEnd)
+        {
+            currentFrame.Footprint.Add(cacheLine);
+            cacheLine += CacheLineSize;
+        }
+    }
+    
+    public ulong CalculateFootprintSize(HashSet<ulong> footprint)
+    {
+        return (ulong)footprint.Count * CacheLineSize;
+    }
+    
+    public HashSet<ulong> MergeFootprints(HashSet<ulong> a, HashSet<ulong> b)
+    {
+        // Always merge into the larger set for efficiency
+        if (a.Count < b.Count)
+        {
+            (a, b) = (b, a);
+        }
+        
+        a.UnionWith(b);
+        return a;
+    }
+}
+
+/// <summary>
+/// Symbol resolution and caching
+/// </summary>
+public unsafe class SymbolResolver
+{
+    public string? InternString(TraceState state, IntPtr intPtr)
+    {
+        if (intPtr == IntPtr.Zero) return null;
+        
+        if (state.SymbolCache.TryGetValue(intPtr, out var cachedSymbol))
+        {
+            return cachedSymbol;
+        }
+        
+        var str = Marshal.PtrToStringUTF8(intPtr);
+        state.SymbolCache[intPtr] = str;
+        return str;
+    }
+    
+    public string ResolveIp(PerfDlFilterSample* sample, void* ctx, byte[] buffer)
+    {
+        var dlfilter_fns = PerfDlFilter.get_perf_dlfilter_fns();
+        var al = dlfilter_fns->resolve_ip(ctx);
+        
+        if (al != null && al->sym != IntPtr.Zero)
+        {
+            var symbol = Marshal.PtrToStringUTF8(al->sym);
+            return symbol ?? FormatAddress(sample->ip);
+        }
+        
+        return FormatAddress(sample->ip);
+    }
+    
+    public string ResolveAddr(PerfDlFilterSample* sample, void* ctx, byte[] buffer)
+    {
+        if (sample->addr_correlates_sym != 0)
+        {
+            var dlfilter_fns = PerfDlFilter.get_perf_dlfilter_fns();
+            var al = dlfilter_fns->resolve_addr(ctx);
+            
+            if (al != null && al->sym != IntPtr.Zero)
+            {
+                var symbol = Marshal.PtrToStringUTF8(al->sym);
+                return symbol ?? FormatAddress((ulong)sample->addr);
+            }
+        }
+        
+        return FormatAddress((ulong)sample->addr);
+    }
+    
+    private string FormatAddress(ulong address)
+    {
+        return $"0x{address:X}";
     }
 }
