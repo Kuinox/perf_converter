@@ -1,0 +1,8 @@
+.vs
+bin
+obj
+src/artifacts
+*.nupkg
+*.user
+**/Properties/launchSettings.json
+**/testenvironments.json

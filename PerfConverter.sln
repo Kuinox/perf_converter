@@ -1,0 +1,33 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113 d17.12
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfConverter", "PerfConverter\PerfConverter.csproj", "{4FCC1249-59B7-483F-AC37-D49E1504FB10}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "native", "native", "{AE00F4C7-574E-4DDB-BDC5-05666F529086}"
+	ProjectSection(SolutionItems) = preProject
+		native\exports.c = native\exports.c
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorld", "HelloWorld\HelloWorld.csproj", "{B2360234-FD6E-4E2A-83E9-96BEAED497C9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4FCC1249-59B7-483F-AC37-D49E1504FB10}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4FCC1249-59B7-483F-AC37-D49E1504FB10}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4FCC1249-59B7-483F-AC37-D49E1504FB10}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4FCC1249-59B7-483F-AC37-D49E1504FB10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
