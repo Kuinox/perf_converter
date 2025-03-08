@@ -14,6 +14,7 @@ public unsafe class PerfDlFilter
         public StreamWriter Writer { get; set; } = null!;
         public int EventCount { get; set; }
         public HashSet<string> Events { get; set; } = null!;
+        public Dictionary<IntPtr, string?> SymbolCache { get; set; } = new Dictionary<IntPtr, string>();
 
         public void Dispose()
         {
@@ -32,7 +33,8 @@ public unsafe class PerfDlFilter
             {
                 Writer = new StreamWriter(File.Create("output.txt")),
                 EventCount = 0,
-                Events = new()
+                Events = new(),
+                SymbolCache = new()
             };
 
             // Write header
@@ -49,15 +51,31 @@ public unsafe class PerfDlFilter
         }
     }
 
+    static string? InternString(State state, IntPtr intPtr)
+    {
+        if(intPtr == IntPtr.Zero) return null;
+        if (state.SymbolCache.TryGetValue(intPtr, out var cachedSymbol))
+        {
+            return cachedSymbol;
+        }
+        var str = Marshal.PtrToStringUTF8(intPtr);
+        state.SymbolCache[intPtr] = str;
+        state.Writer.WriteLine($"Resolved: {str}");
+        return str;
+    }
+
     static void ResolveAddress(State state, PerfDlFilterSample* sample, void* ctx)
     {
         if (sample->addr_correlates_sym != 0)
         {
+            var addr = (IntPtr)sample->addr;
             var dlfilter_fns = get_perf_dlfilter_fns();
-            var al = get_perf_dlfilter_fns()->resolve_ip(ctx);
+            var al = dlfilter_fns->resolve_ip(ctx);
+            
             if (al != null)
             {
-                state.Writer.WriteLine($"Resolved address size {al->size}");
+                var symbolName = InternString(state, al->sym);
+                //state.Writer.WriteLine($"Resolved: {symbolName}");
             }
         }
     }
@@ -70,7 +88,6 @@ public unsafe class PerfDlFilter
 
         try
         {
-
             // extract info from the event.
             string eventType = GetEventString(sample->@event)!;
             var splitted = eventType.Split(":");
