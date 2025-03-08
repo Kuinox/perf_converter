@@ -22,6 +22,9 @@ public class ThreadState
     
     readonly Stack<StackInfo> _stack = new();
     
+    public StackInfo? LastReturnedFrame { get; set; }
+    public ulong LastBranchIp { get; set; }
+    
     public void Call(string? symbolName, ulong address, ulong time, ulong instrCount, ulong cycleCount)
     {
         var stackInfo = new StackInfo(symbolName, address, time, instrCount, cycleCount);
@@ -32,7 +35,9 @@ public class ThreadState
     {
         if (_stack.Count > 0)
         {
-            return _stack.Pop();
+            var frame = _stack.Pop();
+            LastReturnedFrame = frame;
+            return frame;
         }
         return null;
     }

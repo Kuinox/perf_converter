@@ -12,18 +12,16 @@ public unsafe class PerfDlFilter
     private class State : IDisposable
     {
         public StreamWriter Writer { get; set; } = null!;
-        public int EventCount { get; set; }
         public HashSet<string> Events { get; set; } = null!;
         public Dictionary<IntPtr, string?> SymbolCache { get; set; } = new Dictionary<IntPtr, string>();
         public Dictionary<int, ThreadState> Threads { get; set; } = new Dictionary<int, ThreadState>();
+        public long EventCount { get; set; }
 
         public void Dispose()
         {
             Writer?.Dispose();
         }
     }
-
-    private static string? GetEventString(IntPtr eventPtr) => Marshal.PtrToStringUTF8(eventPtr);
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
     public static int Start(void** data, void* ctx)
@@ -91,9 +89,8 @@ public unsafe class PerfDlFilter
         try
         {
             state.EventCount++;
-            
             // extract info from the event.
-            string eventType = GetEventString(sample->@event)!;
+            string eventType = InternString(state, sample->@event)!;
             var splitted = eventType.Split(":");
             var eventName = splitted[0];
             var flag = sample->flags;
@@ -144,7 +141,9 @@ public unsafe class PerfDlFilter
             }
             else if (isBranch)
             {
-                state.Writer.WriteLine($"[{state.EventCount}] T{tid}: BRANCH {symbolName ?? "0x" + sample->ip.ToString("X")}");
+                // Skip branch events as requested
+                threadState.LastBranchIp = sample->ip;
+                return 0;
             }
             
             // Periodically flush
