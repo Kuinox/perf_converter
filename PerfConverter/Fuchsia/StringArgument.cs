@@ -12,12 +12,16 @@ public class StringArgument : RecordArgument
     public StringArgument(string name, string value) 
         : base(name, 0)
     {
+        if (string.IsNullOrEmpty(value))
+            throw new ArgumentException("String value cannot be null or empty");
         _value = value;
     }
     
     public StringArgument(ushort nameRef, string value) 
         : base(string.Empty, nameRef)
     {
+        if(string.IsNullOrEmpty(value))
+            throw new ArgumentException("String value cannot be null or empty");
         _value = value;
     }
     

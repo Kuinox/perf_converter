@@ -3,7 +3,7 @@
 /// <summary>
 /// Represents data for a specific call stack frame
 /// </summary>
-public class FrameData
+public class StackFrame
 {
     // Counters at the start of this frame
     public ulong StartInsnCount { get; set; }
@@ -17,7 +17,7 @@ public class FrameData
     // Cache footprint for this frame
     public HashSet<ulong> Footprint { get; set; } = new HashSet<ulong>();
     
-    public FrameData(string? symbolName, ulong address, ulong timestamp, ulong insnCount, ulong cycCount)
+    public StackFrame(string? symbolName, ulong address, ulong timestamp, ulong insnCount, ulong cycCount)
     {
         SymbolName = symbolName;
         Address = address;
@@ -27,7 +27,7 @@ public class FrameData
     }
     
     // Create a default frame with zeroed counters
-    public FrameData()
+    public StackFrame()
     {
         SymbolName = "ROOT";
         Address = 0;
@@ -40,29 +40,25 @@ public class FrameData
 /// <summary>
 /// Manages the state of a thread including call stack and performance counters
 /// </summary>
-public class ThreadState
+public class ThreadContext
 {
     // Thread identification
     public (ulong ProcessId, ulong ThreadId) PidTid { get; }
     
-    // Performance counters
     public ulong InsnCount { get; set; }
     public ulong CycCount { get; set; }
     public ulong LastSeenTime { get; set; }
     
-    // Current execution state
-    public ulong Ip { get; set; }
-    
     // Call stack frames
-    private readonly List<FrameData> _stack = new();
+    private readonly List<StackFrame> _stack = new();
     
-    public ThreadState((ulong, ulong) pidTid)
+    public ThreadContext((ulong, ulong) pidTid)
     {
         PidTid = pidTid;
         
         // Initialize with root frame (for entire trace) and segment frame (for current trace segment)
-        _stack.Add(new FrameData()); // Root frame
-        _stack.Add(new FrameData()); // Current segment frame
+        _stack.Add(new StackFrame()); // Root frame
+        _stack.Add(new StackFrame()); // Current segment frame
     }
     
     /// <summary>
@@ -70,14 +66,14 @@ public class ThreadState
     /// </summary>
     public void PushFrame(string? symbolName, ulong address, ulong timestamp, ulong insnCount, ulong cycCount)
     {
-        var frame = new FrameData(symbolName, address, timestamp, insnCount, cycCount);
+        var frame = new StackFrame(symbolName, address, timestamp, insnCount, cycCount);
         _stack.Add(frame);
     }
     
     /// <summary>
     /// Pops a frame from the call stack
     /// </summary>
-    public FrameData? PopFrame()
+    public StackFrame? PopFrame()
     {
         if (_stack.Count <= 1)
             return null;
@@ -90,12 +86,12 @@ public class ThreadState
     /// <summary>
     /// Gets the current (top) frame in the stack
     /// </summary>
-    public FrameData? CurrentFrame => _stack.Count > 0 ? _stack[^1] : null;
+    public StackFrame? CurrentFrame => _stack.Count > 0 ? _stack[^1] : null;
     
     /// <summary>
     /// Gets the parent of the current frame
     /// </summary>
-    public FrameData? ParentFrame => _stack.Count > 1 ? _stack[^2] : null;
+    public StackFrame? ParentFrame => _stack.Count > 1 ? _stack[^2] : null;
     
     /// <summary>
     /// Gets the number of frames in the stack
@@ -105,7 +101,7 @@ public class ThreadState
     /// <summary>
     /// Gets a copy of the current stack frames (newest to oldest)
     /// </summary>
-    public IEnumerable<FrameData> GetStackFrames()
+    public IEnumerable<StackFrame> GetStackFrames()
     {
         return _stack.AsEnumerable().Reverse();
     }
@@ -113,7 +109,7 @@ public class ThreadState
     /// <summary>
     /// Merges a popped frame's footprint with its parent frame
     /// </summary>
-    public void MergeFootprints(FrameData poppedFrame)
+    public void MergeFootprints(StackFrame poppedFrame)
     {
         if (_stack.Count > 0)
         {
@@ -128,7 +124,7 @@ public class ThreadState
     /// <summary>
     /// Calculate metrics for the current frame relative to when it started
     /// </summary>
-    public (ulong InsnDelta, ulong CycDelta, ulong Duration) GetFrameMetrics(FrameData frame)
+    public (ulong InsnDelta, ulong CycDelta, ulong Duration) GetFrameMetrics(StackFrame frame)
     {
         var insnDelta = InsnCount - frame.StartInsnCount;
         var cycDelta = CycCount - frame.StartCycCount;

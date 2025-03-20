@@ -24,6 +24,12 @@ public abstract class Record
         if (recordSize > 4095) // 12 bits max for normal records
             throw new InvalidOperationException("Record too large");
 
+        if (recordSize == 0)
+        {
+            File.AppendAllText("log.txt", "Unexpected record of size 0\n");
+            throw new InvalidOperationException("Unexpected record of size 0");
+        }
+
         // Write header word:
         // [0..3]   - Record type (4 bits)
         // [4..15]  - Size in 8-byte words (12 bits)

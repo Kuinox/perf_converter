@@ -7,7 +7,7 @@ namespace PerfConverter;
 /// <summary>
 /// Handles frame events and serializes them to Fuchsia Trace Format (FTF)
 /// </summary>
-public unsafe class FuchsiaFrameHandler : ITraceFrameHandler, IDisposable
+public unsafe class FuchsiaFrameHandler : IDisposable
 {
     private const string PROVIDER_NAME = "PerfConverter";
     private const string CATEGORY_NAME = "Perf";
@@ -56,7 +56,7 @@ public unsafe class FuchsiaFrameHandler : ITraceFrameHandler, IDisposable
         }
     }
     
-    public void PushFrame(ThreadState threadState, PerfDlFilterSample* sample, TimestampMode mode, void* ctx)
+    public void PushFrame(ThreadContext threadState, PerfDlFilterSample* sample, TimestampMode mode, void* ctx)
     {
         string symbol;
         
@@ -87,14 +87,14 @@ public unsafe class FuchsiaFrameHandler : ITraceFrameHandler, IDisposable
             threadRef,
             categoryRef,
             symbolRef);
-        
+        Console.WriteLine($"Pushing frame {symbol} at {timestamp}");
         eventRecord.Write(_writer);
         
         // Push frame onto thread state
         threadState.PushFrame(symbol, sample->ip, sample->time, threadState.InsnCount, threadState.CycCount);
     }
     
-    public void PopFrame(ThreadState threadState, TimestampMode mode, void* ctx)
+    public void PopFrame(ThreadContext threadState, TimestampMode mode, void* ctx)
     {
         var frame = threadState.PopFrame();
         if (frame == null) return;
@@ -133,7 +133,7 @@ public unsafe class FuchsiaFrameHandler : ITraceFrameHandler, IDisposable
         threadState.MergeFootprints(frame);
     }
     
-    public void PopUnknownFrame(ThreadState threadState, PerfDlFilterSample* sample, TimestampMode mode, void* ctx)
+    public void PopUnknownFrame(ThreadContext threadState, PerfDlFilterSample* sample, TimestampMode mode, void* ctx)
     {
         var frame = threadState.CurrentFrame;
         if (frame == null) return;
@@ -188,7 +188,7 @@ public unsafe class FuchsiaFrameHandler : ITraceFrameHandler, IDisposable
     /// <summary>
     /// Get appropriate timestamp based on mode
     /// </summary>
-    private ulong GetTimestamp(ThreadState threadState, PerfDlFilterSample* sample, TimestampMode mode)
+    private ulong GetTimestamp(ThreadContext threadState, PerfDlFilterSample* sample, TimestampMode mode)
     {
         return mode switch
         {
