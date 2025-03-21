@@ -12,6 +12,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "native", "native", "{AE00F4
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorld", "HelloWorld\HelloWorld.csproj", "{B2360234-FD6E-4E2A-83E9-96BEAED497C9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfConverter.Fuchsia", "PerfConverter.Fuchsia\PerfConverter.Fuchsia.csproj", "{27638D87-4557-4850-B3AB-DF735BC0C538}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,6 +28,10 @@ Global
 		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B2360234-FD6E-4E2A-83E9-96BEAED497C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{27638D87-4557-4850-B3AB-DF735BC0C538}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27638D87-4557-4850-B3AB-DF735BC0C538}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{27638D87-4557-4850-B3AB-DF735BC0C538}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27638D87-4557-4850-B3AB-DF735BC0C538}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
