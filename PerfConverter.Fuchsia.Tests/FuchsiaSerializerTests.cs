@@ -42,57 +42,48 @@ public class FuchsiaSerializerTests
         // Arrange
         string traceFilePath = Path.Combine(_tempDirectory, "simple_event.ftf");
         
-        using (var ms = new MemoryStream())
-        using (var writer = new BinaryWriter(ms))
-        {
-            // Write magic number
-            writer.Write(0x0016547846040010UL);
+        // Create records to be processed
+        var providerInfo = new MetadataRecord(
+            MetadataType.ProviderInfo,
+            0, // Provider ID
+            "TestProvider");
             
-            // Provider info metadata
-            var providerInfo = new MetadataRecord(
-                MetadataType.ProviderInfo,
-                0, // Provider ID
-                "TestProvider");
-            providerInfo.Write(writer);
+        var providerSection = new MetadataRecord(
+            MetadataType.ProviderSection,
+            0); // Provider ID
             
-            // Provider section metadata
-            var providerSection = new MetadataRecord(
-                MetadataType.ProviderSection,
-                0); // Provider ID
-            providerSection.Write(writer);
+        var threadRecord = new ThreadRecord(1, 1000, 1001);
             
-            // Thread record
-            var threadRecord = new ThreadRecord(1, 1000, 1001);
-            threadRecord.Write(writer);
+        var categoryString = new StringRecord(1, "TestCategory");
+        var nameString = new StringRecord(2, "TestEvent");
             
-            // String records
-            var categoryString = new StringRecord(1, "TestCategory");
-            categoryString.Write(writer);
+        var eventBegin = new EventRecord(
+            EventType.DurationBegin,
+            1000000, // timestamp
+            1, // thread ref
+            1, // category ref
+            2); // name ref
             
-            var nameString = new StringRecord(2, "TestEvent");
-            nameString.Write(writer);
-            
-            // Event record (duration begin)
-            var eventBegin = new EventRecord(
-                EventType.DurationBegin,
-                1000000, // timestamp
-                1, // thread ref
-                1, // category ref
-                2); // name ref
-            eventBegin.Write(writer);
-            
-            // Event record (duration end)
-            var eventEnd = new EventRecord(
-                EventType.DurationEnd,
-                2000000, // timestamp
-                1, // thread ref
-                1, // category ref
-                2); // name ref
-            eventEnd.Write(writer);
-            
-            // Save to file
-            File.WriteAllBytes(traceFilePath, ms.ToArray());
-        }
+        var eventEnd = new EventRecord(
+            EventType.DurationEnd,
+            2000000, // timestamp
+            1, // thread ref
+            1, // category ref
+            2); // name ref
+        
+        // Use trace processor to create the file
+        var records = new Record[] 
+        { 
+            providerInfo, 
+            providerSection, 
+            threadRecord, 
+            categoryString, 
+            nameString, 
+            eventBegin, 
+            eventEnd 
+        };
+        
+        _traceProcessor.WriteTraceFile(traceFilePath, records);
         
         Console.WriteLine($"Trace file: {traceFilePath}");
         // Act
@@ -108,55 +99,47 @@ public class FuchsiaSerializerTests
         // Arrange
         string traceFilePath = Path.Combine(_tempDirectory, "event_with_args.ftf");
         
-        using (var ms = new MemoryStream())
-        using (var writer = new BinaryWriter(ms))
-        {
-            // Write magic number
-            writer.Write(0x0016547846040010UL);
+        // Create records to be processed
+        var providerInfo = new MetadataRecord(
+            MetadataType.ProviderInfo,
+            0, // Provider ID
+            "TestProvider");
             
-            // Provider info metadata
-            var providerInfo = new MetadataRecord(
-                MetadataType.ProviderInfo,
-                0, // Provider ID
-                "TestProvider");
-            providerInfo.Write(writer);
+        var providerSection = new MetadataRecord(
+            MetadataType.ProviderSection,
+            0); // Provider ID
             
-            // Provider section metadata
-            var providerSection = new MetadataRecord(
-                MetadataType.ProviderSection,
-                0); // Provider ID
-            providerSection.Write(writer);
+        var threadRecord = new ThreadRecord(1, 1000, 1001);
             
-            // Thread record
-            var threadRecord = new ThreadRecord(1, 1000, 1001);
-            threadRecord.Write(writer);
+        var categoryString = new StringRecord(1, "TestCategory");
+        var nameString = new StringRecord(2, "TestEvent");
+        var argNameString = new StringRecord(3, "TestArg");
             
-            // String records
-            var categoryString = new StringRecord(1, "TestCategory");
-            categoryString.Write(writer);
+        // Create arguments
+        var numericArg = new NumericArgument(3, 42);
             
-            var nameString = new StringRecord(2, "TestEvent");
-            nameString.Write(writer);
-            
-            var argNameString = new StringRecord(3, "TestArg");
-            argNameString.Write(writer);
-            
-            // Create arguments
-            var numericArg = new NumericArgument(3, 42);
-            
-            // Event record with arguments
-            var eventRecord = new EventRecord(
-                EventType.Instant,
-                1000000, // timestamp
-                1, // thread ref
-                1, // category ref
-                2, // name ref
-                [numericArg]);
-            eventRecord.Write(writer);
-            
-            // Save to file
-            File.WriteAllBytes(traceFilePath, ms.ToArray());
-        }
+        // Event record with arguments
+        var eventRecord = new EventRecord(
+            EventType.Instant,
+            1000000, // timestamp
+            1, // thread ref
+            1, // category ref
+            2, // name ref
+            [numericArg]);
+        
+        // Use trace processor to create the file
+        var records = new Record[] 
+        { 
+            providerInfo, 
+            providerSection, 
+            threadRecord, 
+            categoryString, 
+            nameString, 
+            argNameString, 
+            eventRecord 
+        };
+        
+        _traceProcessor.WriteTraceFile(traceFilePath, records);
         
         // Act
         bool isValid = _traceProcessor.ValidateTrace(traceFilePath);
@@ -171,61 +154,52 @@ public class FuchsiaSerializerTests
         // Arrange
         var traceFilePath = Path.Combine(_tempDirectory, "complete_event.ftf");
         
-        using (var ms = new MemoryStream())
-        using (var writer = new BinaryWriter(ms))
-        {
-            // Write magic number
-            writer.Write(0x0016547846040010UL);
+        // Create records to be processed
+        var providerInfo = new MetadataRecord(
+            MetadataType.ProviderInfo,
+            0, // Provider ID
+            "TestProvider");
             
-            // Provider info metadata
-            var providerInfo = new MetadataRecord(
-                MetadataType.ProviderInfo,
-                0, // Provider ID
-                "TestProvider");
-            providerInfo.Write(writer);
+        var providerSection = new MetadataRecord(
+            MetadataType.ProviderSection,
+            0); // Provider ID
             
-            // Provider section metadata
-            var providerSection = new MetadataRecord(
-                MetadataType.ProviderSection,
-                0); // Provider ID
-            providerSection.Write(writer);
+        var threadRecord = new ThreadRecord(1, 1000, 1001);
             
-            // Thread record
-            var threadRecord = new ThreadRecord(1, 1000, 1001);
-            threadRecord.Write(writer);
+        var categoryString = new StringRecord(1, "TestCategory");
+        var nameString = new StringRecord(2, "TestEvent");
+        var arg1NameString = new StringRecord(3, "Instructions");
+        var arg2NameString = new StringRecord(4, "Cycles");
             
-            // String records
-            var categoryString = new StringRecord(1, "TestCategory");
-            categoryString.Write(writer);
+        // Create arguments
+        var instructionsArg = new NumericArgument(3, 1000);
+        var cyclesArg = new NumericArgument(4, 5000);
             
-            var nameString = new StringRecord(2, "TestEvent");
-            nameString.Write(writer);
-            
-            var arg1NameString = new StringRecord(3, "Instructions");
-            arg1NameString.Write(writer);
-            
-            var arg2NameString = new StringRecord(4, "Cycles");
-            arg2NameString.Write(writer);
-            
-            // Create arguments
-            var instructionsArg = new NumericArgument(3, 1000);
-            var cyclesArg = new NumericArgument(4, 5000);
-            
-            // Complete duration event (with start and end time)
-            var eventRecord = new EventRecord(
-                EventType.DurationComplete,
-                1000000, // start timestamp
-                1, // thread ref
-                1, // category ref
-                2, // name ref
-                [instructionsArg, cyclesArg],
-                null, null, null,
-                2000000); // end timestamp
-            eventRecord.Write(writer);
-            
-            // Save to file
-            File.WriteAllBytes(traceFilePath, ms.ToArray());
-        }
+        // Complete duration event (with start and end time)
+        var eventRecord = new EventRecord(
+            EventType.DurationComplete,
+            1000000, // start timestamp
+            1, // thread ref
+            1, // category ref
+            2, // name ref
+            [instructionsArg, cyclesArg],
+            null, null, null,
+            2000000); // end timestamp
+        
+        // Use trace processor to create the file
+        var records = new Record[] 
+        { 
+            providerInfo, 
+            providerSection, 
+            threadRecord, 
+            categoryString, 
+            nameString, 
+            arg1NameString, 
+            arg2NameString, 
+            eventRecord 
+        };
+        
+        _traceProcessor.WriteTraceFile(traceFilePath, records);
         
         // Act
         bool isValid = _traceProcessor.ValidateTrace(traceFilePath);
@@ -237,13 +211,56 @@ public class FuchsiaSerializerTests
     [Test]
     public void SimpleSlice_ShouldProduceValidTrace()
     {
-        //arrange
-        var traceFilePath = Path.Combine("simple_slice.ftf");
-        using (var ms = new MemoryStream())
-        using (var writer = new BinaryWriter(ms))
-        {
+        // Arrange
+        var traceFilePath = Path.Combine(_tempDirectory, "simple_slice.ftf");
+        
+        // Create records to be processed
+        var providerInfo = new MetadataRecord(
+            MetadataType.ProviderInfo,
+            0, // Provider ID
+            "TestProvider");
             
-        }
-
+        var providerSection = new MetadataRecord(
+            MetadataType.ProviderSection,
+            0); // Provider ID
+            
+        var threadRecord = new ThreadRecord(1, 1000, 1001);
+            
+        var categoryString = new StringRecord(1, "TestCategory");
+        var nameString = new StringRecord(2, "TestSlice");
+        
+        // Create a slice event using DurationComplete instead of separate begin/end
+        // DurationComplete is more likely to be recognized as a proper slice by Perfetto
+        var sliceEvent = new EventRecord(
+            EventType.DurationComplete,  // Use DurationComplete instead of separate begin/end
+            1000000, // start timestamp
+            1, // thread ref
+            1, // category ref
+            2, // name ref
+            null, null, null, null,
+            2000000); // end timestamp
+        
+        // Use trace processor to create the file
+        var records = new Record[] 
+        { 
+            providerInfo, 
+            providerSection, 
+            threadRecord, 
+            categoryString, 
+            nameString, 
+            sliceEvent
+        };
+        
+        _traceProcessor.WriteTraceFile(traceFilePath, records);
+        
+        Console.WriteLine($"Trace file: {traceFilePath}");
+        
+        // Act
+        bool isValid = _traceProcessor.ValidateTrace(traceFilePath);
+        bool hasSlices = _traceProcessor.VerifySlices(traceFilePath);
+        
+        // Assert
+        Assert.That(isValid, "Trace file should be valid");
+        Assert.That(hasSlices, "Trace file should contain slices");
     }
 }

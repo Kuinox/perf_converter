@@ -7,4 +7,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- PerfConverter depends on this library, not the other way around -->
+
 </Project>

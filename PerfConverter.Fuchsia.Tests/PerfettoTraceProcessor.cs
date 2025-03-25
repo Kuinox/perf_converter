@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PerfConverter.Fuchsia;
 
 namespace PerfConverter.Fuchsia.Tests
 {
@@ -82,6 +83,54 @@ namespace PerfConverter.Fuchsia.Tests
             // If the process exits with code 0 and returns the expected result, 
             // then the trace file is valid
             return process.ExitCode == 0 && output.Contains("1");
+        }
+
+        /// <summary>
+        /// Verifies that slices are present in the slice table
+        /// </summary>
+        /// <param name="traceFilePath">Path to the trace file</param>
+        /// <returns>True if slices are found, false otherwise</returns>
+        public bool VerifySlices(string traceFilePath)
+        {
+            if (!File.Exists(traceFilePath))
+                throw new FileNotFoundException($"Trace file not found: {traceFilePath}");
+
+            // Create process to run trace_processor_shell
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = _executablePath,
+                Arguments = $"-Q \"SELECT COUNT(*) FROM slice\" {traceFilePath}",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = new Process { StartInfo = startInfo };
+            process.Start();
+
+            var exited = process.WaitForExit(5000);
+            if (!exited)
+                throw new TimeoutException("Trace processor timed out");
+
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            
+            if (error.Contains("Error", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"Error checking slices: {error}");
+                return false;
+            }
+
+            // Check that the count is > 0
+            if (int.TryParse(output.Trim(), out int count))
+            {
+                Console.WriteLine($"Found {count} slices in the trace");
+                return count > 0;
+            }
+            
+            Console.WriteLine($"Could not parse slice count: {output}");
+            return false;
         }
     }
 }

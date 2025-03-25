@@ -1,43 +1,43 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <OutputType>Library</OutputType>
-        <TargetFramework>net9.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <PublishAot>true</PublishAot>
-        <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <SelfContained>true</SelfContained>
-    </PropertyGroup>
-
-    <Target Name="CompileNative" BeforeTargets="Compile">
-        <Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
-    </Target>
-    
-    <Target Name="TransformExportsFile" BeforeTargets="LinkNative">
-        <Message Importance="high" Text="Transforming exports file: $(ExportsFile)" />
-
-        <PropertyGroup>
-            <NewContent>global:
-                perf_dlfilter_fns;
-                get_perf_dlfilter_fns;</NewContent>
-        </PropertyGroup>
-
-        <ReadLinesFromFile File="$(ExportsFile)">
-            <Output TaskParameter="Lines" ItemName="FileContents" />
-        </ReadLinesFromFile>
-
-        <WriteLinesToFile File="$(ExportsFile)" Lines="@(FileContents -&gt; Replace('global:', '$(NewContent)'))" Overwrite="true" />
-    </Target>
-
-
-    <ItemGroup>
-        <NativeLibrary Include="$(BaseOutputPath)exports.o" />
-    </ItemGroup>
-
-
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Library</OutputType>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <PublishAot>true</PublishAot>
+        <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <SelfContained>true</SelfContained>
+    </PropertyGroup>
+
+    <Target Name="CompileNative" BeforeTargets="Compile">
+        <Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
+    </Target>
+    
+    <Target Name="TransformExportsFile" BeforeTargets="LinkNative">
+        <Message Importance="high" Text="Transforming exports file: $(ExportsFile)" />
+
+        <PropertyGroup>
+            <NewContent>global:
+                perf_dlfilter_fns;
+                get_perf_dlfilter_fns;</NewContent>
+        </PropertyGroup>
+
+        <ReadLinesFromFile File="$(ExportsFile)">
+            <Output TaskParameter="Lines" ItemName="FileContents" />
+        </ReadLinesFromFile>
+
+        <WriteLinesToFile File="$(ExportsFile)" Lines="@(FileContents -&gt; Replace('global:', '$(NewContent)'))" Overwrite="true" />
+    </Target>
+
+
+    <ItemGroup>
+        <NativeLibrary Include="$(BaseOutputPath)exports.o" />
+    </ItemGroup>
+
+
     <ItemGroup>
       <ProjectReference Include="..\PerfConverter.Fuchsia\PerfConverter.Fuchsia.csproj" />
-    </ItemGroup>
-
+    </ItemGroup>
+
 </Project>
