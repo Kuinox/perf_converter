@@ -1,8 +1,0 @@
-V1.0 {
-    global:
-        DotNetRuntimeDebugHeader;
-        start;
-        filter_event_early;
-        stop;
-    local: *;
-};

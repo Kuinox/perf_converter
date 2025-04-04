@@ -53,7 +53,6 @@ public unsafe class SqlTraceProcessor : ITraceProcessor
     public static SqlTraceProcessor Create(SqliteConnection connection)
     {
         connection.Execute(@"
-            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='TraceSamples' AND xtype='U')
             CREATE TABLE TraceSamples (
                 Id BIGINT IDENTITY(1,1) PRIMARY KEY,
                 SampleId BIGINT NOT NULL,
