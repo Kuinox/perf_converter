@@ -60,12 +60,26 @@ public unsafe class PerfDlFilter
     {
         try
         {
+            // string from pointer
+            var str = Marshal.PtrToStringUTF8((IntPtr)sample->@event);
+            Console.Error.WriteLine($"FilterEventEarly: event: {str}");
+            Console.Error.WriteLine($"FilterEventEarly: id{sample->id} ip{(ulong)sample->ip:X} addr{(ulong)sample->addr:X} pid{sample->pid} tid{sample->tid} time{sample->time} cpu{sample->cpu} period{sample->period} insn_cnt{sample->insn_cnt} cyc_cnt{sample->cyc_cnt} weight{sample->weight} cpumode{sample->cpumode} addr_correlates_sym{sample->addr_correlates_sym} event{(ulong)sample->@event:X} machine_pid{sample->machine_pid} vcpu{sample->vcpu:X}");
             var fns = get_perf_dlfilter_fns();
+            Console.Error.WriteLine($"FilterEventEarly: fns pointer: {(ulong)fns:X}");
+            Console.Error.WriteLine($"FilterEventEarly: resolve_ip address: {(ulong)fns->resolve_ip:X}");
+            Console.Error.WriteLine($"FilterEventEarly: resolve_addr address: {(ulong)fns->resolve_addr:X}");
+            if((ulong)sample->ip == 0)
+            {
+                return 0;
+            }
+            Console.Error.WriteLine($"resolving ip");
+            AddressProcessor.ResolveIp(fns, sample->pid, sample->ip);
+
             if (sample->addr_correlates_sym != 0)
             {
+                Console.Error.WriteLine($"resolving addr");
                 AddressProcessor.HandleAdress(fns, sample->pid, sample->addr);
             }
-            AddressProcessor.ResolveIp(fns, sample->pid, sample->ip);
 
             TraceProcessor.FilterEventEarly(sample);
 

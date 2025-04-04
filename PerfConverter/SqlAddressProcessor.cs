@@ -18,7 +18,11 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         var casted = (ulong)addr;
         if (!_addresses.Add(casted)) return;
 
+        Console.Error.WriteLine($"HandleAdress: resolve_addr function address: {(ulong)fns->resolve_addr:X}");
+        Console.Error.WriteLine($"HandleAdress: addr parameter: {(ulong)addr:X}");
+
         var resolved = fns->resolve_addr(addr);
+        Console.Error.WriteLine($"HandleAdress: resolved address: {(ulong)resolved:X}");
         if (resolved == null) return;
 
         InsertResolved(resolved, pid, isIp: false);
@@ -28,10 +32,21 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
     {
         if (!_addresses.Add((ulong)ip)) return;
 
-        var resolved = fns->resolve_ip(ip);
-        if (resolved == null) return;
+        Console.Error.WriteLine($"ResolveIp: resolve_ip function address: {(ulong)fns->resolve_ip:X}");
+        Console.Error.WriteLine($"ResolveIp: ip parameter: {(ulong)ip:X}");
 
-        InsertResolved(resolved, pid, isIp: true);
+        try
+        {
+            var resolved = fns->resolve_ip(ip);
+            Console.Error.WriteLine($"ResolveIp: resolved address: {(ulong)resolved:X}");
+            if (resolved == null) return;
+
+            InsertResolved(resolved, pid, isIp: true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"ResolveIp: Exception calling resolve_ip: {ex}");
+        }
     }
 
     private unsafe void InsertResolved(PerfDlfilterAl* info, int pid, bool isIp)
