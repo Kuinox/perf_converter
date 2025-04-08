@@ -67,7 +67,7 @@ public unsafe class PerfDlFilter
     //        var addr = (IntPtr)sample->addr;
     //        var dlfilter_fns = get_perf_dlfilter_fns();
     //        var al = dlfilter_fns->resolve_ip(ctx);
-            
+
     //        if (al != null)
     //        {
     //            var symbolName = InternString(state, al->sym);
@@ -79,18 +79,28 @@ public unsafe class PerfDlFilter
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
-        var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-        var state = (State)handle.Target!;
-        var id = _traceProcessor.FilterEventEarly(sample);
-        var fns = get_perf_dlfilter_fns();
-        _addressProcessor.ProcessIp(fns, id, sample->pid, ctx);
-        if (sample->addr_correlates_sym != 0)
+        try
         {
-            _addressProcessor.ProcessAddress(fns, id, sample->pid, ctx);
+
+            var handle = GCHandle.FromIntPtr((IntPtr)rawState);
+            var state = (State)handle.Target!;
+
+            // Now id will be the same as sample->id
+            var id = _traceProcessor.FilterEventEarly(sample);
+            var fns = get_perf_dlfilter_fns();
+
+            _addressProcessor.ProcessIp(fns, id, sample->pid, ctx);
+            if (sample->addr_correlates_sym != 0)
+            {
+                _addressProcessor.ProcessAddress(fns, id, sample->pid, ctx);
+            }
         }
-
-
-        return 0;
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Exception in FilterEventEarly: {ex}");
+            return -1;
+        }
+        return 1;
     }
 
     [UnmanagedCallersOnly(EntryPoint = "stop")]
@@ -100,6 +110,10 @@ public unsafe class PerfDlFilter
         {
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
+
+            // Commit any remaining batched data
+            (_traceProcessor as SqlTraceProcessor)?.Flush();
+            (_addressProcessor as SqlAddressProcessor)?.Flush();
 
             handle.Free();
             return 0;
