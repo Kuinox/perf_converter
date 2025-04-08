@@ -1,60 +1,51 @@
-﻿using Dapper;
+﻿using System.Runtime.InteropServices;
+using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlTraceProcessor : ITraceProcessor
+public unsafe class SqlTraceProcessor(SqliteConnection connection) : ITraceProcessor
 {
-    private readonly SqliteConnection _connection;
-
-    private SqlTraceProcessor(SqliteConnection connection)
+    public unsafe long FilterEventEarly(PerfDlFilterSample* sample)
     {
-        _connection = connection;
-    }
-
-    public unsafe void FilterEventEarly(PerfDlFilterSample* sample)
-    {
-        InsertSample(sample);
-    }
-
-    private unsafe void InsertSample(PerfDlFilterSample* s)
-    {
-        _connection.Execute(@"
-            INSERT INTO TraceSamples (
-                SampleId, Pid, Tid, Time, Cpu, Ip, Addr, Period,
-                InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym,
-                Event, MachinePid, Vcpu
-            ) VALUES (
-                @SampleId, @Pid, @Tid, @Time, @Cpu, @Ip, @Addr, @Period,
-                @InsnCnt, @CycCnt, @Weight, @Cpumode, @AddrCorrelatesSym,
-                @Event, @MachinePid, @Vcpu
-            );
-        ", new
+        connection.Execute(@"
+        INSERT INTO TraceSamples (
+            SampleId, Pid, Tid, Time, Cpu, Ip, Addr, Period,
+            InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym,
+            Event, MachinePid, Vcpu
+        ) VALUES (
+            @SampleId, @Pid, @Tid, @Time, @Cpu, @Ip, @Addr, @Period,
+            @InsnCnt, @CycCnt, @Weight, @Cpumode, @AddrCorrelatesSym,
+            @Event, @MachinePid, @Vcpu
+        );
+    ", new
         {
-            SampleId = s->id,
-            Pid = s->pid,
-            Tid = s->tid,
-            Time = s->time,
-            Cpu = s->cpu,
-            Ip = (long)s->ip,
-            Addr = (long)s->addr,
-            Period = s->period,
-            InsnCnt = s->insn_cnt,
-            CycCnt = s->cyc_cnt,
-            Weight = s->weight,
-            Cpumode = s->cpumode,
-            AddrCorrelatesSym = s->addr_correlates_sym,
-            Event = (long)s->@event,
-            MachinePid = s->machine_pid,
-            Vcpu = s->vcpu
+            SampleId = sample->id,
+            Pid = sample->pid,
+            Tid = sample->tid,
+            Time = sample->time,
+            Cpu = sample->cpu,
+            Ip = (long)sample->ip,
+            Addr = (long)sample->addr,
+            Period = sample->period,
+            InsnCnt = sample->insn_cnt,
+            CycCnt = sample->cyc_cnt,
+            Weight = sample->weight,
+            Cpumode = sample->cpumode,
+            AddrCorrelatesSym = sample->addr_correlates_sym,
+            Event = Marshal.PtrToStringUTF8(sample->@event),
+            MachinePid = sample->machine_pid,
+            Vcpu = sample->vcpu
         });
+
+        return connection.ExecuteScalar<long>("SELECT last_insert_rowid();");
     }
 
     public static SqlTraceProcessor Create(SqliteConnection connection)
     {
         connection.Execute(@"
             CREATE TABLE TraceSamples (
-                Id BIGINT IDENTITY(1,1) PRIMARY KEY,
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
                 SampleId BIGINT NOT NULL,
                 Pid INT,
                 Tid INT,
@@ -68,7 +59,7 @@ public unsafe class SqlTraceProcessor : ITraceProcessor
                 Weight BIGINT,
                 Cpumode TINYINT,
                 AddrCorrelatesSym TINYINT,
-                Event BIGINT,
+                Event TEXT,
                 MachinePid INT,
                 Vcpu INT
             );

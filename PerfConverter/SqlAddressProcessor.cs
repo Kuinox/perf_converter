@@ -1,47 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using Dapper;
-using Microsoft.Data.SqlClient;
 using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
 public unsafe class SqlAddressProcessor : IAddressProcessor
 {
-    private readonly HashSet<ulong> _addresses = [];
     private readonly SqliteConnection _connection;
 
     private SqlAddressProcessor(SqliteConnection connection) => _connection = connection;
 
-    public unsafe void ProcessAddress(PerfDlfilterFns* fns, int pid, void* addr)
+    public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
-        var casted = (ulong)addr;
-        if (!_addresses.Add(casted)) return;
-
-        Console.Error.WriteLine($"HandleAdress: resolve_addr function address: {(ulong)fns->resolve_addr:X}");
-        Console.Error.WriteLine($"HandleAdress: addr parameter: {(ulong)addr:X}");
-
-        var resolved = fns->resolve_addr(addr);
-        Console.Error.WriteLine($"HandleAdress: resolved address: {(ulong)resolved:X}");
-        if (resolved == null) return;
-
-        InsertResolved(resolved, pid, isIp: false);
+        var resolved = fns->resolve_addr(ctx);
+        InsertResolved(resolved, traceId, pid, isIp: false);
     }
 
-    public unsafe void ProcessIp(PerfDlfilterFns* fns, int pid, void* ip)
+    public unsafe void ProcessIp(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
-        if (!_addresses.Add((ulong)ip)) return;
-
-        Console.Error.WriteLine($"ResolveIp: resolve_ip function address: {(ulong)fns->resolve_ip:X}");
-        Console.Error.WriteLine($"ResolveIp: ip parameter: {(ulong)ip:X}");
-
         try
         {
-            var resolved = fns->resolve_ip(ip);
+            var resolved = fns->resolve_ip(ctx);
             Console.Error.WriteLine($"ResolveIp: resolved address: {(ulong)resolved:X}");
             if (resolved == null) return;
 
-            InsertResolved(resolved, pid, isIp: true);
+            InsertResolved(resolved, traceId, pid, isIp: true);
         }
         catch (Exception ex)
         {
@@ -49,20 +33,23 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         }
     }
 
-    private unsafe void InsertResolved(PerfDlfilterAl* info, int pid, bool isIp)
+    private unsafe void InsertResolved(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
     {
         _connection.Execute(@"
-                INSERT INTO Addresses (
-                    Address, Pid, IsIp, Size, Symoff, Sym, SymStart, SymEnd,
-                    Dso, SymBinding, Is64Bit, IsKernelIp,
-                    BuildIdSize, BuildId, Filtered, Comm, Priv
-                ) VALUES (
-                    @Address, @Pid, @IsIp, @Size, @Symoff, @Sym, @SymStart, @SymEnd,
-                    @Dso, @SymBinding, @Is64Bit, @IsKernelIp,
-                    @BuildIdSize, @BuildId, @Filtered, @Comm, @Priv
-                );
-            ", new
+            INSERT INTO Addresses (
+                TraceId,
+                Address, Pid, IsIp, Size, Symoff, Sym, SymStart, SymEnd,
+                Dso, SymBinding, Is64Bit, IsKernelIp,
+                BuildIdSize, BuildId, Filtered, Comm, Priv
+            ) VALUES (
+                @TraceId,
+                @Address, @Pid, @IsIp, @Size, @Symoff, @Sym, @SymStart, @SymEnd,
+                @Dso, @SymBinding, @Is64Bit, @IsKernelIp,
+                @BuildIdSize, @BuildId, @Filtered, @Comm, @Priv
+            );
+        ", new
         {
+            TraceId = traceId,
             Address = info->addr,
             Pid = pid,
             IsIp = isIp,
@@ -86,27 +73,29 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
     public static SqlAddressProcessor Create(SqliteConnection connection)
     {
         connection.Execute(@"
-                CREATE TABLE Addresses (
-                    Id BIGINT IDENTITY(1,1) PRIMARY KEY,
-                    Address BIGINT NOT NULL,
-                    Pid INT NOT NULL,
-                    IsIp BIT NOT NULL,
-                    Size INT,
-                    Symoff INT,
-                    Sym BIGINT,
-                    SymStart BIGINT,
-                    SymEnd BIGINT,
-                    Dso BIGINT,
-                    SymBinding TINYINT,
-                    Is64Bit TINYINT,
-                    IsKernelIp TINYINT,
-                    BuildIdSize INT,
-                    BuildId BIGINT,
-                    Filtered TINYINT,
-                    Comm BIGINT,
-                    Priv BIGINT
-                );
-            ");
+            CREATE TABLE Addresses (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                TraceId BIGINT NOT NULL,
+                Address BIGINT NOT NULL,
+                Pid INT NOT NULL,
+                IsIp TINYINT NOT NULL,
+                Size INT,
+                Symoff INT,
+                Sym BIGINT,
+                SymStart BIGINT,
+                SymEnd BIGINT,
+                Dso BIGINT,
+                SymBinding TINYINT,
+                Is64Bit TINYINT,
+                IsKernelIp TINYINT,
+                BuildIdSize INT,
+                BuildId BIGINT,
+                Filtered TINYINT,
+                Comm BIGINT,
+                Priv BIGINT,
+                FOREIGN KEY (TraceId) REFERENCES TraceSamples(Id)
+            );
+        ");
 
         return new SqlAddressProcessor(connection);
     }

@@ -81,45 +81,16 @@ public unsafe class PerfDlFilter
     {
         var handle = GCHandle.FromIntPtr((IntPtr)rawState);
         var state = (State)handle.Target!;
-
+        var id = _traceProcessor.FilterEventEarly(sample);
         var fns = get_perf_dlfilter_fns();
-        _addressProcessor.ProcessIp(fns, sample->pid, sample->ip);
+        _addressProcessor.ProcessIp(fns, id, sample->pid, ctx);
         if (sample->addr_correlates_sym != 0)
         {
-            _addressProcessor.ProcessAddress(fns, sample->pid, sample->addr);
+            _addressProcessor.ProcessAddress(fns, id, sample->pid, ctx);
         }
 
-        _traceProcessor.FilterEventEarly(sample);
 
-        state.EventCount++;
-        if(state.EventCount > 100)
-        {
-            Console.Error.WriteLine("Processed 100 events, stopping.");
-            return -1;
-        }
         return 0;
-
-        //try
-        //{
-        //    // extract info from the event.
-        //    string eventType = GetEventString(sample->@event)!;
-        //    var splitted = eventType.Split(":");
-        //    var eventName = splitted[0];
-        //    var flag = sample->flags;
-        //    var isCall = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0;
-        //    var isBranch = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_BRANCH) != 0;
-        //    var isReturn = (flag & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0;
-
-
-        //    return 0;
-        //}
-        //catch (Exception e)
-        //{
-        //    state.Writer.WriteLine("Error processing event");
-        //    state.Writer.WriteLine(e);
-        //    state.Writer.Flush();
-        //    return -1;
-        //}
     }
 
     [UnmanagedCallersOnly(EntryPoint = "stop")]
