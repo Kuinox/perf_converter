@@ -13,7 +13,7 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
 
     private SqlAddressProcessor(SqliteConnection connection) => _connection = connection;
 
-    public unsafe void HandleAdress(PerfDlfilterFns* fns, int pid, void* addr)
+    public unsafe void ProcessAddress(PerfDlfilterFns* fns, int pid, void* addr)
     {
         var casted = (ulong)addr;
         if (!_addresses.Add(casted)) return;
@@ -28,7 +28,7 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         InsertResolved(resolved, pid, isIp: false);
     }
 
-    public unsafe void ResolveIp(PerfDlfilterFns* fns, int pid, void* ip)
+    public unsafe void ProcessIp(PerfDlfilterFns* fns, int pid, void* ip)
     {
         if (!_addresses.Add((ulong)ip)) return;
 

@@ -1,46 +1,45 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <OutputType>Library</OutputType>
-        <TargetFramework>net9.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <PublishAot>true</PublishAot>
-        <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <SelfContained>true</SelfContained>
-    </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<PublishAot>true</PublishAot>
+		<RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<SelfContained>true</SelfContained>
+	</PropertyGroup>
 
-    <Target Name="CompileNative" BeforeTargets="Compile">
-        <Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
-    </Target>
-    
-    <Target Name="TransformExportsFile" BeforeTargets="LinkNative">
-        <Message Importance="high" Text="Transforming exports file: $(ExportsFile)" />
+	<Target Name="CompileNative" BeforeTargets="Compile" Condition="'$(OS)' == 'Unix'">
+		<Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o"/>
+	</Target>
 
-        <PropertyGroup>
-            <NewContent>global:
-                perf_dlfilter_fns;
-                get_perf_dlfilter_fns;</NewContent>
-        </PropertyGroup>
+	<Target Name="TransformExportsFile" BeforeTargets="LinkNative" Condition="'$(OS)' == 'Unix'">
+		<Message Importance="high" Text="Transforming exports file: $(ExportsFile)"/>
+		<PropertyGroup>
+			<NewContent>
+				global:
+				perf_dlfilter_fns;
+				get_perf_dlfilter_fns;
+			</NewContent>
+		</PropertyGroup>
 
-        <ReadLinesFromFile File="$(ExportsFile)">
-            <Output TaskParameter="Lines" ItemName="FileContents" />
-        </ReadLinesFromFile>
+		<ReadLinesFromFile File="$(ExportsFile)">
+			<Output TaskParameter="Lines" ItemName="FileContents"/>
+		</ReadLinesFromFile>
 
-        <WriteLinesToFile File="$(ExportsFile)" Lines="@(FileContents -&gt; Replace('global:', '$(NewContent)'))" Overwrite="true" />
-    </Target>
+		<WriteLinesToFile File="$(ExportsFile)"
+						  Lines="@(FileContents -> Replace('global:', '$(NewContent)'))"
+						  Overwrite="true"/>
+	</Target>
 
-
-    <ItemGroup>
-        <NativeLibrary Include="$(BaseOutputPath)exports.o" />
-    </ItemGroup>
-
-
+	<ItemGroup Condition="'$(OS)' == 'Unix'">
+		<NativeLibrary Include="$(BaseOutputPath)exports.o"/>
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Dapper" Version="2.1.66" />
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3" />
 	</ItemGroup>
-
 </Project>

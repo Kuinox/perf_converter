@@ -8,6 +8,6 @@ namespace PerfConverter;
 
 internal interface IAddressProcessor
 {
-    unsafe void HandleAdress(PerfDlfilterFns* fns, int pid, void* addr);
-    unsafe void ResolveIp(PerfDlfilterFns* fns, int pid, void* ip);
+    unsafe void ProcessAddress(PerfDlfilterFns* fns, int pid, void* addr);
+    unsafe void ProcessIp(PerfDlfilterFns* fns, int pid, void* ip);
 }
