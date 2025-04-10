@@ -47,35 +47,6 @@ public unsafe class PerfDlFilter
         }
     }
 
-    //static string? InternString(State state, IntPtr intPtr)
-    //{
-    //    if(intPtr == IntPtr.Zero) return null;
-    //    if (state.SymbolCache.TryGetValue(intPtr, out var cachedSymbol))
-    //    {
-    //        return cachedSymbol;
-    //    }
-    //    var str = Marshal.PtrToStringUTF8(intPtr);
-    //    state.SymbolCache[intPtr] = str;
-    //    state.Writer.WriteLine($"Resolved: {str}");
-    //    return str;
-    ////}
-
-    //static void ResolveAddress(State state, PerfDlFilterSample* sample, void* ctx)
-    //{
-    //    if (sample->addr_correlates_sym != 0)
-    //    {
-    //        var addr = (IntPtr)sample->addr;
-    //        var dlfilter_fns = get_perf_dlfilter_fns();
-    //        var al = dlfilter_fns->resolve_ip(ctx);
-
-    //        if (al != null)
-    //        {
-    //            var symbolName = InternString(state, al->sym);
-    //            //state.Writer.WriteLine($"Resolved: {symbolName}");
-    //        }
-    //    }
-    //}
-
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
@@ -112,8 +83,8 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
 
             // Commit any remaining batched data
-            (_traceProcessor as SqlTraceProcessor)?.Flush();
-            (_addressProcessor as SqlAddressProcessor)?.Flush();
+            (_traceProcessor as SqlTraceProcessor)?.Close();
+            (_addressProcessor as SqlAddressProcessor)?.Close();
 
             handle.Free();
             return 0;

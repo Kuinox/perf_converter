@@ -5,11 +5,8 @@ using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlAddressProcessor : IAddressProcessor
+public unsafe class SqlAddressProcessor(SqliteConnection connection) : BackgroundBatching<SqlAddressProcessor.AddressEntry>(200_000), IAddressProcessor
 {
-    private const int BATCH_SIZE = 20000;
-
-    [StructLayout(LayoutKind.Sequential)]
     public struct AddressEntry
     {
         public ulong Id;
@@ -20,6 +17,7 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         public int Size;
         public int Symoff;
         public long Sym;
+        public string? SymStr;
         public ulong SymStart;
         public ulong SymEnd;
         public long Dso;
@@ -34,19 +32,14 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         public bool Used;
     }
 
-    private readonly Memory<AddressEntry> _addresses = new AddressEntry[BATCH_SIZE];
-    private int _addressCount = 0;
-    private ulong _totalAddresses = 0;
-    private readonly SqliteConnection _connection;
-
-    private SqlAddressProcessor(SqliteConnection connection) => _connection = connection;
+    private ulong _currenAddress = 0;
 
     public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
         var resolved = fns->resolve_addr(ctx);
         if (resolved != null)
         {
-            AddToAddressBatch(resolved, traceId, pid, isIp: false);
+            Process(resolved, traceId, pid, isIp: false);
         }
     }
 
@@ -55,19 +48,18 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
         var resolved = fns->resolve_ip(ctx);
         if (resolved == null) return;
 
-        AddToAddressBatch(resolved, traceId, pid, isIp: true);
+        Process(resolved, traceId, pid, isIp: true);
     }
 
-    private unsafe void AddToAddressBatch(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
+    private unsafe void Process(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
     {
-        if (_addressCount >= BATCH_SIZE)
-        {
-            Flush();
-        }
+        var symStr = info->sym != 0
+            ? Marshal.PtrToStringUTF8((IntPtr)info->sym)
+            : null;
 
-        _addresses.Span[_addressCount] = new AddressEntry
+        QueueItem(new AddressEntry
         {
-            Id = _totalAddresses++,
+            Id = _currenAddress++,
             TraceId = traceId,
             Address = info->addr,
             Pid = pid,
@@ -75,6 +67,7 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
             Size = (int)info->size,
             Symoff = (int)info->symoff,
             Sym = (long)info->sym,
+            SymStr = symStr,
             SymStart = info->sym_start,
             SymEnd = info->sym_end,
             Dso = (long)info->dso,
@@ -87,37 +80,26 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
             Comm = (long)info->comm,
             Priv = (long)info->priv,
             Used = true
-        };
-
-        _addressCount++;
+        });
     }
 
-    public void Flush()
+    protected override void BatchSend(IReadOnlyCollection<AddressEntry> batch)
     {
-        if (_addressCount == 0) return;
-
-        using var transaction = _connection.BeginTransaction();
-
-        // Prepare parameters array for bulk insert
-
-        _connection.Execute(@"
+        connection.Execute(@"
             INSERT INTO Addresses (
                 Id,
                 TraceId,
-                Address, Pid, IsIp, Size, Symoff, Sym, SymStart, SymEnd,
+                Address, Pid, IsIp, Size, Symoff, Sym, SymStr, SymStart, SymEnd,
                 Dso, SymBinding, Is64Bit, IsKernelIp,
                 BuildIdSize, BuildId, Filtered, Comm, Priv
             ) VALUES (
                 @Id,
                 @TraceId,
-                @Address, @Pid, @IsIp, @Size, @Symoff, @Sym, @SymStart, @SymEnd,
+                @Address, @Pid, @IsIp, @Size, @Symoff, @Sym, @SymStr, @SymStart, @SymEnd,
                 @Dso, @SymBinding, @Is64Bit, @IsKernelIp,
                 @BuildIdSize, @BuildId, @Filtered, @Comm, @Priv
             );
-        ", _addresses[.._addressCount].ToArray(), transaction);
-
-        transaction.Commit();
-        _addressCount = 0;
+        ", batch);
     }
 
     public static SqlAddressProcessor Create(SqliteConnection connection)
@@ -132,6 +114,7 @@ public unsafe class SqlAddressProcessor : IAddressProcessor
                 Size INT,
                 Symoff INT,
                 Sym BIGINT,
+                SymStr TEXT,
                 SymStart BIGINT,
                 SymEnd BIGINT,
                 Dso BIGINT,
