@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Transactions;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlAddressProcessor(SqliteConnection connection) : BackgroundBatching<SqlAddressProcessor.AddressEntry>(200_000), IAddressProcessor
+public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSlim semaphore) : BackgroundBatching<SqlAddressProcessor.AddressEntry>(200_000, semaphore), IAddressProcessor
 {
     public struct AddressEntry
     {
@@ -85,6 +86,8 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection) : Backgroun
 
     protected override void BatchSend(IReadOnlyCollection<AddressEntry> batch)
     {
+        using var transaction = connection.BeginTransaction();
+
         connection.Execute(@"
             INSERT INTO Addresses (
                 Id,
@@ -99,10 +102,11 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection) : Backgroun
                 @Dso, @SymBinding, @Is64Bit, @IsKernelIp,
                 @BuildIdSize, @BuildId, @Filtered, @Comm, @Priv
             );
-        ", batch);
+        ", batch, transaction);
+        transaction.Commit();
     }
 
-    public static SqlAddressProcessor Create(SqliteConnection connection)
+    public static SqlAddressProcessor Create(SqliteConnection connection, SemaphoreSlim semaphore)
     {
         connection.Execute(@"
             CREATE TABLE Addresses (
@@ -127,8 +131,8 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection) : Backgroun
                 Comm BIGINT,
                 Priv BIGINT
             );
-        ");
+        ", semaphore);
 
-        return new SqlAddressProcessor(connection);
+        return new SqlAddressProcessor(connection, semaphore);
     }
 }

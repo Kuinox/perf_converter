@@ -9,10 +9,14 @@ namespace PerfConverter
 {
     public abstract class BackgroundBatching<T> where T : struct
     {
+        readonly SemaphoreSlim _semaphore;
         readonly Channel<T> _entries;
         readonly Task _workLoop;
-        protected BackgroundBatching(int channelSize)
+        readonly int _channelSize;
+
+        protected BackgroundBatching(int channelSize, SemaphoreSlim semaphore)
         {
+            _semaphore = semaphore;
             _entries = Channel.CreateBounded<T>(new BoundedChannelOptions(channelSize)
             {
                 SingleReader = true,
@@ -20,6 +24,7 @@ namespace PerfConverter
                 AllowSynchronousContinuations = false
             });
             _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning);
+            this._channelSize = channelSize;
         }
 
         async Task WorkLoop()
@@ -31,11 +36,15 @@ namespace PerfConverter
 
                 while (await _entries.Reader.WaitToReadAsync())
                 {
-                    while (_entries.Reader.TryRead(out var item))
+                    while (_entries.Reader.TryRead(out var item) && batch.Count < _channelSize)
                     {
                         batch.Add(item);
                     }
+                    _semaphore.Wait();
+                    Console.Error.WriteLine($"Sending lol batch of {batch.Count} {typeof(T)}, {_semaphore.CurrentCount}");
                     BatchSend(batch);
+                    Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)}");
+                    _semaphore.Release();
                     batch.Clear();
                 }
             }

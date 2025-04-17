@@ -27,6 +27,7 @@ public unsafe class PerfDlFilter
     {
         try
         {
+            Console.SetError(new WrappingWriter(Console.Error));
             var state = new State
             {
                 EventCount = 0,
@@ -36,13 +37,15 @@ public unsafe class PerfDlFilter
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
             var sqliteConnection = new SqliteConnection("Data Source=perf.db");
             sqliteConnection.Open();
-            _addressProcessor = SqlAddressProcessor.Create(sqliteConnection);
-            _traceProcessor = SqlTraceProcessor.Create(sqliteConnection);
+            var semaphore = new SemaphoreSlim(1);
+            _addressProcessor = SqlAddressProcessor.Create(sqliteConnection, semaphore);
+            _traceProcessor = SqlTraceProcessor.Create(sqliteConnection, semaphore);
 
             return 0;
         }
-        catch
+        catch(Exception ex)
         {
+            Console.Error.WriteLine(ex.ToString());
             return -1;
         }
     }

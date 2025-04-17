@@ -1,10 +1,11 @@
 ﻿using System.Runtime.InteropServices;
+using System.Xml.Schema;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlTraceProcessor(SqliteConnection connection) : BackgroundBatching<SqlTraceProcessor.TraceSample>(200_000), ITraceProcessor
+public unsafe class SqlTraceProcessor(SqliteConnection connection, SemaphoreSlim semaphore) : BackgroundBatching<SqlTraceProcessor.TraceSample>(200_000, semaphore), ITraceProcessor
 {
     [StructLayout(LayoutKind.Sequential)]
     public struct TraceSample
@@ -56,6 +57,7 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection) : BackgroundB
 
     protected override void BatchSend(IReadOnlyCollection<TraceSample> batch)
     {
+        using var transaction = connection.BeginTransaction();
         connection.Execute(@"
         INSERT INTO TraceSamples (
             Id, Pid, Tid, Time, Cpu, Ip, Addr, Period,
@@ -65,10 +67,11 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection) : BackgroundB
             @Id, @Pid, @Tid, @Time, @Cpu, @Ip, @Addr, @Period,
             @InsnCnt, @CycCnt, @Weight, @Cpumode, @AddrCorrelatesSym,
             @Event, @MachinePid, @Vcpu
-        );", batch);
+        );", batch, transaction);
+        transaction.Commit();
     }
 
-    public static SqlTraceProcessor Create(SqliteConnection connection)
+    public static SqlTraceProcessor Create(SqliteConnection connection, SemaphoreSlim semaphore)
     {
         connection.Execute(@"
             CREATE TABLE TraceSamples (
@@ -91,6 +94,6 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection) : BackgroundB
             );
         ");
 
-        return new SqlTraceProcessor(connection);
+        return new SqlTraceProcessor(connection, semaphore);
     }
 }
