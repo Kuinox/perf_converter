@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -9,14 +11,11 @@ namespace PerfConverter
 {
     public abstract class BackgroundBatching<T> where T : struct
     {
-        readonly SemaphoreSlim _semaphore;
         readonly Channel<T> _entries;
         readonly Task _workLoop;
         readonly int _channelSize;
-
-        protected BackgroundBatching(int channelSize, SemaphoreSlim semaphore)
+        unsafe protected BackgroundBatching(int channelSize)
         {
-            _semaphore = semaphore;
             _entries = Channel.CreateBounded<T>(new BoundedChannelOptions(channelSize)
             {
                 SingleReader = true,
@@ -33,18 +32,19 @@ namespace PerfConverter
             {
 
                 var batch = new List<T>();
-
+                Stopwatch sw = Stopwatch.StartNew();
                 while (await _entries.Reader.WaitToReadAsync())
                 {
                     while (_entries.Reader.TryRead(out var item) && batch.Count < _channelSize)
                     {
                         batch.Add(item);
                     }
-                    _semaphore.Wait();
-                    Console.Error.WriteLine($"Sending lol batch of {batch.Count} {typeof(T)}, {_semaphore.CurrentCount}");
+                    SqlLock.Wait();
+                    Console.Error.WriteLine($"Sending batch of {batch.Count} {typeof(T)}");
+                    sw.Restart();
                     BatchSend(batch);
-                    Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)}");
-                    _semaphore.Release();
+                    Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
+                    SqlLock.Release();
                     batch.Clear();
                 }
             }

@@ -1,11 +1,12 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Data.Common;
+using System.Runtime.InteropServices;
 using System.Xml.Schema;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlTraceProcessor(SqliteConnection connection, SemaphoreSlim semaphore) : BackgroundBatching<SqlTraceProcessor.TraceSample>(200_000, semaphore), ITraceProcessor
+public unsafe class SqlTraceProcessor : BackgroundBatching<SqlTraceProcessor.TraceSample>, ITraceProcessor
 {
     [StructLayout(LayoutKind.Sequential)]
     public struct TraceSample
@@ -29,6 +30,12 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection, SemaphoreSlim
     }
     
     private ulong _totalSamples = 0;
+    private readonly DbConnection _connection;
+
+    private SqlTraceProcessor(DbConnection connection) : base(20_000_000)
+    {
+        _connection = connection;
+    }
 
     public unsafe long FilterEventEarly(PerfDlFilterSample* sample)
     {
@@ -57,21 +64,21 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection, SemaphoreSlim
 
     protected override void BatchSend(IReadOnlyCollection<TraceSample> batch)
     {
-        using var transaction = connection.BeginTransaction();
-        connection.Execute(@"
+        using var transaction = _connection.BeginTransaction();
+        _connection.Execute(@"
         INSERT INTO TraceSamples (
             Id, Pid, Tid, Time, Cpu, Ip, Addr, Period,
             InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym,
             Event, MachinePid, Vcpu
         ) VALUES (
-            @Id, @Pid, @Tid, @Time, @Cpu, @Ip, @Addr, @Period,
-            @InsnCnt, @CycCnt, @Weight, @Cpumode, @AddrCorrelatesSym,
-            @Event, @MachinePid, @Vcpu
+            $Id, $Pid, $Tid, $Time, $Cpu, $Ip, $Addr, $Period,
+            $InsnCnt, $CycCnt, $Weight, $Cpumode, $AddrCorrelatesSym,
+            $Event, $MachinePid, $Vcpu
         );", batch, transaction);
         transaction.Commit();
     }
 
-    public static SqlTraceProcessor Create(SqliteConnection connection, SemaphoreSlim semaphore)
+    public static SqlTraceProcessor Create(DbConnection connection)
     {
         connection.Execute(@"
             CREATE TABLE TraceSamples (
@@ -94,6 +101,6 @@ public unsafe class SqlTraceProcessor(SqliteConnection connection, SemaphoreSlim
             );
         ");
 
-        return new SqlTraceProcessor(connection, semaphore);
+        return new SqlTraceProcessor(connection);
     }
 }

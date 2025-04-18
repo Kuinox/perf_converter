@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Data.Common;
 using System.Runtime.InteropServices;
 using System.Transactions;
 using Dapper;
@@ -6,7 +7,7 @@ using Microsoft.Data.Sqlite;
 
 namespace PerfConverter;
 
-public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSlim semaphore) : BackgroundBatching<SqlAddressProcessor.AddressEntry>(200_000, semaphore), IAddressProcessor
+public unsafe class SqlAddressProcessor : BackgroundBatching<SqlAddressProcessor.AddressEntry>, IAddressProcessor
 {
     public struct AddressEntry
     {
@@ -17,8 +18,7 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSl
         public bool IsIp;
         public int Size;
         public int Symoff;
-        public long Sym;
-        public string? SymStr;
+        public long SymStrId;
         public ulong SymStart;
         public ulong SymEnd;
         public long Dso;
@@ -34,6 +34,14 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSl
     }
 
     private ulong _currenAddress = 0;
+    private readonly DbConnection _connection;
+    private readonly SqlSymProcessor _sqlSymProcessor;
+
+    private SqlAddressProcessor(DbConnection connection, SqlSymProcessor sqlSymProcessor) : base(20_000_000)
+    {
+        _connection = connection;
+        _sqlSymProcessor = sqlSymProcessor;
+    }
 
     public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
@@ -54,9 +62,12 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSl
 
     private unsafe void Process(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
     {
-        var symStr = info->sym != 0
-            ? Marshal.PtrToStringUTF8((IntPtr)info->sym)
-            : null;
+        long symStrId = 0;
+        if (info->sym != 0)
+        {
+            var str = Marshal.PtrToStringUTF8(info->sym)!;
+            symStrId = _sqlSymProcessor.Process(str);
+        }
 
         QueueItem(new AddressEntry
         {
@@ -67,58 +78,56 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSl
             IsIp = isIp,
             Size = (int)info->size,
             Symoff = (int)info->symoff,
-            Sym = (long)info->sym,
-            SymStr = symStr,
+            SymStrId = symStrId,
             SymStart = info->sym_start,
             SymEnd = info->sym_end,
-            Dso = (long)info->dso,
+            Dso = info->dso,
             SymBinding = info->sym_binding,
             Is64Bit = info->is_64_bit,
             IsKernelIp = info->is_kernel_ip,
             BuildIdSize = (int)info->buildid_size,
-            BuildId = (long)info->buildid,
+            BuildId = info->buildid,
             Filtered = info->filtered,
-            Comm = (long)info->comm,
-            Priv = (long)info->priv,
+            Comm = info->comm,
+            Priv = info->priv,
             Used = true
         });
     }
 
     protected override void BatchSend(IReadOnlyCollection<AddressEntry> batch)
     {
-        using var transaction = connection.BeginTransaction();
+        using var transaction = _connection.BeginTransaction();
 
-        connection.Execute(@"
+        _connection.Execute(@"
             INSERT INTO Addresses (
                 Id,
                 TraceId,
-                Address, Pid, IsIp, Size, Symoff, Sym, SymStr, SymStart, SymEnd,
+                Address, Pid, IsIp, Size, Symoff, SymStrId, SymStart, SymEnd,
                 Dso, SymBinding, Is64Bit, IsKernelIp,
                 BuildIdSize, BuildId, Filtered, Comm, Priv
             ) VALUES (
-                @Id,
-                @TraceId,
-                @Address, @Pid, @IsIp, @Size, @Symoff, @Sym, @SymStr, @SymStart, @SymEnd,
-                @Dso, @SymBinding, @Is64Bit, @IsKernelIp,
-                @BuildIdSize, @BuildId, @Filtered, @Comm, @Priv
+                $Id,
+                $TraceId,
+                $Address, $Pid, $IsIp, $Size, $Symoff, $SymStrId, $SymStart, $SymEnd,
+                $Dso, $SymBinding, $Is64Bit, $IsKernelIp,
+                $BuildIdSize, $BuildId, $Filtered, $Comm, $Priv
             );
         ", batch, transaction);
         transaction.Commit();
     }
 
-    public static SqlAddressProcessor Create(SqliteConnection connection, SemaphoreSlim semaphore)
+    public static SqlAddressProcessor Create(DbConnection connection, SqlSymProcessor sqlSymProcessor)
     {
         connection.Execute(@"
             CREATE TABLE Addresses (
-                Id INTEGER PRIMARY KEY,
+                Id BIGINT PRIMARY KEY,
                 TraceId BIGINT NOT NULL,
                 Address BIGINT NOT NULL,
                 Pid INT NOT NULL,
                 IsIp TINYINT NOT NULL,
                 Size INT,
                 Symoff INT,
-                Sym BIGINT,
-                SymStr TEXT,
+                SymStrId BIGINT,
                 SymStart BIGINT,
                 SymEnd BIGINT,
                 Dso BIGINT,
@@ -131,8 +140,8 @@ public unsafe class SqlAddressProcessor(SqliteConnection connection, SemaphoreSl
                 Comm BIGINT,
                 Priv BIGINT
             );
-        ", semaphore);
+        ");
 
-        return new SqlAddressProcessor(connection, semaphore);
+        return new SqlAddressProcessor(connection, sqlSymProcessor);
     }
 }

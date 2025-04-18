@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.Sqlite;
+﻿using Dapper;
+using Microsoft.Data.Sqlite;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -10,13 +11,13 @@ public unsafe class PerfDlFilter
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
     public static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
+    private static SqlSymProcessor _sqlSymProcessor = null!;
     private static IAddressProcessor _addressProcessor = null!;
     private static ITraceProcessor _traceProcessor = null!;
-
+    private static SqliteConnection _sqliteConnection = null!;
     private class State
     {
         public int EventCount { get; set; }
-        public HashSet<string> Events { get; set; } = null!;
 
     }
 
@@ -31,15 +32,17 @@ public unsafe class PerfDlFilter
             var state = new State
             {
                 EventCount = 0,
-                Events = [],
             };
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
-            var sqliteConnection = new SqliteConnection("Data Source=perf.db");
-            sqliteConnection.Open();
-            var semaphore = new SemaphoreSlim(1);
-            _addressProcessor = SqlAddressProcessor.Create(sqliteConnection, semaphore);
-            _traceProcessor = SqlTraceProcessor.Create(sqliteConnection, semaphore);
+            _sqliteConnection = new SqliteConnection("Data Source=perf.db");
+            _sqliteConnection.Open();
+            _sqliteConnection.Execute("PRAGMA journal_mode=OFF;");
+            _sqliteConnection.Execute("PRAGMA synchronous=OFF;");
+            _sqliteConnection.Execute("PRAGMA locking_mode=EXCLUSIVE;");
+            _sqlSymProcessor = SqlSymProcessor.Create(_sqliteConnection);
+            _addressProcessor = SqlAddressProcessor.Create(_sqliteConnection, _sqlSymProcessor);
+            _traceProcessor = SqlTraceProcessor.Create(_sqliteConnection);
 
             return 0;
         }
@@ -86,10 +89,11 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
 
             // Commit any remaining batched data
-            (_traceProcessor as SqlTraceProcessor)?.Close();
-            (_addressProcessor as SqlAddressProcessor)?.Close();
+            _traceProcessor.Close();
+            _addressProcessor.Close();
+            _sqlSymProcessor.Close();
+            _sqliteConnection.Close();
 
-            handle.Free();
             return 0;
         }
         catch
