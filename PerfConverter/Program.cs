@@ -1,6 +1,9 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
-using System.Runtime.CompilerServices;
+using PerfConverter.Entry;
+using PerfConverter.Persistance;
+using PerfConverter.Persistance.Sql;
+using PerfConverter.Processor;
 using System.Runtime.InteropServices;
 
 namespace PerfConverter;
@@ -11,15 +14,18 @@ public unsafe class PerfDlFilter
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
     public static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    private static SymProcessor _sqlSymProcessor = null!;
-    private static IAddressProcessor _addressProcessor = null!;
-    private static ITraceProcessor _traceProcessor = null!;
-    private static SqliteConnection _sqliteConnection = null!;
-    private static int? _maxTracesToProcess = null;
+    static ISymProcessor _sqlSymProcessor = null!;
+    static IAddressProcessor _addressProcessor = null!;
+    static ITraceProcessor _traceProcessor = null!;
+    static SqliteConnection _sqliteConnection = null!;
+    static int? _maxTracesToProcess = null;
+    static Batcher<SymbolEntry> _symbolBatcher = null!;
+    static Batcher<AddressEntry> _addressBatcher = null!;
+    static Batcher<TraceSampleEntry> _traceBatcher = null!;
+
     private class State
     {
         public int EventCount { get; set; }
-
     }
 
     private static string? GetEventString(IntPtr eventPtr) => Marshal.PtrToStringUTF8(eventPtr);
@@ -48,9 +54,20 @@ public unsafe class PerfDlFilter
             _sqliteConnection.Execute("PRAGMA journal_mode=OFF;");
             _sqliteConnection.Execute("PRAGMA synchronous=OFF;");
             _sqliteConnection.Execute("PRAGMA locking_mode=EXCLUSIVE;");
-            _sqlSymProcessor = SymProcessor.Create(_sqliteConnection);
-            _addressProcessor = AddressProcessor.Create(_sqliteConnection, _sqlSymProcessor);
-            _traceProcessor = TraceProcessor.Create(_sqliteConnection);
+
+            var batchSize = 1_000_000;
+
+             var sqlSymbolPersister = SqlSymPersistance.Create(_sqliteConnection);
+            var addressPersister = SqlAddressPersistance.Create(_sqliteConnection);
+            var tracePersister = SqlTracePersistance.Create(_sqliteConnection);
+            _symbolBatcher = Batcher<SymbolEntry>.Create(sqlSymbolPersister, batchSize);
+            _addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize);
+            _traceBatcher = Batcher<TraceSampleEntry>.Create(tracePersister, batchSize);
+
+
+            _sqlSymProcessor = new SymProcessor(_symbolBatcher);
+            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _addressBatcher);
+            _traceProcessor = new TraceProcessor(_traceBatcher);
 
             return 0;
         }
@@ -102,9 +119,9 @@ public unsafe class PerfDlFilter
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             // Commit any remaining batched data
-            _traceProcessor.Close();
-            _addressProcessor.Close();
-            _sqlSymProcessor.Close();
+            _traceBatcher.Dispose();
+            _addressBatcher.Dispose();
+            _symbolBatcher.Dispose();
             _sqliteConnection.Close();
             Console.Error.WriteLine("Done.");
             return 0;

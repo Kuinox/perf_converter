@@ -1,23 +1,12 @@
-﻿using System.Runtime.InteropServices;
-using System.Threading.Channels;
+﻿using PerfConverter.Entry;
 using PerfConverter.Persistance;
+using System.Runtime.InteropServices;
 
-namespace PerfConverter;
+namespace PerfConverter.Processor;
 
-public unsafe class AddressProcessor : IAddressProcessor
+public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<AddressEntry> persistance) : IAddressProcessor
 {
     private ulong _currenAddress = 0;
-    private readonly SymProcessor _sqlSymProcessor;
-    private readonly Channel<AddressEntry> _channel;
-    private readonly Task _workThread;
-
-    private AddressProcessor(SymProcessor sqlSymProcessor, IAddressPersistance persistance)
-    {
-        var batchSize = 1_000_000;
-        _sqlSymProcessor = sqlSymProcessor;
-        _channel = Channel.CreateBounded<AddressEntry>(batchSize);
-        _workThread = BackgroundBatching<AddressEntry>.Run(batchSize, _channel.Reader, persistance.Persist);
-    }
 
     public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
@@ -42,12 +31,12 @@ public unsafe class AddressProcessor : IAddressProcessor
         if (info->sym != 0)
         {
             var str = Marshal.PtrToStringUTF8(info->sym)!;
-            symStrId = _sqlSymProcessor.Process(str);
+            symStrId = sqlSymProcessor.Process(str);
         }
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();
 
-        _channel.Writer.Write(new AddressEntry
+        persistance.Persit(new AddressEntry
         {
             Id = _currenAddress++,
             TraceId = traceId,
@@ -68,11 +57,5 @@ public unsafe class AddressProcessor : IAddressProcessor
             Comm = info->comm,
             Priv = info->priv
         });
-    }
-    public void Close()
-    {
-        _channel.Writer.Complete();
-        _workThread.Wait();
-        _sqlSymProcessor.Flush();
     }
 }

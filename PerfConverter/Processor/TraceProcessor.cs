@@ -1,28 +1,16 @@
-﻿using System.Data.Common;
-using System.Runtime.InteropServices;
-using System.Threading.Channels;
-using System.Xml.Schema;
-using Dapper;
-using Microsoft.Data.Sqlite;
+﻿using System.Runtime.InteropServices;
+using PerfConverter.Entry;
 using PerfConverter.Persistance;
 
-namespace PerfConverter;
+namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor : ITraceProcessor
+public unsafe class TraceProcessor(IPersiter<TraceSampleEntry> persistance) : ITraceProcessor
 {
     private ulong _totalSamples = 0;
-    private Channel<TraceSample> _channel;
-    private Task _workThread;
-    private TraceProcessor(ITracePersistance persistance)
-    {
-        var batchSize = 1_000_000;
-        _channel = Channel.CreateBounded<TraceSample>(batchSize);
-        _workThread = BackgroundBatching<TraceSample>.Run(batchSize, _channel.Reader, persistance.Persist);
-    }
 
     public unsafe long FilterEventEarly(PerfDlFilterSample* sample)
     {
-        _channel.Writer.Write(new TraceSample
+        persistance.Persit(new TraceSampleEntry
         {
             Id = _totalSamples++,
             Pid = sample->pid,
@@ -43,11 +31,5 @@ public unsafe class TraceProcessor : ITraceProcessor
         });
 
         return (long)sample->id;
-    }
-
-    public void Close()
-    {
-        _channel.Writer.Complete();
-        _workThread.Wait();
     }
 }

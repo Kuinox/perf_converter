@@ -1,11 +1,4 @@
-using Microsoft.VisualBasic;
-using SQLitePCL;
-using System.Collections.Generic;
-using System;
-using System.Drawing;
 using System.Runtime.InteropServices;
-using System.Transactions;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace PerfConverter;
 

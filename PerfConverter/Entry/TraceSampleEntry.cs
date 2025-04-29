@@ -1,9 +1,9 @@
 ﻿using System.Runtime.InteropServices;
 
-namespace PerfConverter;
+namespace PerfConverter.Entry;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct TraceSample
+public struct TraceSampleEntry
 {
     public ulong Id;
     public int Pid;

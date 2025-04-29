@@ -1,17 +1,15 @@
 ﻿using System.Data.Common;
 using Dapper;
-using PerfConverter.Persistance;
+using PerfConverter.Entry;
 
 namespace PerfConverter.Persistance.Sql;
 
-public class SqlTracePersistance : ITracePersistance
+public class SqlTracePersistance : IBatchPersistance<TraceSampleEntry>
 {
-    private readonly DbConnection _connection;
-    private SqlTracePersistance(DbConnection connection)
-    {
-        _connection = connection;
-    }
-    public void Persist(IReadOnlyCollection<TraceSample> batch)
+    readonly DbConnection _connection;
+    SqlTracePersistance(DbConnection connection) => _connection = connection;
+
+    public void Persist(IReadOnlyCollection<TraceSampleEntry> batch)
     {
         using var transaction = _connection.BeginTransaction();
         _connection.Execute(@"
@@ -27,7 +25,7 @@ public class SqlTracePersistance : ITracePersistance
         transaction.Commit();
     }
 
-    public static ITracePersistance Create(DbConnection connection)
+    public static IBatchPersistance<TraceSampleEntry> Create(DbConnection connection)
     {
         connection.Execute(@"
             CREATE TABLE TraceSamples (

@@ -1,18 +1,37 @@
 ﻿using System.Data.Common;
 using Dapper;
-using PerfConverter.Persistance;
+using PerfConverter.Entry;
 
 namespace PerfConverter.Persistance.Sql;
 
-public class SqlAddressPersistance : IAddressPersistance
+public class SqlAddressPersistance : IBatchPersistance<AddressEntry>
 {
-    private readonly DbConnection _connection;
-    private SqlAddressPersistance(DbConnection connection)
+    readonly DbConnection _connection;
+    SqlAddressPersistance(DbConnection connection) => _connection = connection;
+
+    public void Persist(IReadOnlyCollection<AddressEntry> batch)
     {
-        _connection = connection;
+        using var transaction = _connection.BeginTransaction();
+
+        _connection.Execute(@"
+            INSERT INTO Addresses (
+                Id,
+                TraceId,
+                Address, Pid, IsIp, Size, Symoff, SymStrId, SymStart, SymEnd,
+                Dso, SymBinding, Is64Bit, IsKernelIp,
+                BuildId, Filtered, Comm, Priv
+            ) VALUES (
+                $Id,
+                $TraceId,
+                $Address, $Pid, $IsIp, $Size, $Symoff, $SymStrId, $SymStart, $SymEnd,
+                $Dso, $SymBinding, $Is64Bit, $IsKernelIp,
+                $BuildId, $Filtered, $Comm, $Priv
+            );
+        ", batch, transaction);
+        transaction.Commit();
     }
 
-    public static SqlAddressPersistance Create(DbConnection connection)
+    public static IBatchPersistance<AddressEntry> Create(DbConnection connection)
     {
         connection.Execute(@"
             CREATE TABLE Addresses (
@@ -30,35 +49,12 @@ public class SqlAddressPersistance : IAddressPersistance
                 SymBinding TINYINT,
                 Is64Bit TINYINT,
                 IsKernelIp TINYINT,
-                BuildIdSize INT,
-                BuildId BIGINT,
+                BuildId BLOB,
                 Filtered TINYINT,
                 Comm BIGINT,
                 Priv BIGINT
             );
         ");
         return new SqlAddressPersistance(connection);
-    }
-
-    public void Persist(IReadOnlyCollection<AddressEntry> batch)
-    {
-        using var transaction = _connection.BeginTransaction();
-
-        _connection.Execute(@"
-            INSERT INTO Addresses (
-                Id,
-                TraceId,
-                Address, Pid, IsIp, Size, Symoff, SymStrId, SymStart, SymEnd,
-                Dso, SymBinding, Is64Bit, IsKernelIp,
-                BuildIdSize, BuildId, Filtered, Comm, Priv
-            ) VALUES (
-                $Id,
-                $TraceId,
-                $Address, $Pid, $IsIp, $Size, $Symoff, $SymStrId, $SymStart, $SymEnd,
-                $Dso, $SymBinding, $Is64Bit, $IsKernelIp,
-                $BuildIdSize, $BuildId, $Filtered, $Comm, $Priv
-            );
-        ", batch, transaction);
-        transaction.Commit();
     }
 }

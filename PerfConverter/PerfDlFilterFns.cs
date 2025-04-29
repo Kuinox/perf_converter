@@ -1,6 +1,4 @@
-﻿using System.Runtime.InteropServices;
-
-namespace PerfConverter;
+﻿namespace PerfConverter;
 
 using System;
 using System.Runtime.InteropServices;

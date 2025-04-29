@@ -1,4 +1,4 @@
-﻿namespace PerfConverter;
+﻿namespace PerfConverter.Entry;
 
 public struct AddressEntry
 {
