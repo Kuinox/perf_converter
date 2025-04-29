@@ -1,48 +1,38 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
+﻿using System.Diagnostics;
 using System.Threading.Channels;
-using System.Threading.Tasks;
 
 namespace PerfConverter
 {
-    public abstract class BackgroundBatching<T> where T : struct
+    public sealed class BackgroundBatching<T> where T : struct
     {
-        readonly Channel<T> _entries;
+        readonly ChannelReader<T> _channel;
         readonly Task _workLoop;
-        readonly int _channelSize;
-        unsafe protected BackgroundBatching(int channelSize)
+        readonly int _batchSize;
+        readonly Action<IReadOnlyCollection<T>> _batchProcessor;
+
+        BackgroundBatching(int batchSize, ChannelReader<T> channel, Action<IReadOnlyCollection<T>> batchProcessor)
         {
-            _entries = Channel.CreateBounded<T>(new BoundedChannelOptions(channelSize)
-            {
-                SingleReader = true,
-                SingleWriter = true,
-                AllowSynchronousContinuations = false
-            });
-            _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning);
-            this._channelSize = channelSize;
+            _channel = channel;
+            _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
+            _batchSize = batchSize;
+            _batchProcessor = batchProcessor;
         }
 
         async Task WorkLoop()
         {
             try
             {
-
                 var batch = new List<T>();
                 Stopwatch sw = Stopwatch.StartNew();
-                while (await _entries.Reader.WaitToReadAsync())
+                while (await _channel.WaitToReadAsync())
                 {
-                    while (_entries.Reader.TryRead(out var item) && batch.Count < _channelSize)
+                    while (_channel.TryRead(out var item) && batch.Count < _batchSize)
                     {
                         batch.Add(item);
                     }
                     SqlLock.Wait();
-                    Console.Error.WriteLine($"Sending batch of {batch.Count} {typeof(T)}");
                     sw.Restart();
-                    BatchSend(batch);
+                    _batchProcessor(batch);
                     Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
                     SqlLock.Release();
                     batch.Clear();
@@ -54,20 +44,10 @@ namespace PerfConverter
             }
         }
 
-        protected abstract void BatchSend(IReadOnlyCollection<T> batch);
-
-        protected void QueueItem(T item)
+        public static Task Run(int channelSize, ChannelReader<T> channel, Action<IReadOnlyCollection<T>> batchProcessor)
         {
-            while (!_entries.Writer.TryWrite(item))
-            {
-                Thread.Yield();
-            }
-        }
-
-        public void Close()
-        {
-            _entries.Writer.TryComplete();
-            _workLoop.GetAwaiter().GetResult();
+            var batching = new BackgroundBatching<T>(channelSize, channel, batchProcessor);
+            return batching._workLoop;
         }
     }
 }

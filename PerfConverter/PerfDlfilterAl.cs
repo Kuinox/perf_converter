@@ -15,8 +15,8 @@ public unsafe struct PerfDlfilterAl
     public byte sym_binding;
     public byte is_64_bit;
     public byte is_kernel_ip;
-    public uint buildid_size;
-    public IntPtr buildid;
+    public int buildid_size;
+    public void* buildid;
     public byte filtered;
     public IntPtr comm;
     public IntPtr priv;
