@@ -2,5 +2,5 @@
 
 public interface IBatchPersistance<T>
 {
-    void Persist(IReadOnlyCollection<T> batch);
+    Task PersistAsync(IReadOnlyCollection<T> batch);
 }

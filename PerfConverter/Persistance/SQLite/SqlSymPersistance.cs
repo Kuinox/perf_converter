@@ -9,10 +9,10 @@ public class SqlSymPersistance : IBatchPersistance<SymbolEntry>
     readonly DbConnection _connection;
     SqlSymPersistance(DbConnection connection) => _connection = connection;
 
-    public void Persist(IReadOnlyCollection<SymbolEntry> batch)
+    public async Task PersistAsync(IReadOnlyCollection<SymbolEntry> batch)
     {
         using var transaction = _connection.BeginTransaction();
-        _connection.Execute(@"
+        await _connection.ExecuteAsync(@"
                 INSERT INTO SymbolsStr (Id, Symbol)
                 VALUES (@Id, @Symbol)
             ", batch, transaction);

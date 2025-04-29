@@ -56,13 +56,14 @@ public unsafe class PerfDlFilter
             _sqliteConnection.Execute("PRAGMA locking_mode=EXCLUSIVE;");
 
             var batchSize = 1_000_000;
+            var sqlLock = new Lock();
+            var sqlSymbolPersister = new SqlLock<SymbolEntry>(sqlLock, SqlSymPersistance.Create(_sqliteConnection));
+            var addressPersister = new SqlLock<AddressEntry>(sqlLock, SqlAddressPersistance.Create(_sqliteConnection));
+            var tracePersister = new SqlLock<TraceSampleEntry>(sqlLock, SqlTracePersistance.Create(_sqliteConnection));
 
-             var sqlSymbolPersister = SqlSymPersistance.Create(_sqliteConnection);
-            var addressPersister = SqlAddressPersistance.Create(_sqliteConnection);
-            var tracePersister = SqlTracePersistance.Create(_sqliteConnection);
-            _symbolBatcher = Batcher<SymbolEntry>.Create(sqlSymbolPersister, batchSize);
-            _addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize);
-            _traceBatcher = Batcher<TraceSampleEntry>.Create(tracePersister, batchSize);
+            _symbolBatcher = Batcher<SymbolEntry>.Create(sqlSymbolPersister, batchSize, BatchingMode.ASAP);
+            _addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize, BatchingMode.ASAP);
+            _traceBatcher = Batcher<TraceSampleEntry>.Create(tracePersister, batchSize, BatchingMode.ASAP);
 
 
             _sqlSymProcessor = new SymProcessor(_symbolBatcher);
@@ -71,7 +72,7 @@ public unsafe class PerfDlFilter
 
             return 0;
         }
-        catch(Exception ex)
+        catch (Exception ex)
         {
             Console.Error.WriteLine(ex.ToString());
             return -1;
@@ -85,7 +86,7 @@ public unsafe class PerfDlFilter
         {
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
-            
+
             state.EventCount++;
             if (_maxTracesToProcess.HasValue && state.EventCount > _maxTracesToProcess.Value)
             {

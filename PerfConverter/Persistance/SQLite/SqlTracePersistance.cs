@@ -9,10 +9,10 @@ public class SqlTracePersistance : IBatchPersistance<TraceSampleEntry>
     readonly DbConnection _connection;
     SqlTracePersistance(DbConnection connection) => _connection = connection;
 
-    public void Persist(IReadOnlyCollection<TraceSampleEntry> batch)
+    public async Task PersistAsync(IReadOnlyCollection<TraceSampleEntry> batch)
     {
         using var transaction = _connection.BeginTransaction();
-        _connection.Execute(@"
+        await _connection.ExecuteAsync(@"
         INSERT INTO TraceSamples (
             Id, Pid, Tid, Time, Cpu, Ip, Addr, Period,
             InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym,

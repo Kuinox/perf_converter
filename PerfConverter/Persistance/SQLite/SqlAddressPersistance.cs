@@ -9,11 +9,11 @@ public class SqlAddressPersistance : IBatchPersistance<AddressEntry>
     readonly DbConnection _connection;
     SqlAddressPersistance(DbConnection connection) => _connection = connection;
 
-    public void Persist(IReadOnlyCollection<AddressEntry> batch)
+    public async Task PersistAsync(IReadOnlyCollection<AddressEntry> batch)
     {
         using var transaction = _connection.BeginTransaction();
 
-        _connection.Execute(@"
+        await _connection.ExecuteAsync(@"
             INSERT INTO Addresses (
                 Id,
                 TraceId,

@@ -8,27 +8,23 @@ public class Batcher<T> : IPersiter<T>, IDisposable
 {
     readonly IBatchPersistance<T> _batchPersistance;
     readonly int _batchSize;
+    readonly BatchingMode _batchingMode;
     readonly Channel<T> _channel;
     Task? _workLoop;
 
-    Batcher(IBatchPersistance<T> batchPersistance, int batchSize)
+    Batcher(IBatchPersistance<T> batchPersistance, int batchSize, BatchingMode batchingMode)
     {
         _batchPersistance = batchPersistance;
         _batchSize = batchSize;
+        _batchingMode = batchingMode;
         _channel = Channel.CreateBounded<T>(batchSize);
     }
 
-    void Start()
-    {
-        _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
-    }
+    void Start() => _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
 
     public void Persit(T val)
     {
-        while (!_channel.Writer.TryWrite(val))
-        {
-            Thread.Yield();
-        }
+        while (!_channel.Writer.TryWrite(val)) Thread.Yield();
     }
 
     async Task WorkLoop()
@@ -38,7 +34,7 @@ public class Batcher<T> : IPersiter<T>, IDisposable
             var batch = new List<T>();
             while (await _channel.Reader.WaitToReadAsync())
             {
-                SendBatch(batch);
+                Work(batch);
             }
         }
         catch (Exception e)
@@ -47,25 +43,35 @@ public class Batcher<T> : IPersiter<T>, IDisposable
         }
     }
 
-    void SendBatch(List<T> batch)
+    void Work(List<T> batch)
     {
-        Stopwatch sw = Stopwatch.StartNew();
+        AccumulateBatch(batch);
+        if (_batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
+        SendBatch(batch);
+    }
 
-        while (_channel.Reader.TryRead(out var item) && batch.Count < _batchSize)
-        {
-            batch.Add(item);
-        }
-        SqlLock.Wait();
-        sw.Restart();
-        _batchPersistance.Persist(batch);
+    private async Task SendBatch(List<T> batch)
+    {
+        
+        Stopwatch sw = Stopwatch.StartNew();
+        await _batchPersistance.PersistAsync(batch);
         Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
-        SqlLock.Release();
+        sw.Restart();
         batch.Clear();
     }
 
-    public static Batcher<T> Create(IBatchPersistance<T> batchPersistance, int batchSize)
+    private void AccumulateBatch(List<T> batch)
     {
-        var batcher = new Batcher<T>(batchPersistance, batchSize);
+        while (_channel.Reader.TryRead(out var item))
+        {
+            batch.Add(item);
+            if (batch.Count >= _batchSize) break;
+        }
+    }
+
+    public static Batcher<T> Create(IBatchPersistance<T> batchPersistance, int batchSize, BatchingMode batchingMode)
+    {
+        var batcher = new Batcher<T>(batchPersistance, batchSize, batchingMode);
         batcher.Start();
         return batcher;
     }
