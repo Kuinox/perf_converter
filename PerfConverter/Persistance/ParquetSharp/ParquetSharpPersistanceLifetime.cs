@@ -14,11 +14,10 @@ public class ParquetSharpPersistanceLifetime(
     public IPersiter<AddressEntry> AddressBatcher => addressBatcher;
     public IPersiter<TraceSampleEntry> TraceBatcher => traceBatcher;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        // Dispose batchers in reverse order of creation
-        traceBatcher.Dispose();
-        addressBatcher.Dispose();
-        symbolBatcher.Dispose();
+        await traceBatcher.DisposeAsync();
+        await addressBatcher.DisposeAsync();
+        await symbolBatcher.DisposeAsync();
     }
 }

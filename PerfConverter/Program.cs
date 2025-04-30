@@ -108,7 +108,7 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
             
             // Dispose the persistence lifetime which will handle all cleanup
-            _persistanceLifetime.Dispose();
+            _persistanceLifetime.DisposeAsync().AsTask().Wait();
             
             Console.Error.WriteLine("Done.");
             return 0;
