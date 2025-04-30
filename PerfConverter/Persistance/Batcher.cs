@@ -52,10 +52,18 @@ public class Batcher<T> : IPersiter<T>, IDisposable
 
     private async Task SendBatch(List<T> batch)
     {
-        
+
         Stopwatch sw = Stopwatch.StartNew();
-        await _batchPersistance.PersistAsync(batch);
-        Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
+        try
+        {
+            await _batchPersistance.PersistAsync(batch);
+            Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
+        }
+        catch (Exception e)
+        {
+            Console.Error.WriteLine(e);
+        }
+
         sw.Restart();
         batch.Clear();
     }

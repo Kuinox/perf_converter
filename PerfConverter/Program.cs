@@ -1,8 +1,6 @@
 ﻿using Dapper;
-using Microsoft.Data.Sqlite;
 using PerfConverter.Entry;
 using PerfConverter.Persistance;
-using PerfConverter.Persistance.Sql;
 using PerfConverter.Processor;
 using System.Runtime.InteropServices;
 
@@ -17,11 +15,8 @@ public unsafe class PerfDlFilter
     static ISymProcessor _sqlSymProcessor = null!;
     static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
-    static SqliteConnection _sqliteConnection = null!;
     static int? _maxTracesToProcess = null;
-    static Batcher<SymbolEntry> _symbolBatcher = null!;
-    static Batcher<AddressEntry> _addressBatcher = null!;
-    static Batcher<TraceSampleEntry> _traceBatcher = null!;
+    static IPersistanceLifetime _persistanceLifetime = null!;
 
     private class State
     {
@@ -49,26 +44,20 @@ public unsafe class PerfDlFilter
             }
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
-            _sqliteConnection = new SqliteConnection("Data Source=perf.db");
-            _sqliteConnection.Open();
-            _sqliteConnection.Execute("PRAGMA journal_mode=OFF;");
-            _sqliteConnection.Execute("PRAGMA synchronous=OFF;");
-            _sqliteConnection.Execute("PRAGMA locking_mode=EXCLUSIVE;");
 
-            var batchSize = 1_000_000;
-            var sqlLock = new Lock();
-            var sqlSymbolPersister = new SqlLock<SymbolEntry>(sqlLock, SqlSymPersistance.Create(_sqliteConnection));
-            var addressPersister = new SqlLock<AddressEntry>(sqlLock, SqlAddressPersistance.Create(_sqliteConnection));
-            var tracePersister = new SqlLock<TraceSampleEntry>(sqlLock, SqlTracePersistance.Create(_sqliteConnection));
+            var batchSize = 10_000;
+            string? batchSizeEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
+            if (!string.IsNullOrEmpty(batchSizeEnv) && int.TryParse(batchSizeEnv, out int parsedBatchSize))
+            {
+                batchSize = parsedBatchSize;
+                Console.Error.WriteLine($"Using batch size of {batchSize}");
+            }
+            
+            _persistanceLifetime = PersistanceFactory.CreatePersistance(batchSize);
 
-            _symbolBatcher = Batcher<SymbolEntry>.Create(sqlSymbolPersister, batchSize, BatchingMode.ASAP);
-            _addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize, BatchingMode.ASAP);
-            _traceBatcher = Batcher<TraceSampleEntry>.Create(tracePersister, batchSize, BatchingMode.ASAP);
-
-
-            _sqlSymProcessor = new SymProcessor(_symbolBatcher);
-            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _addressBatcher);
-            _traceProcessor = new TraceProcessor(_traceBatcher);
+            _sqlSymProcessor = new SymProcessor(_persistanceLifetime.SymbolBatcher);
+            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _persistanceLifetime.AddressBatcher);
+            _traceProcessor = new TraceProcessor(_persistanceLifetime.TraceBatcher);
 
             return 0;
         }
@@ -119,11 +108,10 @@ public unsafe class PerfDlFilter
         {
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
-            // Commit any remaining batched data
-            _traceBatcher.Dispose();
-            _addressBatcher.Dispose();
-            _symbolBatcher.Dispose();
-            _sqliteConnection.Close();
+            
+            // Dispose the persistence lifetime which will handle all cleanup
+            _persistanceLifetime.Dispose();
+            
             Console.Error.WriteLine("Done.");
             return 0;
         }
