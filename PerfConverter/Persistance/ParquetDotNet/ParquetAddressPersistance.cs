@@ -7,32 +7,34 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
 {
-    private readonly string _filePath;
-    private readonly ParquetSchema _schema;
-    
-    private long[]? _ids;
-    private long[]? _traceIds;
-    private long[]? _addresses;
-    private int[]? _pids;
-    private bool[]? _isIps;
-    private int[]? _sizes;
-    private int[]? _symoffs;
-    private long[]? _symStrIds;
-    private long[]? _symStarts;
-    private long[]? _symEnds;
-    private long[]? _dsos;
-    private byte[]? _symBindings;
-    private byte[]? _is64Bits;
-    private byte[]? _isKernelIps;
-    private byte[][]? _buildIds;
-    private byte[]? _filtereds;
-    private long[]? _comms;
-    private long[]? _privs;
-    
-    private ParquetAddressPersistance(string basePath, int batchSize)
+    readonly string _filePath;
+    readonly ParquetSchema _schema;
+    readonly CompressionMethod _compressionMethod;
+
+    long[] _ids;
+    long[] _traceIds;
+    long[] _addresses;
+    int[] _pids;
+    bool[] _isIps;
+    int[] _sizes;
+    int[] _symoffs;
+    long[] _symStrIds;
+    long[] _symStarts;
+    long[] _symEnds;
+    long[] _dsos;
+    byte[] _symBindings;
+    byte[] _is64Bits;
+    byte[] _isKernelIps;
+    byte[][] _buildIds;
+    byte[] _filtereds;
+    long[] _comms;
+    long[] _privs;
+
+
+    private ParquetAddressPersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         _filePath = Path.Combine(basePath, "addresses.parquet");
-        
+        _compressionMethod = compressionMethod;
         _schema = new ParquetSchema(
             new DataField<long>("Id"),
             new DataField<long>("TraceId"),
@@ -53,16 +55,16 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
             new DataField<long>("Comm"),
             new DataField<long>("Priv")
         );
-        
+
         ResizeArrays(batchSize);
     }
 
     public async Task PersistAsync(IReadOnlyCollection<AddressEntry> batch)
     {
         int count = batch.Count;
-        
+
         ResizeArrays(count);
-        
+
         int i = 0;
         foreach (var entry in batch)
         {
@@ -80,7 +82,7 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
             _symBindings[i] = entry.SymBinding;
             _is64Bits[i] = entry.Is64Bit;
             _isKernelIps[i] = entry.IsKernelIp;
-            _buildIds[i] = entry.BuildId;
+            _buildIds[i] = entry.BuildId ?? Array.Empty<byte>();
             _filtereds[i] = entry.Filtered;
             _comms[i] = entry.Comm;
             _privs[i] = entry.Priv;
@@ -88,35 +90,64 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         }
 
         bool fileExists = File.Exists(_filePath);
-        
-        using var fileStream = fileExists
+
+        await using var fileStream = fileExists
             ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
             : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
-        
-        using var writer = fileExists
+
+        await using var writer = fileExists
             ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
             : await ParquetWriter.CreateAsync(_schema, fileStream);
-            
+        writer.CompressionMethod = _compressionMethod;
+
+        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
+        var traceIdColumn = new DataColumn(_schema.DataFields[1], _traceIds);
+        var addressColumn = new DataColumn(_schema.DataFields[2], _addresses);
+        var pidColumn = new DataColumn(_schema.DataFields[3], _pids);
+        var isIpColumn = new DataColumn(_schema.DataFields[4], _isIps);
+        var sizeColumn = new DataColumn(_schema.DataFields[5], _sizes);
+        var symoffColumn = new DataColumn(_schema.DataFields[6], _symoffs);
+        var symStrIdColumn = new DataColumn(_schema.DataFields[7], _symStrIds);
+        var symStartColumn = new DataColumn(_schema.DataFields[8], _symStarts);
+        var symEndColumn = new DataColumn(_schema.DataFields[9], _symEnds);
+        var dsoColumn = new DataColumn(_schema.DataFields[10], _dsos);
+        var symBindingColumn = new DataColumn(_schema.DataFields[11], _symBindings);
+        var is64BitColumn = new DataColumn(_schema.DataFields[12], _is64Bits);
+        var isKernelIpColumn = new DataColumn(_schema.DataFields[13], _isKernelIps);
+        
+        for (int x = 0; x < _buildIds.Length; x++)
+        {
+            if (_buildIds[x] == null)
+            {
+                _buildIds[x] = Array.Empty<byte>();
+            }
+        }
+        var buildIdColumn = new DataColumn(_schema.DataFields[14], _buildIds);
+        
+        var filteredColumn = new DataColumn(_schema.DataFields[15], _filtereds);
+        var commColumn = new DataColumn(_schema.DataFields[16], _comms);
+        var privColumn = new DataColumn(_schema.DataFields[17], _privs);
+
         using var groupWriter = writer.CreateRowGroup();
 
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[0], _ids));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[1], _traceIds));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[2], _addresses));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[3], _pids));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[4], _isIps));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[5], _sizes));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[6], _symoffs));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[7], _symStrIds));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[8], _symStarts));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[9], _symEnds));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[10], _dsos));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[11], _symBindings));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[12], _is64Bits));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[13], _isKernelIps));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[14], _buildIds));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[15], _filtereds));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[16], _comms));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[17], _privs));
+        await groupWriter.WriteColumnAsync(idColumn);
+        await groupWriter.WriteColumnAsync(traceIdColumn);
+        await groupWriter.WriteColumnAsync(addressColumn);
+        await groupWriter.WriteColumnAsync(pidColumn);
+        await groupWriter.WriteColumnAsync(isIpColumn);
+        await groupWriter.WriteColumnAsync(sizeColumn);
+        await groupWriter.WriteColumnAsync(symoffColumn);
+        await groupWriter.WriteColumnAsync(symStrIdColumn);
+        await groupWriter.WriteColumnAsync(symStartColumn);
+        await groupWriter.WriteColumnAsync(symEndColumn);
+        await groupWriter.WriteColumnAsync(dsoColumn);
+        await groupWriter.WriteColumnAsync(symBindingColumn);
+        await groupWriter.WriteColumnAsync(is64BitColumn);
+        await groupWriter.WriteColumnAsync(isKernelIpColumn);
+        await groupWriter.WriteColumnAsync(buildIdColumn);
+        await groupWriter.WriteColumnAsync(filteredColumn);
+        await groupWriter.WriteColumnAsync(commColumn);
+        await groupWriter.WriteColumnAsync(privColumn);
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
@@ -140,7 +171,7 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         nameof(_privs))]
     private void ResizeArrays(int newSize)
     {
-        if(_ids != null && _ids.Length == newSize)
+        if (_ids != null && _ids.Length == newSize)
 #pragma warning disable CS8774 // Member must have a non-null value when exiting.
             return;
 #pragma warning restore CS8774 // Member must have a non-null value when exiting.
@@ -165,9 +196,9 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         _privs = new long[newSize];
     }
 
-    public static IBatchPersistance<AddressEntry> Create(string basePath, int batchSize)
+    public static IBatchPersistance<AddressEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetAddressPersistance(basePath, batchSize);
+        return new ParquetAddressPersistance(basePath, batchSize, compressionMethod);
     }
 }

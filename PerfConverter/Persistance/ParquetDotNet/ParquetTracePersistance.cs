@@ -11,27 +11,27 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
 {
-    private readonly string _filePath;
-    private readonly ParquetSchema _schema;
+    readonly string _filePath;
+    readonly ParquetSchema _schema;
+    readonly CompressionMethod _compressionMethod;
+    long[] _ids;
+    int[] _pids;
+    int[] _tids;
+    long[] _times;
+    int[] _cpus;
+    long[] _ips;
+    long[] _addrs;
+    long[] _periods;
+    long[] _insnCnts;
+    long[] _cycCnts;
+    long[] _weights;
+    byte[] _cpumodes;
+    byte[] _addrCorrelatesSyms;
+    string[] _events;
+    int[] _machinePids;
+    int[] _vcpus;
     
-    private long[] _ids;
-    private int[] _pids;
-    private int[] _tids;
-    private long[] _times;
-    private int[] _cpus;
-    private long[] _ips;
-    private long[] _addrs;
-    private long[] _periods;
-    private long[] _insnCnts;
-    private long[] _cycCnts;
-    private long[] _weights;
-    private byte[] _cpumodes;
-    private byte[] _addrCorrelatesSyms;
-    private string[] _events;
-    private int[] _machinePids;
-    private int[] _vcpus;
-    
-    private ParquetTracePersistance(string basePath, int batchSize)
+    ParquetTracePersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         _filePath = Path.Combine(basePath, "tracesamples.parquet");
         
@@ -54,6 +54,7 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
             new DataField<int>("Vcpu")
         );
         ResizeArrays(batchSize);
+        _compressionMethod = compressionMethod;
     }
 
     public async Task PersistAsync(IReadOnlyCollection<TraceSampleEntry> batch)
@@ -91,49 +92,52 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
 
         bool fileExists = File.Exists(_filePath);
         
-        using var fileStream = fileExists
+        await using var fileStream = fileExists
             ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
             : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
 
-        using var writer = fileExists
+        await using var writer = fileExists
             ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
             : await ParquetWriter.CreateAsync(_schema, fileStream);
 
-        writer.CompressionMethod = CompressionMethod.None;
+        writer.CompressionMethod = _compressionMethod;
 
+        // Create columns using the schema fields
+        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
+        var pidColumn = new DataColumn(_schema.DataFields[1], _pids);
+        var tidColumn = new DataColumn(_schema.DataFields[2], _tids);
+        var timeColumn = new DataColumn(_schema.DataFields[3], _times);
+        var cpuColumn = new DataColumn(_schema.DataFields[4], _cpus);
+        var ipColumn = new DataColumn(_schema.DataFields[5], _ips);
+        var addrColumn = new DataColumn(_schema.DataFields[6], _addrs);
+        var periodColumn = new DataColumn(_schema.DataFields[7], _periods);
+        var insnCntColumn = new DataColumn(_schema.DataFields[8], _insnCnts);
+        var cycCntColumn = new DataColumn(_schema.DataFields[9], _cycCnts);
+        var weightColumn = new DataColumn(_schema.DataFields[10], _weights);
+        var cpumodeColumn = new DataColumn(_schema.DataFields[11], _cpumodes);
+        var addrCorrelatesSymColumn = new DataColumn(_schema.DataFields[12], _addrCorrelatesSyms);
+        var eventColumn = new DataColumn(_schema.DataFields[13], _events);
+        var machinePidColumn = new DataColumn(_schema.DataFields[14], _machinePids);
+        var vcpuColumn = new DataColumn(_schema.DataFields[15], _vcpus);
+        
         using var groupWriter = writer.CreateRowGroup();
-        Console.Error.WriteLine("Writing Ids");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Id"), _ids));
-        Console.Error.WriteLine("Writing Pids");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<int>("Pid"), _pids));
-        Console.Error.WriteLine("Writing Tids");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<int>("Tid"), _tids));
-        Console.Error.WriteLine("Writing Times");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Time"), _times));
-        Console.Error.WriteLine("Writing Cpus");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<int>("Cpu"), _cpus));
-        Console.Error.WriteLine("Writing Ips");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Ip"), _ips));
-        Console.Error.WriteLine("Writing Addrs");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Addr"), _addrs));
-        Console.Error.WriteLine("Writing Periods");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Period"), _periods));
-        Console.Error.WriteLine("Writing InsnCnt");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("InsnCnt"), _insnCnts));
-        Console.Error.WriteLine("Writing CycCnt");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("CycCnt"), _cycCnts));
-        Console.Error.WriteLine("Writing Weights");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<long>("Weight"), _weights));
-        Console.Error.WriteLine("Writing Cpumode");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<byte>("Cpumode"), _cpumodes));
-        Console.Error.WriteLine("Writing AddrCorrelatesSym");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<byte>("AddrCorrelatesSym"), _addrCorrelatesSyms));
-        Console.Error.WriteLine("Writing Events");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<string>("Event"), _events));
-        Console.Error.WriteLine("Writing MachinePids");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<int>("MachinePid"), _machinePids));
-        Console.WriteLine("Writing Vcpus");
-        await groupWriter.WriteColumnAsync(new DataColumn(new DataField<int>("Vcpu"), _vcpus));
+        
+        await groupWriter.WriteColumnAsync(idColumn);
+        await groupWriter.WriteColumnAsync(pidColumn);
+        await groupWriter.WriteColumnAsync(tidColumn);
+        await groupWriter.WriteColumnAsync(timeColumn);
+        await groupWriter.WriteColumnAsync(cpuColumn);
+        await groupWriter.WriteColumnAsync(ipColumn);
+        await groupWriter.WriteColumnAsync(addrColumn);
+        await groupWriter.WriteColumnAsync(periodColumn);
+        await groupWriter.WriteColumnAsync(insnCntColumn);
+        await groupWriter.WriteColumnAsync(cycCntColumn);
+        await groupWriter.WriteColumnAsync(weightColumn);
+        await groupWriter.WriteColumnAsync(cpumodeColumn);
+        await groupWriter.WriteColumnAsync(addrCorrelatesSymColumn);
+        await groupWriter.WriteColumnAsync(eventColumn);
+        await groupWriter.WriteColumnAsync(machinePidColumn);
+        await groupWriter.WriteColumnAsync(vcpuColumn);
     }
 
     [MemberNotNull(
@@ -173,9 +177,9 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
         _vcpus = new int[newSize];
     }
 
-    public static IBatchPersistance<TraceSampleEntry> Create(string basePath, int batchSize)
+    public static IBatchPersistance<TraceSampleEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetTracePersistance(basePath, batchSize);
+        return new ParquetTracePersistance(basePath, batchSize, compressionMethod);
     }
 }

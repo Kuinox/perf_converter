@@ -9,13 +9,13 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
 {
-    private readonly string _filePath;
-    private readonly ParquetSchema _schema;
+    readonly string _filePath;
+    readonly ParquetSchema _schema;
+    CompressionMethod _compressionMethod;
+    long[]? _ids;
+    string[]? _symbols;
 
-    private long[]? _ids;
-    private string[]? _symbols;
-
-    private ParquetSymPersistance(string basePath, int batchSize)
+    private ParquetSymPersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         _filePath = Path.Combine(basePath, "symbols.parquet");
 
@@ -25,15 +25,12 @@ public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
         );
 
         ResizeArrays(batchSize);
+        _compressionMethod = compressionMethod;
     }
 
     public async Task PersistAsync(IReadOnlyCollection<SymbolEntry> batch)
     {
-        int count = batch.Count;
-
-
-        ResizeArrays(count);
-
+        ResizeArrays(batch.Count);
 
         var i = 0;
         foreach (var entry in batch)
@@ -45,18 +42,23 @@ public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
 
         var fileExists = File.Exists(_filePath);
 
-        using var fileStream = fileExists
+        await using var fileStream = fileExists
             ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
             : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
 
-        using var writer = fileExists
+        await using var writer = fileExists
             ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
             : await ParquetWriter.CreateAsync(_schema, fileStream);
 
+        writer.CompressionMethod = _compressionMethod;
+
+        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
+        var symbolColumn = new DataColumn(_schema.DataFields[1], _symbols);
+        
         using var groupWriter = writer.CreateRowGroup();
 
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[0], _ids));
-        await groupWriter.WriteColumnAsync(new DataColumn(_schema.DataFields[1], _symbols));
+        await groupWriter.WriteColumnAsync(idColumn);
+        await groupWriter.WriteColumnAsync(symbolColumn);
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
@@ -73,9 +75,9 @@ public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
         _symbols = new string[newSize];
     }
 
-    public static IBatchPersistance<SymbolEntry> Create(string basePath, int batchSize)
+    public static IBatchPersistance<SymbolEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetSymPersistance(basePath, batchSize);
+        return new ParquetSymPersistance(basePath, batchSize, compressionMethod);
     }
 }

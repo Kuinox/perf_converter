@@ -34,20 +34,22 @@ public class Batcher<T> : IPersiter<T>, IDisposable
             var batch = new List<T>();
             while (await _channel.Reader.WaitToReadAsync())
             {
-                Work(batch);
+                await Work(batch, false);
             }
+            if(batch.Count > 0) await Work(batch, true);
         }
         catch (Exception e)
         {
             Console.Error.WriteLine(e);
+            Console.Error.WriteLine(e.StackTrace);
         }
     }
 
-    void Work(List<T> batch)
+    async Task Work(List<T> batch, bool lastBatch)
     {
         AccumulateBatch(batch);
-        if (_batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
-        SendBatch(batch);
+        if (!lastBatch && _batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
+        await SendBatch(batch);
     }
 
     private async Task SendBatch(List<T> batch)

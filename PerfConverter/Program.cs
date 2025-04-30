@@ -45,7 +45,7 @@ public unsafe class PerfDlFilter
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
-            var batchSize = 10_000;
+            var batchSize = 10_000_000;
             string? batchSizeEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
             if (!string.IsNullOrEmpty(batchSizeEnv) && int.TryParse(batchSizeEnv, out int parsedBatchSize))
             {
