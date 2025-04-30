@@ -31,6 +31,8 @@ public class SqlAddressPersistance : IBatchPersistance<AddressEntry>
         transaction.Commit();
     }
 
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
     public static IBatchPersistance<AddressEntry> Create(DbConnection connection)
     {
         connection.Execute(@"

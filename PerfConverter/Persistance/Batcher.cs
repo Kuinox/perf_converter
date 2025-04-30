@@ -1,10 +1,9 @@
-﻿using PerfConverter.Persistance.Sql;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Threading.Channels;
 
 namespace PerfConverter.Persistance;
 
-public class Batcher<T> : IPersiter<T>, IDisposable
+public class Batcher<T> : IPersiter<T>, IAsyncDisposable
 {
     readonly IBatchPersistance<T> _batchPersistance;
     readonly int _batchSize;
@@ -52,7 +51,7 @@ public class Batcher<T> : IPersiter<T>, IDisposable
         await SendBatch(batch);
     }
 
-    private async Task SendBatch(List<T> batch)
+    async Task SendBatch(List<T> batch)
     {
 
         Stopwatch sw = Stopwatch.StartNew();
@@ -70,7 +69,7 @@ public class Batcher<T> : IPersiter<T>, IDisposable
         batch.Clear();
     }
 
-    private void AccumulateBatch(List<T> batch)
+    void AccumulateBatch(List<T> batch)
     {
         while (_channel.Reader.TryRead(out var item))
         {
@@ -86,9 +85,14 @@ public class Batcher<T> : IPersiter<T>, IDisposable
         return batcher;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _channel.Writer.Complete();
-        _workLoop?.Wait();
+        if (_workLoop != null)
+        {
+            await _workLoop;
+        }
+        
+        await _batchPersistance.DisposeAsync();
     }
 }

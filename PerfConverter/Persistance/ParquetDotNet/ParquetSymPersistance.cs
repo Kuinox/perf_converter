@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using Parquet;
+﻿using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
@@ -9,23 +7,23 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
 {
-    readonly string _filePath;
     readonly ParquetSchema _schema;
-    CompressionMethod _compressionMethod;
+    readonly ParquetWriter _writer;
+    readonly FileStream _fileStream;
     long[]? _ids;
     string[]? _symbols;
 
-    private ParquetSymPersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
-    {
-        _filePath = Path.Combine(basePath, "symbols.parquet");
 
+    ParquetSymPersistance(string basePath, int batchSize, CompressionMethod compressionMethod, ParquetWriter writer, FileStream fileStream)
+    {
         _schema = new ParquetSchema(
             new DataField<long>("Id"),
             new DataField<string>("Symbol")
         );
 
+        _writer = writer;
+        _fileStream = fileStream;
         ResizeArrays(batchSize);
-        _compressionMethod = compressionMethod;
     }
 
     public async Task PersistAsync(IReadOnlyCollection<SymbolEntry> batch)
@@ -40,31 +38,25 @@ public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
             i++;
         }
 
-        var fileExists = File.Exists(_filePath);
-
-        await using var fileStream = fileExists
-            ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
-            : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
-
-        await using var writer = fileExists
-            ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
-            : await ParquetWriter.CreateAsync(_schema, fileStream);
-
-        writer.CompressionMethod = _compressionMethod;
-
         var idColumn = new DataColumn(_schema.DataFields[0], _ids);
         var symbolColumn = new DataColumn(_schema.DataFields[1], _symbols);
-        
-        using var groupWriter = writer.CreateRowGroup();
+
+        using var groupWriter = _writer.CreateRowGroup();
 
         await groupWriter.WriteColumnAsync(idColumn);
         await groupWriter.WriteColumnAsync(symbolColumn);
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _writer.DisposeAsync();
+        await _fileStream.DisposeAsync();
+    }
+
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
         nameof(_ids),
         nameof(_symbols))]
-    private void ResizeArrays(int newSize)
+void ResizeArrays(int newSize)
     {
         if (_ids != null && _ids.Length == newSize)
 #pragma warning disable CS8774 // Member must have a non-null value when exiting.
@@ -75,9 +67,22 @@ public class ParquetSymPersistance : IBatchPersistance<SymbolEntry>
         _symbols = new string[newSize];
     }
 
-    public static IBatchPersistance<SymbolEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistance<SymbolEntry>> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetSymPersistance(basePath, batchSize, compressionMethod);
+        var filePath = Path.Combine(basePath, "symbols.parquet");
+
+        var schema = new ParquetSchema(
+            new DataField<long>("Id"),
+            new DataField<string>("Symbol")
+        );
+
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
+
+        var writer = await ParquetWriter.CreateAsync(schema, fileStream);
+
+        writer.CompressionMethod = compressionMethod;
+
+        return new ParquetSymPersistance(basePath, batchSize, compressionMethod, writer, fileStream);
     }
 }

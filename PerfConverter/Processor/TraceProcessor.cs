@@ -6,7 +6,7 @@ namespace PerfConverter.Processor;
 
 public unsafe class TraceProcessor(IPersiter<TraceSampleEntry> persistance) : ITraceProcessor
 {
-    private ulong _totalSamples = 0;
+    ulong _totalSamples = 0;
 
     public unsafe long FilterEventEarly(PerfDlFilterSample* sample)
     {

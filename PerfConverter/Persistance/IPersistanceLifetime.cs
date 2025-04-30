@@ -3,7 +3,7 @@ namespace PerfConverter.Persistance;
 /// <summary>
 /// Interface for managing the lifetime of persistence components
 /// </summary>
-public interface IPersistanceLifetime : IDisposable
+public interface IPersistanceLifetime : IAsyncDisposable
 {
     /// <summary>
     /// Gets the symbol batcher

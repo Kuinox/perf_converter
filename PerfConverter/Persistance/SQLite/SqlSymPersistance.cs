@@ -19,6 +19,8 @@ public class SqlSymPersistance : IBatchPersistance<SymbolEntry>
         transaction.Commit();
     }
 
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
     public static IBatchPersistance<SymbolEntry> Create(DbConnection connection)
     {
         connection.Execute(@"

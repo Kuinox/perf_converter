@@ -15,5 +15,5 @@ public unsafe struct PerfDlfilterFns
     public delegate* unmanaged<void*, IntPtr> attr;
     public delegate* unmanaged<void*, ulong, void*, uint, int> object_code;
     public delegate* unmanaged<void*, PerfDlfilterAl*, void> al_cleanup;
-    private fixed long reserved[119];
+    fixed long reserved[119];
 }

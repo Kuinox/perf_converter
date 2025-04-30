@@ -4,8 +4,8 @@ namespace PerfConverter;
 
 public class WrappingWriter : TextWriter
 {
-    private readonly TextWriter _original;
-    private const int MaxWidth = 90;
+    readonly TextWriter _original;
+    const int MaxWidth = 90;
 
     public WrappingWriter(TextWriter original)
     {

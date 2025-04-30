@@ -1,7 +1,4 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
-using System.Threading.Tasks;
+﻿using System.Diagnostics.CodeAnalysis;
 using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
@@ -11,9 +8,10 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
 {
-    readonly string _filePath;
     readonly ParquetSchema _schema;
-    readonly CompressionMethod _compressionMethod;
+    ParquetWriter _writer;
+    FileStream _fileStream;
+
     long[] _ids;
     int[] _pids;
     int[] _tids;
@@ -30,11 +28,9 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
     string[] _events;
     int[] _machinePids;
     int[] _vcpus;
-    
-    ParquetTracePersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
+
+    ParquetTracePersistance(int batchSize, ParquetWriter writer, FileStream fileStream)
     {
-        _filePath = Path.Combine(basePath, "tracesamples.parquet");
-        
         _schema = new ParquetSchema(
             new DataField<long>("Id"),
             new DataField<int>("Pid"),
@@ -53,21 +49,23 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
             new DataField<int>("MachinePid"),
             new DataField<int>("Vcpu")
         );
+
+        _writer = writer;
+        _fileStream = fileStream;
         ResizeArrays(batchSize);
-        _compressionMethod = compressionMethod;
     }
 
     public async Task PersistAsync(IReadOnlyCollection<TraceSampleEntry> batch)
     {
         if (batch.Count == 0) return;
-        
+
         int count = batch.Count;
-        
+
         if (count != _ids.Length)
         {
             ResizeArrays(count);
         }
-        
+
         int i = 0;
         foreach (var entry in batch)
         {
@@ -90,18 +88,6 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
             i++;
         }
 
-        bool fileExists = File.Exists(_filePath);
-        
-        await using var fileStream = fileExists
-            ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
-            : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
-
-        await using var writer = fileExists
-            ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
-            : await ParquetWriter.CreateAsync(_schema, fileStream);
-
-        writer.CompressionMethod = _compressionMethod;
-
         // Create columns using the schema fields
         var idColumn = new DataColumn(_schema.DataFields[0], _ids);
         var pidColumn = new DataColumn(_schema.DataFields[1], _pids);
@@ -119,9 +105,9 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
         var eventColumn = new DataColumn(_schema.DataFields[13], _events);
         var machinePidColumn = new DataColumn(_schema.DataFields[14], _machinePids);
         var vcpuColumn = new DataColumn(_schema.DataFields[15], _vcpus);
-        
-        using var groupWriter = writer.CreateRowGroup();
-        
+
+        using var groupWriter = _writer.CreateRowGroup();
+
         await groupWriter.WriteColumnAsync(idColumn);
         await groupWriter.WriteColumnAsync(pidColumn);
         await groupWriter.WriteColumnAsync(tidColumn);
@@ -140,24 +126,30 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
         await groupWriter.WriteColumnAsync(vcpuColumn);
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _writer.DisposeAsync();
+        await _fileStream.DisposeAsync();
+    }
+
     [MemberNotNull(
-        nameof(_ids), 
-        nameof(_pids), 
-        nameof(_tids), 
-        nameof(_times), 
-        nameof(_cpus), 
-        nameof(_ips), 
-        nameof(_addrs), 
-        nameof(_periods), 
-        nameof(_insnCnts), 
-        nameof(_cycCnts), 
-        nameof(_weights), 
-        nameof(_cpumodes), 
-        nameof(_addrCorrelatesSyms), 
-        nameof(_events), 
-        nameof(_machinePids), 
+        nameof(_ids),
+        nameof(_pids),
+        nameof(_tids),
+        nameof(_times),
+        nameof(_cpus),
+        nameof(_ips),
+        nameof(_addrs),
+        nameof(_periods),
+        nameof(_insnCnts),
+        nameof(_cycCnts),
+        nameof(_weights),
+        nameof(_cpumodes),
+        nameof(_addrCorrelatesSyms),
+        nameof(_events),
+        nameof(_machinePids),
         nameof(_vcpus))]
-    private void ResizeArrays(int newSize)
+    void ResizeArrays(int newSize)
     {
         _ids = new long[newSize];
         _pids = new int[newSize];
@@ -177,9 +169,34 @@ public class ParquetTracePersistance : IBatchPersistance<TraceSampleEntry>
         _vcpus = new int[newSize];
     }
 
-    public static IBatchPersistance<TraceSampleEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistance<TraceSampleEntry>> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetTracePersistance(basePath, batchSize, compressionMethod);
+        var filePath = Path.Combine(basePath, "tracesamples.parquet");
+
+        var schema = new ParquetSchema(
+            new DataField<long>("Id"),
+            new DataField<int>("Pid"),
+            new DataField<int>("Tid"),
+            new DataField<long>("Time"),
+            new DataField<int>("Cpu"),
+            new DataField<long>("Ip"),
+            new DataField<long>("Addr"),
+            new DataField<long>("Period"),
+            new DataField<long>("InsnCnt"),
+            new DataField<long>("CycCnt"),
+            new DataField<long>("Weight"),
+            new DataField<byte>("Cpumode"),
+            new DataField<byte>("AddrCorrelatesSym"),
+            new DataField<string>("Event"),
+            new DataField<int>("MachinePid"),
+            new DataField<int>("Vcpu")
+        );
+
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
+        var writer = await ParquetWriter.CreateAsync(schema, fileStream);
+        writer.CompressionMethod = compressionMethod;
+
+        return new ParquetTracePersistance(batchSize, writer, fileStream);
     }
 }

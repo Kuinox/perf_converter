@@ -8,11 +8,10 @@ namespace PerfConverter.Persistance.Sql;
 /// </summary>
 public class SqlPersistanceLifetime : IPersistanceLifetime
 {
-    private readonly SqliteConnection _connection;
-    private readonly Batcher<SymbolEntry> _symbolBatcher;
-    private readonly Batcher<AddressEntry> _addressBatcher;
-    private readonly Batcher<TraceSampleEntry> _traceBatcher;
-    private bool _disposed = false;
+    readonly SqliteConnection _connection;
+    readonly Batcher<SymbolEntry> _symbolBatcher;
+    readonly Batcher<AddressEntry> _addressBatcher;
+    readonly Batcher<TraceSampleEntry> _traceBatcher;
 
     public SqlPersistanceLifetime(
         SqliteConnection connection,
@@ -30,16 +29,12 @@ public class SqlPersistanceLifetime : IPersistanceLifetime
     public IPersiter<AddressEntry> AddressBatcher => _addressBatcher;
     public IPersiter<TraceSampleEntry> TraceBatcher => _traceBatcher;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        if (_disposed) return;
+        await _traceBatcher.DisposeAsync();
+        await _addressBatcher.DisposeAsync();
+        await _symbolBatcher.DisposeAsync();
         
-        _traceBatcher.Dispose();
-        _addressBatcher.Dispose();
-        _symbolBatcher.Dispose();
-        
-        _connection.Close();
-        
-        _disposed = true;
+        await _connection.CloseAsync();
     }
 }

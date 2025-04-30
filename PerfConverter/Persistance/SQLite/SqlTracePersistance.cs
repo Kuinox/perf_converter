@@ -25,6 +25,8 @@ public class SqlTracePersistance : IBatchPersistance<TraceSampleEntry>
         transaction.Commit();
     }
 
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
     public static IBatchPersistance<TraceSampleEntry> Create(DbConnection connection)
     {
         connection.Execute(@"

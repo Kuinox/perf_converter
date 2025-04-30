@@ -6,7 +6,7 @@ namespace PerfConverter.Processor;
 
 public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<AddressEntry> persistance) : IAddressProcessor
 {
-    private ulong _currenAddress = 0;
+    ulong _currenAddress = 0;
 
     public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
     {
@@ -25,7 +25,7 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<Ad
         Process(resolved, traceId, pid, isIp: true);
     }
 
-    private unsafe void Process(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
+    unsafe void Process(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
     {
         long symStrId = 0;
         if (info->sym != 0)

@@ -1,7 +1,5 @@
 using Parquet;
 using PerfConverter.Entry;
-using System.IO;
-using System.IO.Compression;
 
 namespace PerfConverter.Persistance.ParquetDotNet;
 
@@ -15,9 +13,9 @@ public static class ParquetPersistanceFactory
     {
         Directory.CreateDirectory(outputDirectory);
         
-        var symbolPersister = ParquetSymPersistance.Create(outputDirectory, batchSize, compressionMethod);
-        var addressPersister = ParquetAddressPersistance.Create(outputDirectory, batchSize, compressionMethod);
-        var tracePersister = ParquetTracePersistance.Create(outputDirectory, batchSize, compressionMethod);
+        var symbolPersister = ParquetSymPersistance.Create(outputDirectory, batchSize, compressionMethod).GetAwaiter().GetResult();
+        var addressPersister = ParquetAddressPersistance.Create(outputDirectory, batchSize, compressionMethod).GetAwaiter().GetResult();
+        var tracePersister = ParquetTracePersistance.Create(outputDirectory, batchSize, compressionMethod).GetAwaiter().GetResult();
         
         var symbolBatcher = Batcher<SymbolEntry>.Create(symbolPersister, batchSize, batchingMode);
         var addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize, batchingMode);

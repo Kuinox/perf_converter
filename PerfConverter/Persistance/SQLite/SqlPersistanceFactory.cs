@@ -1,7 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
 using PerfConverter.Entry;
-using System.Data.Common;
 
 namespace PerfConverter.Persistance.Sql;
 

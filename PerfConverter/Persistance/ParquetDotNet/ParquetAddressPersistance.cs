@@ -7,9 +7,9 @@ namespace PerfConverter.Persistance.ParquetDotNet;
 
 public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
 {
-    readonly string _filePath;
     readonly ParquetSchema _schema;
-    readonly CompressionMethod _compressionMethod;
+    readonly ParquetWriter _writer;
+    readonly FileStream _fileStream;
 
     long[] _ids;
     long[] _traceIds;
@@ -31,10 +31,8 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
     long[] _privs;
 
 
-    private ParquetAddressPersistance(string basePath, int batchSize, CompressionMethod compressionMethod)
+    ParquetAddressPersistance(string basePath, int batchSize, CompressionMethod compressionMethod, ParquetWriter writer, FileStream fileStream)
     {
-        _filePath = Path.Combine(basePath, "addresses.parquet");
-        _compressionMethod = compressionMethod;
         _schema = new ParquetSchema(
             new DataField<long>("Id"),
             new DataField<long>("TraceId"),
@@ -56,6 +54,8 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
             new DataField<long>("Priv")
         );
 
+        _writer = writer;
+        _fileStream = fileStream;
         ResizeArrays(batchSize);
     }
 
@@ -89,17 +89,6 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
             i++;
         }
 
-        bool fileExists = File.Exists(_filePath);
-
-        await using var fileStream = fileExists
-            ? new FileStream(_filePath, FileMode.Open, FileAccess.ReadWrite)
-            : new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
-
-        await using var writer = fileExists
-            ? await ParquetWriter.CreateAsync(_schema, fileStream, append: true)
-            : await ParquetWriter.CreateAsync(_schema, fileStream);
-        writer.CompressionMethod = _compressionMethod;
-
         var idColumn = new DataColumn(_schema.DataFields[0], _ids);
         var traceIdColumn = new DataColumn(_schema.DataFields[1], _traceIds);
         var addressColumn = new DataColumn(_schema.DataFields[2], _addresses);
@@ -114,7 +103,7 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         var symBindingColumn = new DataColumn(_schema.DataFields[11], _symBindings);
         var is64BitColumn = new DataColumn(_schema.DataFields[12], _is64Bits);
         var isKernelIpColumn = new DataColumn(_schema.DataFields[13], _isKernelIps);
-        
+
         for (int x = 0; x < _buildIds.Length; x++)
         {
             if (_buildIds[x] == null)
@@ -123,12 +112,12 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
             }
         }
         var buildIdColumn = new DataColumn(_schema.DataFields[14], _buildIds);
-        
+
         var filteredColumn = new DataColumn(_schema.DataFields[15], _filtereds);
         var commColumn = new DataColumn(_schema.DataFields[16], _comms);
         var privColumn = new DataColumn(_schema.DataFields[17], _privs);
 
-        using var groupWriter = writer.CreateRowGroup();
+        using var groupWriter = _writer.CreateRowGroup();
 
         await groupWriter.WriteColumnAsync(idColumn);
         await groupWriter.WriteColumnAsync(traceIdColumn);
@@ -150,6 +139,12 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         await groupWriter.WriteColumnAsync(privColumn);
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        await _writer.DisposeAsync();
+        await _fileStream.DisposeAsync();
+    }
+
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
         nameof(_ids),
         nameof(_traceIds),
@@ -169,7 +164,7 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         nameof(_filtereds),
         nameof(_comms),
         nameof(_privs))]
-    private void ResizeArrays(int newSize)
+void ResizeArrays(int newSize)
     {
         if (_ids != null && _ids.Length == newSize)
 #pragma warning disable CS8774 // Member must have a non-null value when exiting.
@@ -196,9 +191,38 @@ public class ParquetAddressPersistance : IBatchPersistance<AddressEntry>
         _privs = new long[newSize];
     }
 
-    public static IBatchPersistance<AddressEntry> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistance<AddressEntry>> Create(string basePath, int batchSize, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        return new ParquetAddressPersistance(basePath, batchSize, compressionMethod);
+        var filePath = Path.Combine(basePath, "addresses.parquet");
+
+        var schema = new ParquetSchema(
+            new DataField<long>("Id"),
+            new DataField<long>("TraceId"),
+            new DataField<long>("Address"),
+            new DataField<int>("Pid"),
+            new DataField<bool>("IsIp"),
+            new DataField<int>("Size"),
+            new DataField<int>("Symoff"),
+            new DataField<long>("SymStrId"),
+            new DataField<long>("SymStart"),
+            new DataField<long>("SymEnd"),
+            new DataField<long>("Dso"),
+            new DataField<byte>("SymBinding"),
+            new DataField<byte>("Is64Bit"),
+            new DataField<byte>("IsKernelIp"),
+            new DataField<byte[]>("BuildId"),
+            new DataField<byte>("Filtered"),
+            new DataField<long>("Comm"),
+            new DataField<long>("Priv")
+        );
+
+
+        var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
+        var writer = await ParquetWriter.CreateAsync(schema, fileStream);
+
+        writer.CompressionMethod = compressionMethod;
+
+        return new ParquetAddressPersistance(basePath, batchSize, compressionMethod, writer, fileStream);
     }
 }

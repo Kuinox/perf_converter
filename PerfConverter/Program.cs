@@ -1,6 +1,4 @@
-﻿using Dapper;
-using PerfConverter.Entry;
-using PerfConverter.Persistance;
+﻿using PerfConverter.Persistance;
 using PerfConverter.Processor;
 using System.Runtime.InteropServices;
 
@@ -18,12 +16,12 @@ public unsafe class PerfDlFilter
     static int? _maxTracesToProcess = null;
     static IPersistanceLifetime _persistanceLifetime = null!;
 
-    private class State
+    class State
     {
         public int EventCount { get; set; }
     }
 
-    private static string? GetEventString(IntPtr eventPtr) => Marshal.PtrToStringUTF8(eventPtr);
+    static string? GetEventString(IntPtr eventPtr) => Marshal.PtrToStringUTF8(eventPtr);
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
     public static int Start(void** data, void* ctx)

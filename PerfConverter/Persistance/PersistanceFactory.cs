@@ -1,17 +1,15 @@
 using Parquet;
-using PerfConverter.Entry;
 using PerfConverter.Persistance.ParquetDotNet;
 using PerfConverter.Persistance.Sql;
-using System;
 
 namespace PerfConverter.Persistance;
 
 public static class PersistanceFactory
 {
-    private const string PERSISTENCE_TYPE_ENV = "PERSISTENCE_TYPE";
-    private const string OUTPUT_DIRECTORY_ENV = "OUTPUT_DIRECTORY";
-    private const string CONNECTION_STRING_ENV = "DB_CONNECTION_STRING";
-    private const string PARQUET_COMPRESS_ENV = "PARQUET_COMPRESSION";
+    const string PERSISTENCE_TYPE_ENV = "PERSISTENCE_TYPE";
+    const string OUTPUT_DIRECTORY_ENV = "OUTPUT_DIRECTORY";
+    const string CONNECTION_STRING_ENV = "DB_CONNECTION_STRING";
+    const string PARQUET_COMPRESS_ENV = "PARQUET_COMPRESSION";
     public static IPersistanceLifetime CreatePersistance(int batchSize)
     {
         var persistenceType = Environment.GetEnvironmentVariable(PERSISTENCE_TYPE_ENV) ?? string.Empty;
