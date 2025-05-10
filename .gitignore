@@ -6,3 +6,6 @@ src/artifacts
 *.user
 **/Properties/launchSettings.json
 **/testenvironments.json
+
+/viewer/venv/Lib/
+/viewer/venv/share/

@@ -6,10 +6,12 @@ namespace PerfConverter.Entry;
 public struct TraceSampleEntry
 {
     public ulong Id;
+    public ulong PerfId;
     public int Pid;
     public int Tid;
     public ulong Time;
     public int Cpu;
+    public uint Flags;
     public long Ip;
     public long Addr;
     public ulong Period;

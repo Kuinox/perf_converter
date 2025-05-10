@@ -1,4 +1,4 @@
-﻿using PerfConverter.Persistance;
+﻿using PerfConverter.Persistence;
 using PerfConverter.Processor;
 using System.Runtime.InteropServices;
 
@@ -14,7 +14,7 @@ public unsafe class PerfDlFilter
     static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
-    static IPersistanceLifetime _persistanceLifetime = null!;
+    static IPersistenceLifetime _persistanceLifetime = null!;
 
     class State
     {
@@ -43,15 +43,8 @@ public unsafe class PerfDlFilter
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
-            var batchSize = 10_000_000;
-            string? batchSizeEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
-            if (!string.IsNullOrEmpty(batchSizeEnv) && int.TryParse(batchSizeEnv, out int parsedBatchSize))
-            {
-                batchSize = parsedBatchSize;
-                Console.Error.WriteLine($"Using batch size of {batchSize}");
-            }
-            
-            _persistanceLifetime = PersistanceFactory.CreatePersistance(batchSize);
+                       
+            _persistanceLifetime = PersistenceFactory.CreatePersistence();
 
             _sqlSymProcessor = new SymProcessor(_persistanceLifetime.SymbolBatcher);
             _addressProcessor = new AddressProcessor(_sqlSymProcessor, _persistanceLifetime.AddressBatcher);
@@ -73,7 +66,6 @@ public unsafe class PerfDlFilter
         {
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
-
             state.EventCount++;
             if (_maxTracesToProcess.HasValue && state.EventCount > _maxTracesToProcess.Value)
             {

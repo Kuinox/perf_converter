@@ -1,10 +1,10 @@
 ﻿using PerfConverter.Entry;
-using PerfConverter.Persistance;
+using PerfConverter.Persistence;
 using System.Runtime.InteropServices;
 
 namespace PerfConverter.Processor;
 
-public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<AddressEntry> persistance) : IAddressProcessor
+public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<AddressEntry> persistence) : IAddressProcessor
 {
     ulong _currenAddress = 0;
 
@@ -36,7 +36,7 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<Ad
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();
 
-        persistance.Persit(new AddressEntry
+        persistence.Persit(new AddressEntry
         {
             Id = _currenAddress++,
             TraceId = traceId,

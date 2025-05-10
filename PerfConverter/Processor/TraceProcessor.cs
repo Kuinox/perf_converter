@@ -1,22 +1,24 @@
 ﻿using System.Runtime.InteropServices;
 using PerfConverter.Entry;
-using PerfConverter.Persistance;
+using PerfConverter.Persistence;
 
 namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor(IPersiter<TraceSampleEntry> persistance) : ITraceProcessor
+public unsafe class TraceProcessor(IPersiter<TraceSampleEntry> persistence) : ITraceProcessor
 {
     ulong _totalSamples = 0;
 
     public unsafe long FilterEventEarly(PerfDlFilterSample* sample)
     {
-        persistance.Persit(new TraceSampleEntry
+        persistence.Persit(new TraceSampleEntry
         {
             Id = _totalSamples++,
+            PerfId = sample->id,
             Pid = sample->pid,
             Tid = sample->tid,
             Time = sample->time,
             Cpu = sample->cpu,
+            Flags = sample->flags,
             Ip = (long)sample->ip,
             Addr = (long)sample->addr,
             Period = sample->period,

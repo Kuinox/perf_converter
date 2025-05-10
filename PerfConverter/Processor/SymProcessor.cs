@@ -1,10 +1,10 @@
 ﻿using PerfConverter.Entry;
-using PerfConverter.Persistance;
+using PerfConverter.Persistence;
 using System.Runtime.InteropServices;
 
 namespace PerfConverter.Processor;
 
-public class SymProcessor(IPersiter<SymbolEntry> persistance) : ISymProcessor
+public class SymProcessor(IPersiter<SymbolEntry> persistence) : ISymProcessor
 {
     readonly Dictionary<string, long> _ids = [];
 
@@ -14,7 +14,7 @@ public class SymProcessor(IPersiter<SymbolEntry> persistance) : ISymProcessor
         if (!exists)
         {
             defaultEntry = _ids.Count;
-            persistance.Persit(new SymbolEntry { Id = defaultEntry, Symbol = sym });
+            persistence.Persit(new SymbolEntry { Id = defaultEntry, Symbol = sym });
         }
         return defaultEntry;
     }
