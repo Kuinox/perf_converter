@@ -14,7 +14,7 @@ public unsafe class PerfDlFilter
     static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
-    static IPersistenceLifetime _persistanceLifetime = null!;
+    static IPersistenceLifetime _persistenceLifetime = null!;
 
     class State
     {
@@ -44,11 +44,11 @@ public unsafe class PerfDlFilter
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
                        
-            _persistanceLifetime = PersistenceFactory.CreatePersistence();
+            _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
-            _sqlSymProcessor = new SymProcessor(_persistanceLifetime.SymbolBatcher);
-            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _persistanceLifetime.AddressBatcher);
-            _traceProcessor = new TraceProcessor(_persistanceLifetime.TraceBatcher);
+            _sqlSymProcessor = new SymProcessor(_persistenceLifetime.SymbolBatcher);
+            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _persistenceLifetime.AddressBatcher);
+            _traceProcessor = new TraceProcessor(_persistenceLifetime.TraceBatcher);
 
             return 0;
         }
@@ -100,7 +100,7 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
             
             // Dispose the persistence lifetime which will handle all cleanup
-            _persistanceLifetime.DisposeAsync().AsTask().Wait();
+            _persistenceLifetime.DisposeAsync().AsTask().Wait();
             
             Console.Error.WriteLine("Done.");
             return 0;

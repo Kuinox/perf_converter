@@ -3,17 +3,17 @@ using System.Threading.Channels;
 
 namespace PerfConverter.Persistence;
 
-public class Batcher<T> : IPersiter<T>, IAsyncDisposable
+public class Batcher<T> : IPersister<T>, IAsyncDisposable
 {
-    readonly IBatchPersistence<T> _batchPersistance;
+    readonly IBatchPersistence<T> _batchPersistence;
     readonly int _batchSize;
     readonly BatchingMode _batchingMode;
     readonly Channel<T> _channel;
     Task? _workLoop;
 
-    Batcher(IBatchPersistence<T> batchPersistance, int batchSize, BatchingMode batchingMode)
+    Batcher(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode)
     {
-        _batchPersistance = batchPersistance;
+        _batchPersistence = batchPersistence;
         _batchSize = batchSize;
         _batchingMode = batchingMode;
         _channel = Channel.CreateBounded<T>(batchSize);
@@ -21,7 +21,7 @@ public class Batcher<T> : IPersiter<T>, IAsyncDisposable
 
     void Start() => _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
 
-    public void Persit(T val)
+    public void Persist(T val)
     {
         while (!_channel.Writer.TryWrite(val)) Thread.Yield();
     }
@@ -57,8 +57,8 @@ public class Batcher<T> : IPersiter<T>, IAsyncDisposable
         Stopwatch sw = Stopwatch.StartNew();
         try
         {
-            await _batchPersistance.PersistAsync(batch);
-            Console.Error.WriteLine($"Sent batch of {batch.Count} {typeof(T)} in {sw.ElapsedMilliseconds}");
+            await _batchPersistence.PersistAsync(batch);
+            Console.Error.WriteLine($"Wrote batch of {batch.Count} {typeof(T).Name} in {sw.ElapsedMilliseconds}ms");
         }
         catch (Exception e)
         {
@@ -78,9 +78,9 @@ public class Batcher<T> : IPersiter<T>, IAsyncDisposable
         }
     }
 
-    public static Batcher<T> Create(IBatchPersistence<T> batchPersistance, int batchSize, BatchingMode batchingMode)
+    public static Batcher<T> Create(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode)
     {
-        var batcher = new Batcher<T>(batchPersistance, batchSize, batchingMode);
+        var batcher = new Batcher<T>(batchPersistence, batchSize, batchingMode);
         batcher.Start();
         return batcher;
     }
@@ -93,6 +93,6 @@ public class Batcher<T> : IPersiter<T>, IAsyncDisposable
             await _workLoop;
         }
         
-        await _batchPersistance.DisposeAsync();
+        await _batchPersistence.DisposeAsync();
     }
 }

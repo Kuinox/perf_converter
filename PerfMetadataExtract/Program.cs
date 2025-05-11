@@ -2,62 +2,46 @@
 using Parquet;
 using PerfConverter.Persistence;
 using PerfMetadataExtract;
-using System.CommandLine;
 
 class Program
 {
     static async Task<int> Main(string[] args)
     {
-        // Create options
-        var inputOption = new Option<FileInfo>(
-            name: "--input",
-            description: "The input perf data file path")
-        { 
-            IsRequired = true 
-        };
-        inputOption.AddAlias("-i");
-
-        var outputOption = new Option<DirectoryInfo>(
-            name: "--output",
-            description: "The output directory for parquet files")
+        if (args.Length < 2)
         {
-            IsRequired = true
-        };
-        outputOption.AddAlias("-o");
+            Console.Error.WriteLine("Usage: PerfMetadataExtract <inputFile> <outputFilePath> [compression] [batchSize]");
+            Console.Error.WriteLine("  inputFile:   Path to the input perf data file");
+            Console.Error.WriteLine("  outputFilePath: Path to the output file");
+            Console.Error.WriteLine("  compression: Compression method (None, Gzip, Snappy) (default: Snappy)");
+            Console.Error.WriteLine("  batchSize:   Batch size for processing (default: 2,000,000)");
+            return 1;
+        }
 
-        var compressionOption = new Option<CompressionMethod>(
-            name: "--compression",
-            description: "Compression method to use",
-            getDefaultValue: () => CompressionMethod.Snappy);
-        compressionOption.AddAlias("-c");
+        string inputPath = args[0];
+        string outputPath = args[1];
 
-        var batchSizeOption = new Option<int>(
-            name: "--batch-size",
-            description: "Batch size for processing",
-            getDefaultValue: () => 2_000_000);
-        batchSizeOption.AddAlias("-b");
-
-        // Create command
-        var rootCommand = new RootCommand("PerfMetadataExtract - Extract auxiliary data lost events from perf data files");
-        rootCommand.AddOption(inputOption);
-        rootCommand.AddOption(outputOption);
-        rootCommand.AddOption(compressionOption);
-        rootCommand.AddOption(batchSizeOption);
-
-        rootCommand.SetHandler((inputFile, outputDir, compression, batchSize) =>
+        // Parse optional arguments
+        CompressionMethod compressionMethod = CompressionMethod.Snappy;
+        if (args.Length > 2 && Enum.TryParse<CompressionMethod>(args[2], true, out var parsedCompression))
         {
-            try
-            {
-                return ExtractAuxDataLostEvents(inputFile.FullName, outputDir.FullName, compression, batchSize);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error during extraction: {ex.Message}");
-                return Task.FromResult(1);
-            }
-        }, inputOption, outputOption, compressionOption, batchSizeOption);
+            compressionMethod = parsedCompression;
+        }
 
-        return await rootCommand.InvokeAsync(args);
+        int batchSize = 2_000_000;
+        if (args.Length > 3 && int.TryParse(args[3], out var parsedBatchSize))
+        {
+            batchSize = parsedBatchSize;
+        }
+
+        try
+        {
+            return await ExtractAuxDataLostEvents(inputPath, outputPath, compressionMethod, batchSize);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error during extraction: {ex.Message}");
+            return 1;
+        }
     }
 
     private static async Task<int> ExtractAuxDataLostEvents(string inputPath, string outputPath, CompressionMethod compressionMethod, int batchSize)
@@ -68,9 +52,15 @@ class Program
             return 1;
         }
 
-        Directory.CreateDirectory(outputPath);
+        // Create output directory if it doesn't exist
+        string outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir))
+        {
+            Directory.CreateDirectory(outputDir);
+        }
+
         Console.WriteLine($"Processing {inputPath}");
-        Console.WriteLine($"Output directory: {outputPath}");
+        Console.WriteLine($"Output file: {outputPath}");
         Console.WriteLine($"Compression: {compressionMethod}");
         Console.WriteLine($"Batch size: {batchSize}");
 
@@ -134,7 +124,7 @@ class Program
                 Flags = flags
             };
 
-            batcher.Persit(entry);
+            batcher.Persist(entry);
         }
     }
 }

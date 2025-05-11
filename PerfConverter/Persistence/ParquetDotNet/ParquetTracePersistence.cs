@@ -12,24 +12,24 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
 
-    long[] _ids;
-    long[] _perfIds;
-    int[] _pids;
-    int[] _tids;
-    long[] _times;
-    int[] _cpus;
+    ulong[] _ids;
+    ulong[] _perfIds;
+    uint[] _pids;
+    uint[] _tids;
+    ulong[] _times;
+    uint[] _cpus;
     uint[] _flags;
-    long[] _ips;
-    long[] _addrs;
-    long[] _periods;
-    long[] _insnCnts;
-    long[] _cycCnts;
-    long[] _weights;
+    ulong[] _ips;
+    ulong[] _addrs;
+    ulong[] _periods;
+    ulong[] _insnCnts;
+    ulong[] _cycCnts;
+    ulong[] _weights;
     byte[] _cpumodes;
     byte[] _addrCorrelatesSyms;
     string[] _events;
-    int[] _machinePids;
-    int[] _vcpus;
+    uint[] _machinePids;
+    uint[] _vcpus;
 
     ParquetTracePersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
     {
@@ -53,19 +53,19 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         int i = 0;
         foreach (var entry in batch)
         {
-            _ids[i] = (long)entry.Id;
-            _perfIds[i] = (long)entry.PerfId;
+            _ids[i] = entry.Id;
+            _perfIds[i] = entry.PerfId;
             _pids[i] = entry.Pid;
             _tids[i] = entry.Tid;
-            _times[i] = (long)entry.Time;
+            _times[i] = entry.Time;
             _flags[i] = entry.Flags;
             _cpus[i] = entry.Cpu;
             _ips[i] = entry.Ip;
             _addrs[i] = entry.Addr;
-            _periods[i] = (long)entry.Period;
-            _insnCnts[i] = (long)entry.InsnCnt;
-            _cycCnts[i] = (long)entry.CycCnt;
-            _weights[i] = (long)entry.Weight;
+            _periods[i] = entry.Period;
+            _insnCnts[i] = entry.InsnCnt;
+            _cycCnts[i] = entry.CycCnt;
+            _weights[i] = entry.Weight;
             _cpumodes[i] = entry.Cpumode;
             _addrCorrelatesSyms[i] = entry.AddrCorrelatesSym;
             _events[i] = entry.Event ?? string.Empty;
@@ -101,6 +101,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         await groupWriter.WriteColumnAsync(tidColumn);
         await groupWriter.WriteColumnAsync(timeColumn);
         await groupWriter.WriteColumnAsync(cpuColumn);
+        await groupWriter.WriteColumnAsync(flagsColumn);
         await groupWriter.WriteColumnAsync(ipColumn);
         await groupWriter.WriteColumnAsync(addrColumn);
         await groupWriter.WriteColumnAsync(periodColumn);
@@ -141,24 +142,24 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         nameof(_vcpus))]
     void ResizeArrays(int newSize)
     {
-        _ids = new long[newSize];
-        _perfIds = new long[newSize];
-        _pids = new int[newSize];
-        _tids = new int[newSize];
-        _times = new long[newSize];
-        _cpus = new int[newSize];
+        _ids = new ulong[newSize];
+        _perfIds = new ulong[newSize];
+        _pids = new uint[newSize];
+        _tids = new uint[newSize];
+        _times = new ulong[newSize];
+        _cpus = new uint[newSize];
         _flags = new uint[newSize];
-        _ips = new long[newSize];
-        _addrs = new long[newSize];
-        _periods = new long[newSize];
-        _insnCnts = new long[newSize];
-        _cycCnts = new long[newSize];
-        _weights = new long[newSize];
+        _ips = new ulong[newSize];
+        _addrs = new ulong[newSize];
+        _periods = new ulong[newSize];
+        _insnCnts = new ulong[newSize];
+        _cycCnts = new ulong[newSize];
+        _weights = new ulong[newSize];
         _cpumodes = new byte[newSize];
         _addrCorrelatesSyms = new byte[newSize];
         _events = new string[newSize];
-        _machinePids = new int[newSize];
-        _vcpus = new int[newSize];
+        _machinePids = new uint[newSize];
+        _vcpus = new uint[newSize];
     }
 
     public static async Task<IBatchPersistence<TraceSampleEntry>> Create(string basePath, CompressionMethod compressionMethod)
@@ -167,24 +168,24 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         var filePath = Path.Combine(basePath, "tracesamples.parquet");
 
         var schema = new ParquetSchema(
-            new DataField<long>("Id"),
-            new DataField<long>("PerfId"),
-            new DataField<int>("Pid"),
-            new DataField<int>("Tid"),
-            new DataField<long>("Time"),
-            new DataField<uint>("Flags"),
-            new DataField<int>("Cpu"),
-            new DataField<long>("Ip"),
-            new DataField<long>("Addr"),
-            new DataField<long>("Period"),
-            new DataField<long>("InsnCnt"),
-            new DataField<long>("CycCnt"),
-            new DataField<long>("Weight"),
-            new DataField<byte>("Cpumode"),
-            new DataField<byte>("AddrCorrelatesSym"),
-            new DataField<string>("Event"),
-            new DataField<int>("MachinePid"),
-            new DataField<int>("Vcpu")
+            new DataField<ulong>("id"),
+            new DataField<ulong>("perfId"),
+            new DataField<uint>("pid"),
+            new DataField<uint>("tid"),
+            new DataField<ulong>("time"),
+            new DataField<uint>("flags"),
+            new DataField<uint>("cpu"),
+            new DataField<ulong>("ip"),
+            new DataField<ulong>("addr"),
+            new DataField<ulong>("period"),
+            new DataField<ulong>("insnCnt"),
+            new DataField<ulong>("cycCnt"),
+            new DataField<ulong>("weight"),
+            new DataField<byte>("cpumode"),
+            new DataField<byte>("addrCorrelatesSym"),
+            new DataField<string>("event"),
+            new DataField<uint>("machinePid"),
+            new DataField<uint>("vcpu")
         );
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);

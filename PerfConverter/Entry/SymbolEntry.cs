@@ -2,6 +2,6 @@
 
 public struct SymbolEntry
 {
-    public long Id;
+    public ulong Id;
     public string Symbol;
 }

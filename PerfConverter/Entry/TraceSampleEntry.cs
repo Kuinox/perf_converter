@@ -7,13 +7,13 @@ public struct TraceSampleEntry
 {
     public ulong Id;
     public ulong PerfId;
-    public int Pid;
-    public int Tid;
+    public uint Pid;
+    public uint Tid;
     public ulong Time;
-    public int Cpu;
+    public uint Cpu;
     public uint Flags;
-    public long Ip;
-    public long Addr;
+    public ulong Ip;
+    public ulong Addr;
     public ulong Period;
     public ulong InsnCnt;
     public ulong CycCnt;
@@ -21,6 +21,6 @@ public struct TraceSampleEntry
     public byte Cpumode;
     public byte AddrCorrelatesSym;
     public string? Event;
-    public int MachinePid;
-    public int Vcpu;
+    public uint MachinePid;
+    public uint Vcpu;
 }

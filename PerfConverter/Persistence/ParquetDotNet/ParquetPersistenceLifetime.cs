@@ -10,9 +10,9 @@ public class ParquetPersistenceLifetime(
     Batcher<AddressEntry> addressBatcher,
     Batcher<TraceSampleEntry> traceBatcher) : IPersistenceLifetime
 {
-    public IPersiter<SymbolEntry> SymbolBatcher => symbolBatcher;   
-    public IPersiter<AddressEntry> AddressBatcher => addressBatcher;
-    public IPersiter<TraceSampleEntry> TraceBatcher => traceBatcher;
+    public IPersister<SymbolEntry> SymbolBatcher => symbolBatcher;   
+    public IPersister<AddressEntry> AddressBatcher => addressBatcher;
+    public IPersister<TraceSampleEntry> TraceBatcher => traceBatcher;
 
     public async ValueTask DisposeAsync()
     {

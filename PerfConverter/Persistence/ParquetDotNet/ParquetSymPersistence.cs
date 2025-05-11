@@ -10,7 +10,7 @@ public class ParquetSymPersistence : IBatchPersistence<SymbolEntry>
     readonly ParquetSchema _schema;
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
-    long[]? _ids;
+    ulong[]? _ids;
     string[]? _symbols;
 
 
@@ -59,7 +59,7 @@ void ResizeArrays(int newSize)
             return;
 #pragma warning restore CS8774 // Member must have a non-null value when exiting.
 
-        _ids = new long[newSize];
+        _ids = new ulong[newSize];
         _symbols = new string[newSize];
     }
 
@@ -69,8 +69,8 @@ void ResizeArrays(int newSize)
         var filePath = Path.Combine(basePath, "symbols.parquet");
 
         var schema = new ParquetSchema(
-            new DataField<long>("Id"),
-            new DataField<string>("Symbol")
+            new DataField<ulong>("id"),
+            new DataField<string>("symbol")
         );
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);

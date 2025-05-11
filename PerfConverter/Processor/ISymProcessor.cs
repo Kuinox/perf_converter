@@ -2,5 +2,5 @@
 
 public interface ISymProcessor
 {
-    long Process(string sym);
+    ulong Process(string sym);
 }

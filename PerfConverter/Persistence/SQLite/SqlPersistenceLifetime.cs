@@ -25,9 +25,9 @@ public class SqlPersistenceLifetime : IPersistenceLifetime
         _traceBatcher = traceBatcher;
     }
 
-    public IPersiter<SymbolEntry> SymbolBatcher => _symbolBatcher;
-    public IPersiter<AddressEntry> AddressBatcher => _addressBatcher;
-    public IPersiter<TraceSampleEntry> TraceBatcher => _traceBatcher;
+    public IPersister<SymbolEntry> SymbolBatcher => _symbolBatcher;
+    public IPersister<AddressEntry> AddressBatcher => _addressBatcher;
+    public IPersister<TraceSampleEntry> TraceBatcher => _traceBatcher;
 
     public async ValueTask DisposeAsync()
     {

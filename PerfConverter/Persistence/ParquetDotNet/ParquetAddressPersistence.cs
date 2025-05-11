@@ -11,24 +11,24 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
 
-    long[] _ids;
-    long[] _traceIds;
-    long[] _addresses;
-    int[] _pids;
+    ulong[] _ids;
+    ulong[] _traceIds;
+    ulong[] _addresses;
+    uint[] _pids;
     bool[] _isIps;
-    int[] _sizes;
-    int[] _symoffs;
-    long[] _symStrIds;
-    long[] _symStarts;
-    long[] _symEnds;
-    long[] _dsos;
+    uint[] _sizes;
+    uint[] _symoffs;
+    ulong[] _symStrIds;
+    ulong[] _symStarts;
+    ulong[] _symEnds;
+    ulong[] _dsos;
     byte[] _symBindings;
     byte[] _is64Bits;
     byte[] _isKernelIps;
     byte[][] _buildIds;
     byte[] _filtereds;
-    long[] _comms;
-    long[] _privs;
+    ulong[] _comms;
+    ulong[] _privs;
 
 
     ParquetAddressPersistence(ParquetSchema schema, CompressionMethod compressionMethod, ParquetWriter writer, FileStream fileStream)
@@ -48,21 +48,21 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         int i = 0;
         foreach (var entry in batch)
         {
-            _ids[i] = (long)entry.Id;
+            _ids[i] = entry.Id;
             _traceIds[i] = entry.TraceId;
-            _addresses[i] = (long)entry.Address;
+            _addresses[i] = entry.Address;
             _pids[i] = entry.Pid;
             _isIps[i] = entry.IsIp;
             _sizes[i] = entry.Size;
             _symoffs[i] = entry.Symoff;
             _symStrIds[i] = entry.SymStrId;
-            _symStarts[i] = (long)entry.SymStart;
-            _symEnds[i] = (long)entry.SymEnd;
+            _symStarts[i] = entry.SymStart;
+            _symEnds[i] = entry.SymEnd;
             _dsos[i] = entry.Dso;
             _symBindings[i] = entry.SymBinding;
             _is64Bits[i] = entry.Is64Bit;
             _isKernelIps[i] = entry.IsKernelIp;
-            _buildIds[i] = entry.BuildId ?? Array.Empty<byte>();
+            _buildIds[i] = entry.BuildId ?? [];
             _filtereds[i] = entry.Filtered;
             _comms[i] = entry.Comm;
             _privs[i] = entry.Priv;
@@ -119,11 +119,6 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         await groupWriter.WriteColumnAsync(privColumn);
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _writer.DisposeAsync();
-        await _fileStream.DisposeAsync();
-    }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
         nameof(_ids),
@@ -144,31 +139,37 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         nameof(_filtereds),
         nameof(_comms),
         nameof(_privs))]
-void ResizeArrays(int newSize)
+    void ResizeArrays(int newSize)
     {
         if (_ids != null && _ids.Length == newSize)
 #pragma warning disable CS8774 // Member must have a non-null value when exiting.
             return;
 #pragma warning restore CS8774 // Member must have a non-null value when exiting.
 
-        _ids = new long[newSize];
-        _traceIds = new long[newSize];
-        _addresses = new long[newSize];
-        _pids = new int[newSize];
+        _ids = new ulong[newSize];
+        _traceIds = new ulong[newSize];
+        _addresses = new ulong[newSize];
+        _pids = new uint[newSize];
         _isIps = new bool[newSize];
-        _sizes = new int[newSize];
-        _symoffs = new int[newSize];
-        _symStrIds = new long[newSize];
-        _symStarts = new long[newSize];
-        _symEnds = new long[newSize];
-        _dsos = new long[newSize];
+        _sizes = new uint[newSize];
+        _symoffs = new uint[newSize];
+        _symStrIds = new ulong[newSize];
+        _symStarts = new ulong[newSize];
+        _symEnds = new ulong[newSize];
+        _dsos = new ulong[newSize];
         _symBindings = new byte[newSize];
         _is64Bits = new byte[newSize];
         _isKernelIps = new byte[newSize];
         _buildIds = new byte[newSize][];
         _filtereds = new byte[newSize];
-        _comms = new long[newSize];
-        _privs = new long[newSize];
+        _comms = new ulong[newSize];
+        _privs = new ulong[newSize];
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _writer.DisposeAsync();
+        await _fileStream.DisposeAsync();
     }
 
     public static async Task<IBatchPersistence<AddressEntry>> Create(string basePath, CompressionMethod compressionMethod)
@@ -177,24 +178,24 @@ void ResizeArrays(int newSize)
         var filePath = Path.Combine(basePath, "addresses.parquet");
 
         var schema = new ParquetSchema(
-            new DataField<long>("Id"),
-            new DataField<long>("TraceId"),
-            new DataField<long>("Address"),
-            new DataField<int>("Pid"),
-            new DataField<bool>("IsIp"),
-            new DataField<int>("Size"),
-            new DataField<int>("Symoff"),
-            new DataField<long>("SymStrId"),
-            new DataField<long>("SymStart"),
-            new DataField<long>("SymEnd"),
-            new DataField<long>("Dso"),
-            new DataField<byte>("SymBinding"),
-            new DataField<byte>("Is64Bit"),
-            new DataField<byte>("IsKernelIp"),
-            new DataField<byte[]>("BuildId"),
-            new DataField<byte>("Filtered"),
-            new DataField<long>("Comm"),
-            new DataField<long>("Priv")
+            new DataField<ulong>("id"),
+            new DataField<ulong>("traceId"),
+            new DataField<ulong>("address"),
+            new DataField<uint>("pid"),
+            new DataField<bool>("isIp"),
+            new DataField<uint>("size"),
+            new DataField<uint>("symoff"),
+            new DataField<ulong>("symStrId"),
+            new DataField<ulong>("symStart"),
+            new DataField<ulong>("symEnd"),
+            new DataField<ulong>("dso"),
+            new DataField<byte>("symBinding"),
+            new DataField<byte>("is64Bit"),
+            new DataField<byte>("isKernelIp"),
+            new DataField<byte[]>("buildId"),
+            new DataField<byte>("filtered"),
+            new DataField<ulong>("comm"),
+            new DataField<ulong>("priv")
         );
 
 

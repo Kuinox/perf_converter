@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 
 namespace PerfConverter.Processor;
 
-public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<AddressEntry> persistence) : IAddressProcessor
+public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersister<AddressEntry> persistence) : IAddressProcessor
 {
     ulong _currenAddress = 0;
 
-    public unsafe void ProcessAddress(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
+    public unsafe void ProcessAddress(PerfDlfilterFns* fns, ulong traceId, int pid, void* ctx)
     {
         var resolved = fns->resolve_addr(ctx);
         if (resolved != null)
@@ -17,7 +17,7 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<Ad
         }
     }
 
-    public unsafe void ProcessIp(PerfDlfilterFns* fns, long traceId, int pid, void* ctx)
+    public unsafe void ProcessIp(PerfDlfilterFns* fns, ulong traceId, int pid, void* ctx)
     {
         var resolved = fns->resolve_ip(ctx);
         if (resolved == null) return;
@@ -25,9 +25,9 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<Ad
         Process(resolved, traceId, pid, isIp: true);
     }
 
-    unsafe void Process(PerfDlfilterAl* info, long traceId, int pid, bool isIp)
+    unsafe void Process(PerfDlfilterAl* info, ulong traceId, int pid, bool isIp)
     {
-        long symStrId = 0;
+        ulong symStrId = 0;
         if (info->sym != 0)
         {
             var str = Marshal.PtrToStringUTF8(info->sym)!;
@@ -36,26 +36,26 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersiter<Ad
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();
 
-        persistence.Persit(new AddressEntry
+        persistence.Persist(new AddressEntry
         {
             Id = _currenAddress++,
             TraceId = traceId,
             Address = info->addr,
-            Pid = pid,
+            Pid = (uint)pid,
             IsIp = isIp,
-            Size = (int)info->size,
-            Symoff = (int)info->symoff,
+            Size = info->size,
+            Symoff = info->symoff,
             SymStrId = symStrId,
             SymStart = info->sym_start,
             SymEnd = info->sym_end,
-            Dso = info->dso,
+            Dso = (ulong)info->dso,
             SymBinding = info->sym_binding,
             Is64Bit = info->is_64_bit,
             IsKernelIp = info->is_kernel_ip,
             BuildId = buildId,
             Filtered = info->filtered,
-            Comm = info->comm,
-            Priv = info->priv
+            Comm = (ulong)info->comm,
+            Priv = (ulong)info->priv
         });
     }
 }

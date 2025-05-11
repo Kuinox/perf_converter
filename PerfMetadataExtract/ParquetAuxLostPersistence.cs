@@ -42,7 +42,7 @@ public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
         {
             _times[i] = entry.Time;
             _pids[i] = entry.Pid;
-            _tid[i] = entry.Pid;
+            _tid[i] = entry.Tid;
             _cpu[i] = entry.Cpu;
             _flags[i] = entry.Flags;
             i++;
@@ -88,10 +88,8 @@ public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
         await _fileStream.DisposeAsync();
     }
 
-    public static async Task<ParquetAuxLostPersistence> Create(string basePath, CompressionMethod compressionMethod)
+    public static async Task<ParquetAuxLostPersistence> Create(string filePath, CompressionMethod compressionMethod)
     {
-        Directory.CreateDirectory(basePath);
-        var filePath = Path.Combine(basePath, "auxlost.parquet");
         var schema = new ParquetSchema(
             new DataField<ulong>("time"),
             new DataField<ulong>("pid"),
@@ -99,7 +97,6 @@ public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
             new DataField<ulong>("cpu"),
             new DataField<ulong>("flags")
         );
-
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);

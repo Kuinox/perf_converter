@@ -23,23 +23,23 @@ public static class PersistenceFactory
         var outputDirectory = Environment.GetEnvironmentVariable(OUTPUT_DIRECTORY_ENV) ?? "parquet_output";
         var compressionEnv = Environment.GetEnvironmentVariable(PARQUET_COMPRESS_ENV);
 
-        if (persistenceType.Equals("parquet", StringComparison.OrdinalIgnoreCase))
+        if (persistenceType.Equals("sqlite", StringComparison.OrdinalIgnoreCase))
         {
-            var compressionMethod = CompressionMethod.Snappy;
-            if (!string.IsNullOrEmpty(compressionEnv))
-            {
-                if (Enum.TryParse<CompressionMethod>(compressionEnv, true, out var parsedCompression))
-                    compressionMethod = parsedCompression;
-                else
-                    Console.Error.WriteLine($"Invalid Parquet compression method: {compressionEnv}. Defaulting to Snappy.");
-            }
-            Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
-            return ParquetPersistenceFactory.CreatePersistence(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
+            Console.Error.WriteLine($"Warning: Converting to SQLite is extremely slow due to lack of data compression.");
+            string connectionString = Environment.GetEnvironmentVariable(CONNECTION_STRING_ENV) ?? "Data Source=perf.db";
+            Console.Error.WriteLine($"Using SQLite connection: {connectionString}");
+            return SqlPersistenceFactory.CreatePersistence(connectionString, batchSize, BatchingMode.ASAP);
         }
 
-        // Default to SQLite
-        string connectionString = Environment.GetEnvironmentVariable(CONNECTION_STRING_ENV) ?? "Data Source=perf.db";
-        Console.Error.WriteLine($"Using SQLite connection: {connectionString}");
-        return SqlPersistenceFactory.CreatePersistence(connectionString, batchSize, BatchingMode.ASAP);
+        var compressionMethod = CompressionMethod.Snappy;
+        if (!string.IsNullOrEmpty(compressionEnv))
+        {
+            if (Enum.TryParse<CompressionMethod>(compressionEnv, true, out var parsedCompression))
+                compressionMethod = parsedCompression;
+            else
+                Console.Error.WriteLine($"Invalid Parquet compression method: {compressionEnv}. Defaulting to Snappy.");
+        }
+        Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
+        return ParquetPersistenceFactory.CreatePersistence(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
     }
 }

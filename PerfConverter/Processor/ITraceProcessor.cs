@@ -2,5 +2,5 @@ namespace PerfConverter.Processor;
 
 public interface ITraceProcessor
 {
-    unsafe long FilterEventEarly(PerfDlFilterSample* sample);
+    unsafe ulong FilterEventEarly(PerfDlFilterSample* sample);
 }
