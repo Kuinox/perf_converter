@@ -1,21 +1,21 @@
 ﻿using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
-using PerfConverter.Persistence;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Temp.Core;
 
 namespace PerfMetadataExtract;
 
 public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
 {
-    private ParquetSchema _schema;
-    private ParquetWriter _writer;
-    private FileStream _fileStream;
+    readonly ParquetSchema _schema;
+    readonly ParquetWriter _writer;
+    readonly FileStream _fileStream;
 
     ulong[] _times;
     ulong[] _pids;

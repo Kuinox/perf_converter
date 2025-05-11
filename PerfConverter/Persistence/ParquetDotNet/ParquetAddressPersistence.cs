@@ -2,6 +2,7 @@
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 
@@ -31,7 +32,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
     ulong[] _privs;
 
 
-    ParquetAddressPersistence(ParquetSchema schema, CompressionMethod compressionMethod, ParquetWriter writer, FileStream fileStream)
+    ParquetAddressPersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
     {
         ResizeArrays(0);
         _schema = schema;
@@ -88,7 +89,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         {
             if (_buildIds[x] == null)
             {
-                _buildIds[x] = Array.Empty<byte>();
+                _buildIds[x] = [];
             }
         }
         var buildIdColumn = new DataColumn(_schema.DataFields[14], _buildIds);
@@ -204,6 +205,6 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
 
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetAddressPersistence(schema, compressionMethod, writer, fileStream);
+        return new ParquetAddressPersistence(schema, writer, fileStream);
     }
 }

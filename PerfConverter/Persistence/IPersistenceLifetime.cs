@@ -1,3 +1,5 @@
+using Temp.Core;
+
 namespace PerfConverter.Persistence;
 
 /// <summary>
@@ -5,18 +7,10 @@ namespace PerfConverter.Persistence;
 /// </summary>
 public interface IPersistenceLifetime : IAsyncDisposable
 {
-    /// <summary>
-    /// Gets the symbol batcher
-    /// </summary>
-    IPersister<Entry.SymbolEntry> SymbolBatcher { get; }
-    
-    /// <summary>
-    /// Gets the address batcher
-    /// </summary>
+    IPersister<Entry.StringEntry> SymbolBatcher { get; }
+
+    IPersister<Entry.StringEntry> CommBatcher { get; }
     IPersister<Entry.AddressEntry> AddressBatcher { get; }
     
-    /// <summary>
-    /// Gets the trace batcher
-    /// </summary>
     IPersister<Entry.TraceSampleEntry> TraceBatcher { get; }
 }

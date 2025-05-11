@@ -1,4 +1,4 @@
-﻿namespace PerfConverter;
+﻿namespace PerfConverter.PerfStructs;
 
 public enum DLFilterFlag : uint
 {

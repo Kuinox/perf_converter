@@ -1,4 +1,6 @@
-﻿namespace PerfConverter.Processor;
+﻿using PerfConverter.PerfStructs;
+
+namespace PerfConverter.Processor;
 
 interface IAddressProcessor
 {

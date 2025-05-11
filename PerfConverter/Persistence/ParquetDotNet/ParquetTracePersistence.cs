@@ -3,6 +3,7 @@ using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 

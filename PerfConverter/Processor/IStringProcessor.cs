@@ -1,6 +1,6 @@
 ﻿namespace PerfConverter.Processor;
 
-public interface ISymProcessor
+public interface IStringProcessor
 {
     ulong Process(string sym);
 }

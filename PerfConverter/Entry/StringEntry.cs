@@ -1,6 +1,6 @@
 ﻿namespace PerfConverter.Entry;
 
-public struct SymbolEntry
+public struct StringEntry
 {
     public ulong Id;
     public string Symbol;

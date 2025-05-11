@@ -1,3 +1,5 @@
+using PerfConverter.PerfStructs;
+
 namespace PerfConverter.Processor;
 
 public interface ITraceProcessor

@@ -1,4 +1,6 @@
-﻿public struct AuxDataLostEntry
+﻿namespace PerfMetadataExtract;
+
+public struct AuxDataLostEntry
 {
     public ulong Time;
     public ulong Pid;

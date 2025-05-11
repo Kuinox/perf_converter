@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace PerfConverter;
+namespace PerfConverter.PerfStructs;
 
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct PerfDlFilterSample
@@ -101,7 +101,7 @@ public unsafe struct PerfDlFilterSample
     /// version.
     /// </summary>
     public uint raw_size;
-    public IntPtr raw_data;
+    public nint raw_data;
 
     /// <summary>
     /// Number of brstack entries
@@ -156,16 +156,16 @@ public unsafe struct PerfDlFilterSample
     /// The type of branches recorded is specified by the
     /// branch_sample_type field.
     /// </summary>
-    public IntPtr brstack;
+    public nint brstack;
     /// <summary>
     ///  Number of raw_callchain entries
     /// </summary>
     public ulong raw_callchain_nr;
-    public IntPtr raw_callchain;
+    public nint raw_callchain;
     /// <summary>
     /// Event name
     /// </summary>
-    public IntPtr @event;
+    public nint @event;
     public int machine_pid;
     public int vcpu;
 }

@@ -1,7 +1,7 @@
 ﻿using Microsoft.LinuxTracepoints.Decode;
 using Parquet;
-using PerfConverter.Persistence;
 using PerfMetadataExtract;
+using Temp.Core;
 
 class Program
 {
@@ -53,7 +53,7 @@ class Program
         }
 
         // Create output directory if it doesn't exist
-        string outputDir = Path.GetDirectoryName(outputPath);
+        string outputDir = Path.GetDirectoryName(outputPath) ?? "";
         if (!string.IsNullOrEmpty(outputDir))
         {
             Directory.CreateDirectory(outputDir);

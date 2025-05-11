@@ -1,10 +1,10 @@
 ﻿using PerfConverter.Entry;
-using PerfConverter.Persistence;
 using System.Runtime.InteropServices;
+using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public class SymProcessor(IPersister<SymbolEntry> persistence) : ISymProcessor
+public class StringProcessor(IPersister<StringEntry> persistence) : IStringProcessor
 {
     readonly Dictionary<string, ulong> _ids = [];
 
@@ -14,7 +14,7 @@ public class SymProcessor(IPersister<SymbolEntry> persistence) : ISymProcessor
         if (!exists)
         {
             defaultEntry = (ulong)_ids.Count;
-            persistence.Persist(new SymbolEntry { Id = defaultEntry, Symbol = sym });
+            persistence.Persist(new StringEntry { Id = defaultEntry, Symbol = sym });
         }
         return defaultEntry;
     }

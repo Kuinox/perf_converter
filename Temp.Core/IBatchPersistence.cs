@@ -1,4 +1,4 @@
-﻿namespace PerfConverter.Persistence;
+﻿namespace Temp.Core;
 
 public interface IBatchPersistence<T> : IAsyncDisposable
 {

@@ -2,10 +2,11 @@
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 
-public class ParquetSymPersistence : IBatchPersistence<SymbolEntry>
+public class ParquetStringPersistence : IBatchPersistence<StringEntry>
 {
     readonly ParquetSchema _schema;
     readonly ParquetWriter _writer;
@@ -14,7 +15,7 @@ public class ParquetSymPersistence : IBatchPersistence<SymbolEntry>
     string[]? _symbols;
 
 
-    ParquetSymPersistence(ParquetSchema schema, CompressionMethod compressionMethod, ParquetWriter writer, FileStream fileStream)
+    ParquetStringPersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
     {
         _schema = schema;
         _writer = writer;
@@ -22,7 +23,7 @@ public class ParquetSymPersistence : IBatchPersistence<SymbolEntry>
         ResizeArrays(0);
     }
 
-    public async Task PersistAsync(IReadOnlyCollection<SymbolEntry> batch)
+    public async Task PersistAsync(IReadOnlyCollection<StringEntry> batch)
     {
         ResizeArrays(batch.Count);
 
@@ -63,10 +64,10 @@ void ResizeArrays(int newSize)
         _symbols = new string[newSize];
     }
 
-    public static async Task<IBatchPersistence<SymbolEntry>> Create(string basePath, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistence<StringEntry>> Create(string basePath, string fileName, CompressionMethod compressionMethod)
     {
         Directory.CreateDirectory(basePath);
-        var filePath = Path.Combine(basePath, "symbols.parquet");
+        var filePath = Path.Combine(basePath, fileName);
 
         var schema = new ParquetSchema(
             new DataField<ulong>("id"),
@@ -79,6 +80,6 @@ void ResizeArrays(int newSize)
 
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetSymPersistence(schema, compressionMethod, writer, fileStream);
+        return new ParquetStringPersistence(schema, writer, fileStream);
     }
 }

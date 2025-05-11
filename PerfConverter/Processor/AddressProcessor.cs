@@ -1,10 +1,11 @@
 ﻿using PerfConverter.Entry;
-using PerfConverter.Persistence;
+using PerfConverter.PerfStructs;
 using System.Runtime.InteropServices;
+using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersister<AddressEntry> persistence) : IAddressProcessor
+public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProcessor commProcessor,  IPersister<AddressEntry> persistence) : IAddressProcessor
 {
     ulong _currenAddress = 0;
 
@@ -31,7 +32,12 @@ public unsafe class AddressProcessor(ISymProcessor sqlSymProcessor, IPersister<A
         if (info->sym != 0)
         {
             var str = Marshal.PtrToStringUTF8(info->sym)!;
-            symStrId = sqlSymProcessor.Process(str);
+            symStrId = symProcessor.Process(str);
+        }
+        if(info->comm != 0)
+        {
+            var comm = Marshal.PtrToStringUTF8(info->comm)!;
+            commProcessor.Process(comm);
         }
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();

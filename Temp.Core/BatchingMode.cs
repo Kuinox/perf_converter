@@ -1,4 +1,4 @@
-﻿namespace PerfConverter.Persistence;
+﻿namespace Temp.Core;
 
 public enum BatchingMode
 {

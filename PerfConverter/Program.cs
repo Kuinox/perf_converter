@@ -1,4 +1,5 @@
-﻿using PerfConverter.Persistence;
+﻿using PerfConverter.PerfStructs;
+using PerfConverter.Persistence;
 using PerfConverter.Processor;
 using System.Runtime.InteropServices;
 
@@ -8,9 +9,10 @@ namespace PerfConverter;
 public unsafe class PerfDlFilter
 {
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
-    public static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
+    static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    static ISymProcessor _sqlSymProcessor = null!;
+    static IStringProcessor _symProcessor = null!;
+    static IStringProcessor _commProcessor = null!;
     static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
@@ -46,8 +48,9 @@ public unsafe class PerfDlFilter
                        
             _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
-            _sqlSymProcessor = new SymProcessor(_persistenceLifetime.SymbolBatcher);
-            _addressProcessor = new AddressProcessor(_sqlSymProcessor, _persistenceLifetime.AddressBatcher);
+            _symProcessor = new StringProcessor(_persistenceLifetime.SymbolBatcher);
+            _commProcessor = new StringProcessor(_persistenceLifetime.CommBatcher);
+            _addressProcessor = new AddressProcessor(_symProcessor, _commProcessor, _persistenceLifetime.AddressBatcher);
             _traceProcessor = new TraceProcessor(_persistenceLifetime.TraceBatcher);
 
             return 0;

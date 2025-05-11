@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using PerfConverter.Entry;
-using PerfConverter.Persistence;
+using PerfConverter.PerfStructs;
+using Temp.Core;
 
 namespace PerfConverter.Processor;
 
