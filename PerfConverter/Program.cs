@@ -76,7 +76,6 @@ public unsafe class PerfDlFilter
                 return -1; // Return negative error code to make perf exit early
             }
 
-            // Now id will be the same as sample->id
             var id = _traceProcessor.FilterEventEarly(sample);
             var fns = get_perf_dlfilter_fns();
 

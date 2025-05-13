@@ -71,7 +71,7 @@ void ResizeArrays(int newSize)
 
         var schema = new ParquetSchema(
             new DataField<ulong>("id"),
-            new DataField<string>("symbol")
+            new DataField<string>("string")
         );
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);

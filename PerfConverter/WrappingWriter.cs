@@ -24,8 +24,8 @@ public class WrappingWriter : TextWriter
 
         while (value.Length > MaxWidth)
         {
-            _original.WriteLine(value.Substring(0, MaxWidth));
-            value = value.Substring(MaxWidth);
+            _original.WriteLine(value.AsSpan(0, MaxWidth));
+            value = value[MaxWidth..];
         }
 
         _original.WriteLine(value);

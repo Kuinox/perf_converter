@@ -11,9 +11,10 @@ public unsafe class TraceProcessor(IPersister<TraceSampleEntry> persistence) : I
 
     public unsafe ulong FilterEventEarly(PerfDlFilterSample* sample)
     {
+        var id = _totalSamples++;
         persistence.Persist(new TraceSampleEntry
         {
-            Id = _totalSamples++,
+            Id = id,
             PerfId = sample->id,
             Pid = (uint)sample->pid,
             Tid = (uint)sample->tid,
@@ -33,6 +34,7 @@ public unsafe class TraceProcessor(IPersister<TraceSampleEntry> persistence) : I
             Vcpu = (uint)sample->vcpu
         });
 
-        return sample->id;
+        return id;
     }
 }
+    

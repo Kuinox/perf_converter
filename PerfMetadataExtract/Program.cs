@@ -21,7 +21,7 @@ class Program
         string outputPath = args[1];
 
         // Parse optional arguments
-        CompressionMethod compressionMethod = CompressionMethod.Snappy;
+        var compressionMethod = CompressionMethod.Snappy;
         if (args.Length > 2 && Enum.TryParse<CompressionMethod>(args[2], true, out var parsedCompression))
         {
             compressionMethod = parsedCompression;

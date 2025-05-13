@@ -18,6 +18,6 @@ public struct AddressEntry
     public byte IsKernelIp;
     public byte[] BuildId;
     public byte Filtered;
-    public ulong Comm;
+    public ulong CommStrId;
     public ulong Priv;
 }

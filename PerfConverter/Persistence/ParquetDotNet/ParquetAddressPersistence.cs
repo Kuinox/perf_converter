@@ -28,7 +28,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
     byte[] _isKernelIps;
     byte[][] _buildIds;
     byte[] _filtereds;
-    ulong[] _comms;
+    ulong[] _commsStrId;
     ulong[] _privs;
 
 
@@ -65,7 +65,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
             _isKernelIps[i] = entry.IsKernelIp;
             _buildIds[i] = entry.BuildId ?? [];
             _filtereds[i] = entry.Filtered;
-            _comms[i] = entry.Comm;
+            _commsStrId[i] = entry.CommStrId;
             _privs[i] = entry.Priv;
             i++;
         }
@@ -95,7 +95,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         var buildIdColumn = new DataColumn(_schema.DataFields[14], _buildIds);
 
         var filteredColumn = new DataColumn(_schema.DataFields[15], _filtereds);
-        var commColumn = new DataColumn(_schema.DataFields[16], _comms);
+        var commColumn = new DataColumn(_schema.DataFields[16], _commsStrId);
         var privColumn = new DataColumn(_schema.DataFields[17], _privs);
 
         using var groupWriter = _writer.CreateRowGroup();
@@ -138,7 +138,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         nameof(_isKernelIps),
         nameof(_buildIds),
         nameof(_filtereds),
-        nameof(_comms),
+        nameof(_commsStrId),
         nameof(_privs))]
     void ResizeArrays(int newSize)
     {
@@ -163,7 +163,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         _isKernelIps = new byte[newSize];
         _buildIds = new byte[newSize][];
         _filtereds = new byte[newSize];
-        _comms = new ulong[newSize];
+        _commsStrId = new ulong[newSize];
         _privs = new ulong[newSize];
     }
 
@@ -195,7 +195,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
             new DataField<byte>("isKernelIp"),
             new DataField<byte[]>("buildId"),
             new DataField<byte>("filtered"),
-            new DataField<ulong>("comm"),
+            new DataField<ulong>("commStrId"),
             new DataField<ulong>("priv")
         );
 

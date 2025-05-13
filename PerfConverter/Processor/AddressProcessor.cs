@@ -34,10 +34,11 @@ public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProce
             var str = Marshal.PtrToStringUTF8(info->sym)!;
             symStrId = symProcessor.Process(str);
         }
-        if(info->comm != 0)
+        ulong commStrId = 0;
+        if (info->comm != 0)
         {
             var comm = Marshal.PtrToStringUTF8(info->comm)!;
-            commProcessor.Process(comm);
+            commStrId = commProcessor.Process(comm);
         }
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();
@@ -60,7 +61,7 @@ public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProce
             IsKernelIp = info->is_kernel_ip,
             BuildId = buildId,
             Filtered = info->filtered,
-            Comm = (ulong)info->comm,
+            CommStrId = commStrId,
             Priv = (ulong)info->priv
         });
     }
