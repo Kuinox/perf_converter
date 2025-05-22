@@ -5,13 +5,16 @@ using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor(IPersister<TraceSampleEntry> persistence) : ITraceProcessor
+public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> persistanceFactory) : ITraceProcessor
 {
     ulong _totalSamples = 0;
-
+    readonly Dictionary<string, IPersister<TraceSampleEntry>> _persistences = [];
     public unsafe ulong FilterEventEarly(PerfDlFilterSample* sample)
     {
         var id = _totalSamples++;
+        var key = $"{sample->pid}/{sample->tid}";
+        var persistence = CollectionsMarshal.GetValueRefOrAddDefault(_persistences, key, out _);
+        persistence ??= persistanceFactory(key);
         persistence.Persist(new TraceSampleEntry
         {
             Id = id,
@@ -20,7 +23,7 @@ public unsafe class TraceProcessor(IPersister<TraceSampleEntry> persistence) : I
             Tid = (uint)sample->tid,
             Time = sample->time,
             Cpu = (uint)sample->cpu,
-            Flags = sample->flags,
+            Flags = (DLFilterFlag)sample->flags,
             Ip = (ulong)sample->ip,
             Addr = (ulong)sample->addr,
             Period = sample->period,
@@ -37,4 +40,3 @@ public unsafe class TraceProcessor(IPersister<TraceSampleEntry> persistence) : I
         return id;
     }
 }
-    

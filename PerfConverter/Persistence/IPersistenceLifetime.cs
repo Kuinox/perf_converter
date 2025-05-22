@@ -11,6 +11,6 @@ public interface IPersistenceLifetime : IAsyncDisposable
 
     IPersister<Entry.StringEntry> CommBatcher { get; }
     IPersister<Entry.AddressEntry> AddressBatcher { get; }
-    
-    IPersister<Entry.TraceSampleEntry> TraceBatcher { get; }
+
+    IPersister<Entry.TraceSampleEntry> CreateTraceBatcher(string key);
 }

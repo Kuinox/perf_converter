@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using PerfConverter.PerfStructs;
+using System.Runtime.InteropServices;
 
 namespace PerfConverter.Entry;
 
@@ -11,7 +12,7 @@ public struct TraceSampleEntry
     public uint Tid;
     public ulong Time;
     public uint Cpu;
-    public uint Flags;
+    public DLFilterFlag Flags;
     public ulong Ip;
     public ulong Addr;
     public ulong Period;

@@ -3,6 +3,7 @@ using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using PerfConverter.Persistence.ParquetDotNet.Schemas;
 using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
@@ -59,7 +60,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
             _pids[i] = entry.Pid;
             _tids[i] = entry.Tid;
             _times[i] = entry.Time;
-            _flags[i] = entry.Flags;
+            _flags[i] = (uint)entry.Flags;
             _cpus[i] = entry.Cpu;
             _ips[i] = entry.Ip;
             _addrs[i] = entry.Addr;
@@ -75,24 +76,24 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
             i++;
         }
 
-        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
-        var perfIdColumn = new DataColumn(_schema.DataFields[1], _perfIds);
-        var pidColumn = new DataColumn(_schema.DataFields[2], _pids);
-        var tidColumn = new DataColumn(_schema.DataFields[3], _tids);
-        var timeColumn = new DataColumn(_schema.DataFields[4], _times);
-        var cpuColumn = new DataColumn(_schema.DataFields[5], _cpus);
-        var flagsColumn = new DataColumn(_schema.DataFields[6], _flags);
-        var ipColumn = new DataColumn(_schema.DataFields[7], _ips);
-        var addrColumn = new DataColumn(_schema.DataFields[8], _addrs);
-        var periodColumn = new DataColumn(_schema.DataFields[9], _periods);
-        var insnCntColumn = new DataColumn(_schema.DataFields[10], _insnCnts);
-        var cycCntColumn = new DataColumn(_schema.DataFields[11], _cycCnts);
-        var weightColumn = new DataColumn(_schema.DataFields[12], _weights);
-        var cpumodeColumn = new DataColumn(_schema.DataFields[13], _cpumodes);
-        var addrCorrelatesSymColumn = new DataColumn(_schema.DataFields[14], _addrCorrelatesSyms);
-        var eventColumn = new DataColumn(_schema.DataFields[15], _events);
-        var machinePidColumn = new DataColumn(_schema.DataFields[16], _machinePids);
-        var vcpuColumn = new DataColumn(_schema.DataFields[17], _vcpus);
+        var idColumn = new DataColumn(TraceSampleSchema.Id, _ids);
+        var perfIdColumn = new DataColumn(TraceSampleSchema.PerfId, _perfIds);
+        var pidColumn = new DataColumn(TraceSampleSchema.Pid, _pids);
+        var tidColumn = new DataColumn(TraceSampleSchema.Tid, _tids);
+        var timeColumn = new DataColumn(TraceSampleSchema.Time, _times);
+        var cpuColumn = new DataColumn(TraceSampleSchema.Cpu, _cpus);
+        var flagsColumn = new DataColumn(TraceSampleSchema.Flags, _flags);
+        var ipColumn = new DataColumn(TraceSampleSchema.Ip, _ips);
+        var addrColumn = new DataColumn(TraceSampleSchema.Addr, _addrs);
+        var periodColumn = new DataColumn(TraceSampleSchema.Period, _periods);
+        var insnCntColumn = new DataColumn(TraceSampleSchema.InsnCnt, _insnCnts);
+        var cycCntColumn = new DataColumn(TraceSampleSchema.CycCnt, _cycCnts);
+        var weightColumn = new DataColumn(TraceSampleSchema.Weight, _weights);
+        var cpumodeColumn = new DataColumn(TraceSampleSchema.Cpumode, _cpumodes);
+        var addrCorrelatesSymColumn = new DataColumn(TraceSampleSchema.AddrCorrelatesSym, _addrCorrelatesSyms);
+        var eventColumn = new DataColumn(TraceSampleSchema.Event, _events);
+        var machinePidColumn = new DataColumn(TraceSampleSchema.MachinePid, _machinePids);
+        var vcpuColumn = new DataColumn(TraceSampleSchema.Vcpu, _vcpus);
 
         using var groupWriter = _writer.CreateRowGroup();
 
@@ -168,26 +169,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         Directory.CreateDirectory(basePath);
         var filePath = Path.Combine(basePath, "tracesamples.parquet");
 
-        var schema = new ParquetSchema(
-            new DataField<ulong>("id"),
-            new DataField<ulong>("perfId"),
-            new DataField<uint>("pid"),
-            new DataField<uint>("tid"),
-            new DataField<ulong>("time"),
-            new DataField<uint>("flags"),
-            new DataField<uint>("cpu"),
-            new DataField<ulong>("ip"),
-            new DataField<ulong>("addr"),
-            new DataField<ulong>("period"),
-            new DataField<ulong>("insnCnt"),
-            new DataField<ulong>("cycCnt"),
-            new DataField<ulong>("weight"),
-            new DataField<byte>("cpumode"),
-            new DataField<byte>("addrCorrelatesSym"),
-            new DataField<string>("event"),
-            new DataField<uint>("machinePid"),
-            new DataField<uint>("vcpu")
-        );
+        var schema = TraceSampleSchema.Schema;
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);

@@ -1,6 +1,7 @@
 ﻿using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
+using PerfMetadataExtract.Schemas;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -48,11 +49,11 @@ public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
             i++;
         }
 
-        var timesColumn = new DataColumn(_schema.DataFields[0], _times);
-        var pidsColumn = new DataColumn(_schema.DataFields[1], _pids);
-        var tidColumn = new DataColumn(_schema.DataFields[2], _tid);
-        var cpuColumn = new DataColumn(_schema.DataFields[3], _cpu);
-        var flagsColumn = new DataColumn(_schema.DataFields[4], _flags);
+        var timesColumn = new DataColumn(AuxDataLostSchema.Time, _times);
+        var pidsColumn = new DataColumn(AuxDataLostSchema.Pid, _pids);
+        var tidColumn = new DataColumn(AuxDataLostSchema.Tid, _tid);
+        var cpuColumn = new DataColumn(AuxDataLostSchema.Cpu, _cpu);
+        var flagsColumn = new DataColumn(AuxDataLostSchema.Flags, _flags);
 
         using var groupWriter = _writer.CreateRowGroup();
         await groupWriter.WriteColumnAsync(timesColumn);
@@ -90,13 +91,7 @@ public class ParquetAuxLostPersistence : IBatchPersistence<AuxDataLostEntry>
 
     public static async Task<ParquetAuxLostPersistence> Create(string filePath, CompressionMethod compressionMethod)
     {
-        var schema = new ParquetSchema(
-            new DataField<ulong>("time"),
-            new DataField<ulong>("pid"),
-            new DataField<ulong>("tid"),
-            new DataField<ulong>("cpu"),
-            new DataField<ulong>("flags")
-        );
+        var schema = AuxDataLostSchema.Schema;
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);

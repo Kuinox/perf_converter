@@ -51,7 +51,7 @@ public unsafe class PerfDlFilter
             _symProcessor = new StringProcessor(_persistenceLifetime.SymbolBatcher);
             _commProcessor = new StringProcessor(_persistenceLifetime.CommBatcher);
             _addressProcessor = new AddressProcessor(_symProcessor, _commProcessor, _persistenceLifetime.AddressBatcher);
-            _traceProcessor = new TraceProcessor(_persistenceLifetime.TraceBatcher);
+            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
 
             return 0;
         }

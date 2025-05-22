@@ -23,7 +23,20 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
     public void Persist(T val)
     {
-        while (!_channel.Writer.TryWrite(val)) Thread.Yield();
+        var sentMessage = false;
+        while (!_channel.Writer.TryWrite(val))
+        {
+            if(!sentMessage)
+            {
+                Console.Error.WriteLine($"Channel queue stalled.");
+                sentMessage = true;
+            }
+            Thread.Yield();
+        }
+        if (sentMessage)
+        {
+            Console.Error.WriteLine($"Stalled queue completed.");
+        }
     }
 
     async Task WorkLoop()

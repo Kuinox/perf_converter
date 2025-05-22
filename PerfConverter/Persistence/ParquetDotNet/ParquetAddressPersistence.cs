@@ -2,6 +2,7 @@
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using PerfConverter.Persistence.ParquetDotNet.Schemas;
 using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
@@ -70,20 +71,20 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
             i++;
         }
 
-        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
-        var traceIdColumn = new DataColumn(_schema.DataFields[1], _traceIds);
-        var addressColumn = new DataColumn(_schema.DataFields[2], _addresses);
-        var pidColumn = new DataColumn(_schema.DataFields[3], _pids);
-        var isIpColumn = new DataColumn(_schema.DataFields[4], _isIps);
-        var sizeColumn = new DataColumn(_schema.DataFields[5], _sizes);
-        var symoffColumn = new DataColumn(_schema.DataFields[6], _symoffs);
-        var symStrIdColumn = new DataColumn(_schema.DataFields[7], _symStrIds);
-        var symStartColumn = new DataColumn(_schema.DataFields[8], _symStarts);
-        var symEndColumn = new DataColumn(_schema.DataFields[9], _symEnds);
-        var dsoColumn = new DataColumn(_schema.DataFields[10], _dsos);
-        var symBindingColumn = new DataColumn(_schema.DataFields[11], _symBindings);
-        var is64BitColumn = new DataColumn(_schema.DataFields[12], _is64Bits);
-        var isKernelIpColumn = new DataColumn(_schema.DataFields[13], _isKernelIps);
+        var idColumn = new DataColumn(AddressSchema.Id, _ids);
+        var traceIdColumn = new DataColumn(AddressSchema.TraceId, _traceIds);
+        var addressColumn = new DataColumn(AddressSchema.Address, _addresses);
+        var pidColumn = new DataColumn(AddressSchema.Pid, _pids);
+        var isIpColumn = new DataColumn(AddressSchema.IsIp, _isIps);
+        var sizeColumn = new DataColumn(AddressSchema.Size, _sizes);
+        var symoffColumn = new DataColumn(AddressSchema.Symoff, _symoffs);
+        var symStrIdColumn = new DataColumn(AddressSchema.SymStrId, _symStrIds);
+        var symStartColumn = new DataColumn(AddressSchema.SymStart, _symStarts);
+        var symEndColumn = new DataColumn(AddressSchema.SymEnd, _symEnds);
+        var dsoColumn = new DataColumn(AddressSchema.Dso, _dsos);
+        var symBindingColumn = new DataColumn(AddressSchema.SymBinding, _symBindings);
+        var is64BitColumn = new DataColumn(AddressSchema.Is64Bit, _is64Bits);
+        var isKernelIpColumn = new DataColumn(AddressSchema.IsKernelIp, _isKernelIps);
 
         for (int x = 0; x < _buildIds.Length; x++)
         {
@@ -92,14 +93,13 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
                 _buildIds[x] = [];
             }
         }
-        var buildIdColumn = new DataColumn(_schema.DataFields[14], _buildIds);
+        var buildIdColumn = new DataColumn(AddressSchema.BuildId, _buildIds);
 
-        var filteredColumn = new DataColumn(_schema.DataFields[15], _filtereds);
-        var commColumn = new DataColumn(_schema.DataFields[16], _commsStrId);
-        var privColumn = new DataColumn(_schema.DataFields[17], _privs);
+        var filteredColumn = new DataColumn(AddressSchema.Filtered, _filtereds);
+        var commColumn = new DataColumn(AddressSchema.CommStrId, _commsStrId);
+        var privColumn = new DataColumn(AddressSchema.Priv, _privs);
 
         using var groupWriter = _writer.CreateRowGroup();
-
         await groupWriter.WriteColumnAsync(idColumn);
         await groupWriter.WriteColumnAsync(traceIdColumn);
         await groupWriter.WriteColumnAsync(addressColumn);
@@ -178,31 +178,10 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         Directory.CreateDirectory(basePath);
         var filePath = Path.Combine(basePath, "addresses.parquet");
 
-        var schema = new ParquetSchema(
-            new DataField<ulong>("id"),
-            new DataField<ulong>("traceId"),
-            new DataField<ulong>("address"),
-            new DataField<uint>("pid"),
-            new DataField<bool>("isIp"),
-            new DataField<uint>("size"),
-            new DataField<uint>("symoff"),
-            new DataField<ulong>("symStrId"),
-            new DataField<ulong>("symStart"),
-            new DataField<ulong>("symEnd"),
-            new DataField<ulong>("dso"),
-            new DataField<byte>("symBinding"),
-            new DataField<byte>("is64Bit"),
-            new DataField<byte>("isKernelIp"),
-            new DataField<byte[]>("buildId"),
-            new DataField<byte>("filtered"),
-            new DataField<ulong>("commStrId"),
-            new DataField<ulong>("priv")
-        );
-
-
+        var schema = AddressSchema.Schema;
+        
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);
-
         writer.CompressionMethod = compressionMethod;
 
         return new ParquetAddressPersistence(schema, writer, fileStream);

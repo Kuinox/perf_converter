@@ -2,6 +2,7 @@
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
+using PerfConverter.Persistence.ParquetDotNet.Schemas;
 using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
@@ -35,8 +36,8 @@ public class ParquetStringPersistence : IBatchPersistence<StringEntry>
             i++;
         }
 
-        var idColumn = new DataColumn(_schema.DataFields[0], _ids);
-        var symbolColumn = new DataColumn(_schema.DataFields[1], _symbols);
+        var idColumn = new DataColumn(DictionarySchema.Id, _ids);
+        var symbolColumn = new DataColumn(DictionarySchema.Symbol, _symbols);
 
         using var groupWriter = _writer.CreateRowGroup();
 
@@ -69,10 +70,7 @@ void ResizeArrays(int newSize)
         Directory.CreateDirectory(basePath);
         var filePath = Path.Combine(basePath, fileName);
 
-        var schema = new ParquetSchema(
-            new DataField<ulong>("id"),
-            new DataField<string>("string")
-        );
+        var schema = DictionarySchema.Schema;
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
 
