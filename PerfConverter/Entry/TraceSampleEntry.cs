@@ -21,7 +21,7 @@ public struct TraceSampleEntry
     public ulong Weight;
     public byte Cpumode;
     public byte AddrCorrelatesSym;
-    public string? Event;
+    public ulong EventId;
     public uint MachinePid;
     public uint Vcpu;
 }

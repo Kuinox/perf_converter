@@ -5,7 +5,7 @@ using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> persistanceFactory) : ITraceProcessor
+public unsafe class TraceProcessor(IStringProcessor eventProcessor, Func<string, IPersister<TraceSampleEntry>> persistanceFactory) : ITraceProcessor
 {
     ulong _totalSamples = 0;
     readonly Dictionary<string, IPersister<TraceSampleEntry>> _persistences = [];
@@ -15,6 +15,10 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> pe
         var key = $"{sample->pid}/{sample->tid}";
         var persistence = CollectionsMarshal.GetValueRefOrAddDefault(_persistences, key, out _);
         persistence ??= persistanceFactory(key);
+        
+        var eventString = Marshal.PtrToStringUTF8(sample->@event);
+        var eventId = eventString != null ? eventProcessor.Process(eventString) : 0;
+        
         persistence.Persist(new TraceSampleEntry
         {
             Id = id,
@@ -32,7 +36,7 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> pe
             Weight = sample->weight,
             Cpumode = sample->cpumode,
             AddrCorrelatesSym = sample->addr_correlates_sym,
-            Event = Marshal.PtrToStringUTF8(sample->@event),
+            EventId = eventId,
             MachinePid = (uint)sample->machine_pid,
             Vcpu = (uint)sample->vcpu
         });

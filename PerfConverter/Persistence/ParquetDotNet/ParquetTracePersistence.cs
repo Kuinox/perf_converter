@@ -29,7 +29,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
     ulong[] _weights;
     byte[] _cpumodes;
     byte[] _addrCorrelatesSyms;
-    string[] _events;
+    ulong[] _eventIds;
     uint[] _machinePids;
     uint[] _vcpus;
 
@@ -70,7 +70,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
             _weights[i] = entry.Weight;
             _cpumodes[i] = entry.Cpumode;
             _addrCorrelatesSyms[i] = entry.AddrCorrelatesSym;
-            _events[i] = entry.Event ?? string.Empty;
+            _eventIds[i] = entry.EventId;
             _machinePids[i] = entry.MachinePid;
             _vcpus[i] = entry.Vcpu;
             i++;
@@ -91,7 +91,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         var weightColumn = new DataColumn(TraceSampleSchema.Weight, _weights);
         var cpumodeColumn = new DataColumn(TraceSampleSchema.Cpumode, _cpumodes);
         var addrCorrelatesSymColumn = new DataColumn(TraceSampleSchema.AddrCorrelatesSym, _addrCorrelatesSyms);
-        var eventColumn = new DataColumn(TraceSampleSchema.Event, _events);
+        var eventIdColumn = new DataColumn(TraceSampleSchema.EventId, _eventIds);
         var machinePidColumn = new DataColumn(TraceSampleSchema.MachinePid, _machinePids);
         var vcpuColumn = new DataColumn(TraceSampleSchema.Vcpu, _vcpus);
 
@@ -112,7 +112,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         await groupWriter.WriteColumnAsync(weightColumn);
         await groupWriter.WriteColumnAsync(cpumodeColumn);
         await groupWriter.WriteColumnAsync(addrCorrelatesSymColumn);
-        await groupWriter.WriteColumnAsync(eventColumn);
+        await groupWriter.WriteColumnAsync(eventIdColumn);
         await groupWriter.WriteColumnAsync(machinePidColumn);
         await groupWriter.WriteColumnAsync(vcpuColumn);
     }
@@ -139,7 +139,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         nameof(_weights),
         nameof(_cpumodes),
         nameof(_addrCorrelatesSyms),
-        nameof(_events),
+        nameof(_eventIds),
         nameof(_machinePids),
         nameof(_vcpus))]
     void ResizeArrays(int newSize)
@@ -159,7 +159,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         _weights = new ulong[newSize];
         _cpumodes = new byte[newSize];
         _addrCorrelatesSyms = new byte[newSize];
-        _events = new string[newSize];
+        _eventIds = new ulong[newSize];
         _machinePids = new uint[newSize];
         _vcpus = new uint[newSize];
     }

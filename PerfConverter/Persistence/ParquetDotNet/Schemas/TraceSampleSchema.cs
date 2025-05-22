@@ -23,7 +23,7 @@ public static class TraceSampleSchema
     public static DataField<ulong> Weight { get; } = new DataField<ulong>("weight");
     public static DataField<byte> Cpumode { get; } = new DataField<byte>("cpumode");
     public static DataField<byte> AddrCorrelatesSym { get; } = new DataField<byte>("addrCorrelatesSym");
-    public static DataField<string> Event { get; } = new DataField<string>("event");
+    public static DataField<ulong> EventId { get; } = new DataField<ulong>("eventId");
     public static DataField<uint> MachinePid { get; } = new DataField<uint>("machinePid");
     public static DataField<uint> Vcpu { get; } = new DataField<uint>("vcpu");
 
@@ -32,6 +32,6 @@ public static class TraceSampleSchema
     /// </summary>
     public static ParquetSchema Schema { get; } = new ParquetSchema(
         Id, PerfId, Pid, Tid, Time, Cpu, Flags, Ip, Addr, Period, 
-        InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym, Event, MachinePid, Vcpu
+        InsnCnt, CycCnt, Weight, Cpumode, AddrCorrelatesSym, EventId, MachinePid, Vcpu
     );
 }

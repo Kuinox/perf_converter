@@ -13,6 +13,7 @@ public unsafe class PerfDlFilter
 
     static IStringProcessor _symProcessor = null!;
     static IStringProcessor _commProcessor = null!;
+    static IStringProcessor _eventProcessor = null!;
     static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
@@ -50,8 +51,9 @@ public unsafe class PerfDlFilter
 
             _symProcessor = new StringProcessor(_persistenceLifetime.SymbolBatcher);
             _commProcessor = new StringProcessor(_persistenceLifetime.CommBatcher);
+            _eventProcessor = new StringProcessor(_persistenceLifetime.EventBatcher);
             _addressProcessor = new AddressProcessor(_symProcessor, _commProcessor, _persistenceLifetime.AddressBatcher);
-            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
+            _traceProcessor = new TraceProcessor(_eventProcessor, _persistenceLifetime.CreateTraceBatcher);
 
             return 0;
         }

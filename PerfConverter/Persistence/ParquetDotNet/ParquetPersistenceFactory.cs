@@ -21,10 +21,11 @@ public static class ParquetPersistenceFactory
         var addressPersister = ParquetAddressPersistence.Create(outputDirectory, compressionMethod).GetAwaiter().GetResult();
         var symbolBatcher = Batcher<StringEntry>.Create(symbolPersister, batchSize, batchingMode);
         var commBatcher = Batcher<StringEntry>.Create(commPersister, batchSize, batchingMode);
+        var eventBatcher = Batcher<StringEntry>.Create(eventPersister, batchSize, batchingMode);
         var addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize, batchingMode);
 
 
-        return new ParquetPersistenceLifetime(symbolBatcher, commBatcher, addressBatcher, (key) =>
+        return new ParquetPersistenceLifetime(symbolBatcher, commBatcher, eventBatcher, addressBatcher, (key) =>
         {
             var subDir = Path.Combine(outputDirectory, key);
             var persister = ParquetTracePersistence.Create(subDir, compressionMethod).GetAwaiter().GetResult();

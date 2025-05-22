@@ -10,6 +10,7 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 public class ParquetPersistenceLifetime(
     Batcher<StringEntry> symbolBatcher,
     Batcher<StringEntry> commBatcher,
+    Batcher<StringEntry> eventBatcher,
     Batcher<AddressEntry> addressBatcher,
     Func<string, Batcher<TraceSampleEntry>> traceBatcherFactory) : IPersistenceLifetime
 {
@@ -17,6 +18,7 @@ public class ParquetPersistenceLifetime(
 
     public IPersister<StringEntry> SymbolBatcher => symbolBatcher;
     public IPersister<StringEntry> CommBatcher => commBatcher;
+    public IPersister<StringEntry> EventBatcher => eventBatcher;
     public IPersister<AddressEntry> AddressBatcher => addressBatcher;
     public IPersister<TraceSampleEntry> CreateTraceBatcher(string key)
     {
@@ -31,6 +33,7 @@ public class ParquetPersistenceLifetime(
         {
             await entry.DisposeAsync();
         }
+        await eventBatcher.DisposeAsync();
         await commBatcher.DisposeAsync();
         await addressBatcher.DisposeAsync();
         await symbolBatcher.DisposeAsync();
