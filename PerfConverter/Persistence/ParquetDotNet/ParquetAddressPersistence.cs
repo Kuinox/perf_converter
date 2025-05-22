@@ -9,7 +9,6 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 
 public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
 {
-    readonly ParquetSchema _schema;
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
 
@@ -33,10 +32,9 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
     ulong[] _privs;
 
 
-    ParquetAddressPersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
+    ParquetAddressPersistence(ParquetWriter writer, FileStream fileStream)
     {
         ResizeArrays(0);
-        _schema = schema;
         _writer = writer;
         _fileStream = fileStream;
     }
@@ -184,6 +182,6 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetAddressPersistence(schema, writer, fileStream);
+        return new ParquetAddressPersistence(writer, fileStream);
     }
 }

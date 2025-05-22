@@ -9,16 +9,14 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 
 public class ParquetStringPersistence : IBatchPersistence<StringEntry>
 {
-    readonly ParquetSchema _schema;
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
     ulong[]? _ids;
     string[]? _symbols;
 
 
-    ParquetStringPersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
+    ParquetStringPersistence(ParquetWriter writer, FileStream fileStream)
     {
-        _schema = schema;
         _writer = writer;
         _fileStream = fileStream;
         ResizeArrays(0);
@@ -78,6 +76,6 @@ void ResizeArrays(int newSize)
 
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetStringPersistence(schema, writer, fileStream);
+        return new ParquetStringPersistence(writer, fileStream);
     }
 }

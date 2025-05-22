@@ -10,7 +10,6 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 
 public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
 {
-    readonly ParquetSchema _schema;
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
 
@@ -33,9 +32,8 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
     uint[] _machinePids;
     uint[] _vcpus;
 
-    ParquetTracePersistence(ParquetSchema schema, ParquetWriter writer, FileStream fileStream)
+    ParquetTracePersistence(ParquetWriter writer, FileStream fileStream)
     {
-        _schema = schema;
         _writer = writer;
         _fileStream = fileStream;
         ResizeArrays(0);
@@ -175,6 +173,6 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         var writer = await ParquetWriter.CreateAsync(schema, fileStream);
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetTracePersistence(schema, writer, fileStream);
+        return new ParquetTracePersistence(writer, fileStream);
     }
 }

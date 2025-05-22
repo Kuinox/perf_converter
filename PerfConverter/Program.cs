@@ -24,8 +24,6 @@ public unsafe class PerfDlFilter
         public int EventCount { get; set; }
     }
 
-    static string? GetEventString(IntPtr eventPtr) => Marshal.PtrToStringUTF8(eventPtr);
-
     [UnmanagedCallersOnly(EntryPoint = "start")]
     public static int Start(void** data, void* ctx)
     {
@@ -100,12 +98,7 @@ public unsafe class PerfDlFilter
     {
         try
         {
-            var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-            var state = (State)handle.Target!;
-            
-            // Dispose the persistence lifetime which will handle all cleanup
             _persistenceLifetime.DisposeAsync().AsTask().Wait();
-            
             Console.Error.WriteLine("Done.");
             return 0;
         }

@@ -130,7 +130,7 @@ class Program
             var weightColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Weight);
             var cpumodeColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Cpumode);
             var addrCorrelatesSymColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.AddrCorrelatesSym);
-            var eventColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Event);
+            var eventColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.EventId);
             var machinePidColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.MachinePid);
             var vcpuColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Vcpu);
 
@@ -153,7 +153,7 @@ class Program
                     Weight = (ulong)((IList)weightColumn.Data)[j]!,
                     Cpumode = (byte)((IList)cpumodeColumn.Data)[j]!,
                     AddrCorrelatesSym = (byte)((IList)addrCorrelatesSymColumn.Data)[j]!,
-                    Event = (string)((IList)eventColumn.Data)[j]!,
+                    EventId = (ulong)((IList)eventColumn.Data)[j]!,
                     MachinePid = (uint)((IList)machinePidColumn.Data)[j]!,
                     Vcpu = (uint)((IList)vcpuColumn.Data)[j]!
                 };

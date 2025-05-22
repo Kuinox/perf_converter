@@ -9,10 +9,12 @@ public unsafe class TraceProcessor(IStringProcessor eventProcessor, Func<string,
 {
     ulong _totalSamples = 0;
     readonly Dictionary<string, IPersister<TraceSampleEntry>> _persistences = [];
-    public unsafe ulong FilterEventEarly(PerfDlFilterSample* sample)
+    readonly Dictionary<(int, int), string> _keys = [];
+    public ulong FilterEventEarly(PerfDlFilterSample* sample)
     {
         var id = _totalSamples++;
-        var key = $"{sample->pid}/{sample->tid}";
+        var key = CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid), out _);
+        key ??= $"{sample->pid}/{sample->tid}";
         var persistence = CollectionsMarshal.GetValueRefOrAddDefault(_persistences, key, out _);
         persistence ??= persistanceFactory(key);
         
