@@ -10,7 +10,7 @@ public class StringProcessor(IPersister<StringEntry> persistence) : IStringProce
 
     public ulong Process(string sym)
     {
-        var defaultEntry = CollectionsMarshal.GetValueRefOrAddDefault(_ids, sym, out var exists);
+        ref var defaultEntry = ref CollectionsMarshal.GetValueRefOrAddDefault(_ids, sym, out var exists);
         if (!exists)
         {
             defaultEntry = (ulong)_ids.Count;

@@ -22,7 +22,7 @@ public class ParquetPersistenceLifetime(
     public IPersister<AddressEntry> AddressBatcher => addressBatcher;
     public IPersister<TraceSampleEntry> CreateTraceBatcher(string key)
     {
-        var persistence = CollectionsMarshal.GetValueRefOrAddDefault(_tracePersister, key, out _);
+        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_tracePersister, key, out _);
         persistence ??= traceBatcherFactory(key);
         return persistence;
     }

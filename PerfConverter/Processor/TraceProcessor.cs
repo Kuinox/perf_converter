@@ -13,9 +13,9 @@ public unsafe class TraceProcessor(IStringProcessor eventProcessor, Func<string,
     public ulong FilterEventEarly(PerfDlFilterSample* sample)
     {
         var id = _totalSamples++;
-        var key = CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid), out _);
+        ref var key = ref CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid), out _);
         key ??= $"{sample->pid}/{sample->tid}";
-        var persistence = CollectionsMarshal.GetValueRefOrAddDefault(_persistences, key, out _);
+        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_persistences, key, out _);
         persistence ??= persistanceFactory(key);
         
         var eventString = Marshal.PtrToStringUTF8(sample->@event);
