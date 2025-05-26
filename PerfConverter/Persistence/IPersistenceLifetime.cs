@@ -9,6 +9,8 @@ public interface IPersistenceLifetime : IAsyncDisposable
 {
     IPersister<Entry.StringEntry> SymbolBatcher { get; }
 
+    IPersister<Entry.StringEntry> DsoBatcher { get; }
+
     IPersister<Entry.StringEntry> CommBatcher { get; }
     
     IPersister<Entry.StringEntry> EventBatcher { get; }

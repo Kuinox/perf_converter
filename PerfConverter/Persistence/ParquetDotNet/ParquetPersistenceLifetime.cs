@@ -11,6 +11,7 @@ public class ParquetPersistenceLifetime(
     Batcher<StringEntry> symbolBatcher,
     Batcher<StringEntry> commBatcher,
     Batcher<StringEntry> eventBatcher,
+    Batcher<StringEntry> dsoBatcher,
     Batcher<AddressEntry> addressBatcher,
     Func<string, Batcher<TraceSampleEntry>> traceBatcherFactory) : IPersistenceLifetime
 {
@@ -19,6 +20,7 @@ public class ParquetPersistenceLifetime(
     public IPersister<StringEntry> SymbolBatcher => symbolBatcher;
     public IPersister<StringEntry> CommBatcher => commBatcher;
     public IPersister<StringEntry> EventBatcher => eventBatcher;
+    public IPersister<StringEntry> DsoBatcher => dsoBatcher;
     public IPersister<AddressEntry> AddressBatcher => addressBatcher;
     public IPersister<TraceSampleEntry> CreateTraceBatcher(string key)
     {

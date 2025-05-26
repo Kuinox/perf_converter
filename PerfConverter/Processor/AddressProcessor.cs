@@ -5,7 +5,7 @@ using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProcessor commProcessor,  IPersister<AddressEntry> persistence) : IAddressProcessor
+public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProcessor commProcessor, IStringProcessor dsoProcessor, IPersister<AddressEntry> persistence) : IAddressProcessor
 {
     ulong _currenAddress = 0;
 
@@ -39,6 +39,13 @@ public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProce
         {
             var comm = Marshal.PtrToStringUTF8(info->comm)!;
             commStrId = commProcessor.Process(comm);
+        }
+
+        ulong dsoStrId = 0;
+        if (info->dso != 0)
+        {
+            var dso = Marshal.PtrToStringUTF8(info->dso)!;
+            dsoStrId = dsoProcessor.Process(dso);
         }
 
         var buildId = new Span<byte>(info->buildid, info->buildid_size).ToArray();

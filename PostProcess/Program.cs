@@ -3,6 +3,7 @@ using PerfConverter.Entry;
 using System.Collections;
 using PerfConverter.PerfStructs;
 using PerfConverter.Persistence.ParquetDotNet.Schemas;
+using System.Diagnostics;
 
 namespace PostProcess;
 
@@ -20,7 +21,7 @@ class Program
 
         Console.WriteLine($"Reading parquet files from: {basePath}");
 
-        string tracesPath = Path.Combine(basePath, "18461/18463/tracesamples.parquet");
+        string tracesPath = Path.Combine(basePath, "18461/18461/tracesamples.parquet");
         string addressesPath = Path.Combine(basePath, "addresses.parquet");
 
         if (!File.Exists(tracesPath))
@@ -47,60 +48,81 @@ class Program
 
         try
         {
-            int tracesProcessed = 0;
-            int i = 0;
-            int stringsProcessed = 0;
+            // Load the symbol dictionary
+            string symbolsPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "symbols.parquet");
+            if (!File.Exists(symbolsPath))
+            {
+                Console.WriteLine($"Symbols file not found: {symbolsPath}");
+                return;
+            }
+            using var symbolsReader = await ParquetReader.CreateAsync(File.OpenRead(symbolsPath));
+            var symbolDict = await ReadDictAsync(symbolsReader);
+            symbolDict.Add(ulong.MaxValue, "???");
+            symbolDict.Add(0, "null");
 
-            // Example usage of the static methods
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
             using var addressReader = await ParquetReader.CreateAsync(File.OpenRead(addressesPath));
 
-            Console.WriteLine($"Trace file: {traceReader.RowGroupCount} row groups");
-            Console.WriteLine($"Address file: {addressReader.RowGroupCount} row groups");
+            var addrEnum = ReadAllAddressesAsync(addressReader).GetAsyncEnumerator();
+
+            var hasAddr = await addrEnum.MoveNextAsync();
+
+            var stack = new Stack<(ulong, ulong?)>(); // Stack of symbol string IDs
 
             await foreach (var trace in ReadAllTracesAsync(traceReader))
             {
-                if (i++ % 100_000 == 0)
-                {
-                    Console.WriteLine($"Processed {i} traces");
-                }
+                var (ip, address) = await GetIPAndAddress(addrEnum);
                 var isCall = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL);
                 var isRet = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN);
-
-                if (!isCall && !isRet)
-                {
-                    // copy call stack.
-                    continue;
-                }
-
-
                 if (isCall)
                 {
-                    stackDepth++;
+                    stack.Push((ip.SymStrId, address?.SymStrId));
+                    var currentSymbolId = stack.Peek();
+
                 }
                 if (isRet)
                 {
-                    stackDepth--;
+                    stack.Pop();
                 }
-                if (trace.Ip == 0)
-                {
-                    Console.WriteLine($"ip0 count {ip0Count++}, depth {stackDepth}");
-                    stackDepth = 0;
-                }
-                if (stackDepth > maxDepth)
-                {
-                    maxDepth = stackDepth;
-                    Console.WriteLine(stackDepth);
-                }
-            }
 
-            Console.WriteLine($"\nProcessed {tracesProcessed} traces, {i} addresses, and {stringsProcessed} strings");
+                if (stack.Count == 0)
+                {
+                    Console.WriteLine("stack empty");
+                    continue;
+                }
+                (ulong ipId, ulong? addrId) = stack.Peek();
+                if (ipId == 0 && addrId == 0) continue;
+                symbolDict.TryGetValue(ipId, out var ipName);
+                string? currentSymbol = null;
+                if(addrId.HasValue)  symbolDict.TryGetValue(addrId.Value, out currentSymbol);
+                if(currentSymbol != null) {
+                    currentSymbol = $"({currentSymbol})";
+                }
+                var line = $"{currentSymbol}{ipName}";
+                Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
+
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error processing parquet files: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
         }
+    }
+
+    async static ValueTask<(AddressEntry, AddressEntry?)> GetIPAndAddress(IAsyncEnumerator<AddressEntry> addrEnum)
+    {
+        var ipEntry = addrEnum.Current;
+        await addrEnum.MoveNextAsync();
+        AddressEntry? addressEntry = default;
+        if (!addrEnum.Current.IsIp)
+        {
+            addressEntry = addrEnum.Current;
+            await addrEnum.MoveNextAsync();
+        }
+        Debug.Assert(ipEntry.IsIp);
+        if(addressEntry.HasValue) Debug.Assert(!addressEntry.Value.IsIp);
+        return (ipEntry, addressEntry);
     }
 
     /// <summary>
@@ -183,11 +205,11 @@ class Program
             var symStrIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymStrId);
             var symStartColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymStart);
             var symEndColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymEnd);
-            var dsoColumn = await rowGroup.ReadColumnAsync(AddressSchema.Dso);
+            var dsoColumn = await rowGroup.ReadColumnAsync(AddressSchema.DsoStrId);
             var symBindingColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymBinding);
             var is64BitColumn = await rowGroup.ReadColumnAsync(AddressSchema.Is64Bit);
             var isKernelIpColumn = await rowGroup.ReadColumnAsync(AddressSchema.IsKernelIp);
-            var buildIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.BuildId);
+            //var buildIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.BuildId);
             var filteredColumn = await rowGroup.ReadColumnAsync(AddressSchema.Filtered);
             var commStrIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.CommStrId);
             var privColumn = await rowGroup.ReadColumnAsync(AddressSchema.Priv);
@@ -211,7 +233,7 @@ class Program
                     SymBinding = (byte)((IList)symBindingColumn.Data)[j]!,
                     Is64Bit = (byte)((IList)is64BitColumn.Data)[j]!,
                     IsKernelIp = (byte)((IList)isKernelIpColumn.Data)[j]!,
-                    BuildId = (byte[])((IList)buildIdColumn.Data)[j]!,
+                    //BuildId = (byte[])((IList)buildIdColumn.Data)[j]!,
                     Filtered = (byte)((IList)filteredColumn.Data)[j]!,
                     CommStrId = (ulong)((IList)commStrIdColumn.Data)[j]!,
                     Priv = (ulong)((IList)privColumn.Data)[j]!
@@ -225,7 +247,7 @@ class Program
     /// </summary>
     /// <param name="reader">The parquet reader.</param>
     /// <returns>A dictionary mapping string IDs to string values.</returns>
-    public static async Task<IReadOnlyDictionary<ulong, string>> ReadDictAsync(ParquetReader reader)
+    public static async Task<Dictionary<ulong, string>> ReadDictAsync(ParquetReader reader)
     {
         var dict = new Dictionary<ulong, string>();
         for (int i = 0; i < reader.RowGroupCount; i++)

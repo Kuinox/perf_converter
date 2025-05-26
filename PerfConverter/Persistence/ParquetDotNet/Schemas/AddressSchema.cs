@@ -18,7 +18,7 @@ public static class AddressSchema
     public static DataField<ulong> SymStrId { get; } = new DataField<ulong>("symStrId");
     public static DataField<ulong> SymStart { get; } = new DataField<ulong>("symStart");
     public static DataField<ulong> SymEnd { get; } = new DataField<ulong>("symEnd");
-    public static DataField<ulong> Dso { get; } = new DataField<ulong>("dso");
+    public static DataField<ulong> DsoStrId { get; } = new DataField<ulong>("dsoStrId");
     public static DataField<byte> SymBinding { get; } = new DataField<byte>("symBinding");
     public static DataField<byte> Is64Bit { get; } = new DataField<byte>("is64Bit");
     public static DataField<byte> IsKernelIp { get; } = new DataField<byte>("isKernelIp");
@@ -32,6 +32,6 @@ public static class AddressSchema
     /// </summary>
     public static ParquetSchema Schema { get; } = new ParquetSchema(
         Id, TraceId, Address, Pid, IsIp, Size, Symoff, SymStrId, SymStart, SymEnd,
-        Dso, SymBinding, Is64Bit, IsKernelIp, BuildId, Filtered, CommStrId, Priv
+        DsoStrId, SymBinding, Is64Bit, IsKernelIp, BuildId, Filtered, CommStrId, Priv
     );
 }

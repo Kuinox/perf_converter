@@ -79,7 +79,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
         var symStrIdColumn = new DataColumn(AddressSchema.SymStrId, _symStrIds);
         var symStartColumn = new DataColumn(AddressSchema.SymStart, _symStarts);
         var symEndColumn = new DataColumn(AddressSchema.SymEnd, _symEnds);
-        var dsoColumn = new DataColumn(AddressSchema.Dso, _dsos);
+        var dsoColumn = new DataColumn(AddressSchema.DsoStrId, _dsos);
         var symBindingColumn = new DataColumn(AddressSchema.SymBinding, _symBindings);
         var is64BitColumn = new DataColumn(AddressSchema.Is64Bit, _is64Bits);
         var isKernelIpColumn = new DataColumn(AddressSchema.IsKernelIp, _isKernelIps);
