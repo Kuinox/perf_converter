@@ -62,7 +62,7 @@ public unsafe class AddressProcessor(IStringProcessor symProcessor, IStringProce
             SymStrId = symStrId,
             SymStart = info->sym_start,
             SymEnd = info->sym_end,
-            Dso = (ulong)info->dso,
+            DsoStrId = (ulong)info->dso,
             SymBinding = info->sym_binding,
             Is64Bit = info->is_64_bit,
             IsKernelIp = info->is_kernel_ip,

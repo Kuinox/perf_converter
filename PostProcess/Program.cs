@@ -67,7 +67,7 @@ class Program
 
             var hasAddr = await addrEnum.MoveNextAsync();
 
-            var stack = new Stack<(ulong, ulong?)>(); // Stack of symbol string IDs
+            var stack = new Stack<(AddressEntry, AddressEntry?)>(); // Stack of symbol string IDs
 
             await foreach (var trace in ReadAllTracesAsync(traceReader))
             {
@@ -76,7 +76,8 @@ class Program
                 var isRet = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN);
                 if (isCall)
                 {
-                    stack.Push((ip.SymStrId, address?.SymStrId));
+                    
+                    stack.Push((ip, address));
                     var currentSymbolId = stack.Peek();
 
                 }
@@ -90,14 +91,14 @@ class Program
                     Console.WriteLine("stack empty");
                     continue;
                 }
-                (ulong ipId, ulong? addrId) = stack.Peek();
-                if (ipId == 0 && addrId == 0) continue;
-                symbolDict.TryGetValue(ipId, out var ipName);
+                symbolDict.TryGetValue(ip, out var ipName);
                 string? currentSymbol = null;
-                if(addrId.HasValue)  symbolDict.TryGetValue(addrId.Value, out currentSymbol);
+                if(addr.HasValue)  symbolDict.TryGetValue(addr.Value, out currentSymbol);
                 if(currentSymbol != null) {
                     currentSymbol = $"({currentSymbol})";
                 }
+                string? dso = null;
+
                 var line = $"{currentSymbol}{ipName}";
                 Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
 
@@ -229,7 +230,7 @@ class Program
                     SymStrId = (ulong)((IList)symStrIdColumn.Data)[j]!,
                     SymStart = (ulong)((IList)symStartColumn.Data)[j]!,
                     SymEnd = (ulong)((IList)symEndColumn.Data)[j]!,
-                    Dso = (ulong)((IList)dsoColumn.Data)[j]!,
+                    DsoStrId = (ulong)((IList)dsoColumn.Data)[j]!,
                     SymBinding = (byte)((IList)symBindingColumn.Data)[j]!,
                     Is64Bit = (byte)((IList)is64BitColumn.Data)[j]!,
                     IsKernelIp = (byte)((IList)isKernelIpColumn.Data)[j]!,

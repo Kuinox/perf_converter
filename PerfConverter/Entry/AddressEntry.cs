@@ -12,7 +12,7 @@ public struct AddressEntry
     public ulong SymStrId;
     public ulong SymStart;
     public ulong SymEnd;
-    public ulong Dso;
+    public ulong DsoStrId;
     public byte SymBinding;
     public byte Is64Bit;
     public byte IsKernelIp;

@@ -58,7 +58,7 @@ public class ParquetAddressPersistence : IBatchPersistence<AddressEntry>
             _symStrIds[i] = entry.SymStrId;
             _symStarts[i] = entry.SymStart;
             _symEnds[i] = entry.SymEnd;
-            _dsos[i] = entry.Dso;
+            _dsos[i] = entry.DsoStrId;
             _symBindings[i] = entry.SymBinding;
             _is64Bits[i] = entry.Is64Bit;
             _isKernelIps[i] = entry.IsKernelIp;
