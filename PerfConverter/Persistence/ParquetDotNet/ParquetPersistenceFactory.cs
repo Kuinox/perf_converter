@@ -23,7 +23,7 @@ public static class ParquetPersistenceFactory
         var symbolBatcher = Batcher<StringEntry>.Create(symbolPersister, batchSize, batchingMode);
         var commBatcher = Batcher<StringEntry>.Create(commPersister, batchSize, batchingMode);
         var eventBatcher = Batcher<StringEntry>.Create(eventPersister, batchSize, batchingMode);
-        var dsoBatcher = Batcher<StringEntry>.Create(dsoPersister, batchSize, batchingMode); ;
+        var dsoBatcher = Batcher<StringEntry>.Create(dsoPersister, batchSize, batchingMode);
         var addressBatcher = Batcher<AddressEntry>.Create(addressPersister, batchSize, batchingMode);
 
 

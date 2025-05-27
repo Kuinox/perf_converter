@@ -39,9 +39,6 @@ class Program
         await ProcessTracesAndAddresses(tracesPath, addressesPath);
     }
 
-    static int ip0Count;
-    static int stackDepth;
-    static int maxDepth;
     static async Task ProcessTracesAndAddresses(string tracesPath, string addressesPath)
     {
         Console.WriteLine("Processing traces and addresses...");
@@ -82,6 +79,26 @@ class Program
 
                     stack.Push((ip, address));
                     var currentSymbolId = stack.Peek();
+                    if (stack.Count == 0)
+                    {
+                        Console.WriteLine("stack empty");
+                        continue;
+                    }
+                    symbolDict.TryGetValue(ip.SymStrId, out var ipSymbol);
+                    dsoDict.TryGetValue(ip.DsoStrId, out var ipDso);
+                    string? adressSym = null;
+                    string? addressDso = null;
+                    if (address.HasValue)
+                    {
+                        symbolDict.TryGetValue(address.Value.SymStrId, out adressSym);
+                        dsoDict.TryGetValue(address.Value.DsoStrId, out addressDso);
+                    }
+                    if (adressSym != null) adressSym = $"({adressSym})";
+                    if (addressDso != null) addressDso = $"{{{addressDso}}}";
+                    if (ipDso != null) ipDso = $"{{{ipDso}}}";
+                    string? dso = null;
+                    var line = $"{adressSym}{addressDso} {ipSymbol}{{{ipDso}}}";
+                    Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
 
                 }
                 if (isRet)
@@ -89,26 +106,7 @@ class Program
                     stack.Pop();
                 }
 
-                if (stack.Count == 0)
-                {
-                    Console.WriteLine("stack empty");
-                    continue;
-                }
-                symbolDict.TryGetValue(ip.SymStrId, out var ipSymbol);
-                dsoDict.TryGetValue(ip.DsoStrId, out var ipDso);
-                string? adressSym = null;
-                string? addressDso = null;
-                if (address.HasValue)
-                {
-                    symbolDict.TryGetValue(address.Value.SymStrId, out adressSym);
-                    dsoDict.TryGetValue(address.Value.DsoStrId, out addressDso);
-                }
-                if (adressSym != null) adressSym = $"({adressSym})";
-                if (addressDso != null) addressDso = $"{{{addressDso}}}";
-
-                string? dso = null;
-                var line = $"{adressSym}{addressDso} {ipSymbol}{{{ipDso}}}";
-                Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
+                
 
             }
         }
