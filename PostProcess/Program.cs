@@ -11,18 +11,20 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        // Hardcoded path for now
-        string basePath = @"C:\Users\Kuinox\Documents\parquet_output";
+        string basePath = args.Length > 0 ? args[0] : @"C:\Users\Kuinox\Documents\parquet_output";
+        string outputPath = args.Length > 1 ? args[1] : Path.Combine(basePath, "processed");
 
         if (OperatingSystem.IsLinux() && basePath.StartsWith("C:"))
         {
             basePath = "/mnt/c" + basePath.Substring(2).Replace('\\', '/');
         }
 
+        Directory.CreateDirectory(outputPath);
+
         Console.WriteLine($"Reading parquet files from: {basePath}");
 
         string tracesPath = Path.Combine(basePath, "18461/18461/tracesamples.parquet");
-        string addressesPath = Path.Combine(basePath, "addresses.parquet");
+        string auxPath = Path.Combine(basePath, "aux_events.parquet");
 
         if (!File.Exists(tracesPath))
         {
@@ -30,85 +32,132 @@ class Program
             return;
         }
 
-        if (!File.Exists(addressesPath))
+        if (!File.Exists(auxPath))
         {
-            Console.WriteLine($"Addresses file not found: {addressesPath}");
+            Console.WriteLine($"Aux events file not found: {auxPath}");
             return;
         }
 
-        await ProcessTracesAndAddresses(tracesPath, addressesPath);
+        await ProcessAndSplit(tracesPath, auxPath, outputPath);
     }
 
-    static async Task ProcessTracesAndAddresses(string tracesPath, string addressesPath)
+    static async Task ProcessAndSplit(string tracesPath, string auxPath, string outputDir)
     {
-        Console.WriteLine("Processing traces and addresses...");
+        Console.WriteLine("Processing traces and aux events...");
 
         try
         {
-            // Load the symbol dictionary
-            var symbolsPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "symbols.parquet");
-            var dsoPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "dso.parquet");
-            if (!File.Exists(symbolsPath))
-            {
-                Console.WriteLine($"Symbols file not found: {symbolsPath}");
-                return;
-            }
-            using var symbolsReader = await ParquetReader.CreateAsync(File.OpenRead(symbolsPath));
-            using var dsoReader = await ParquetReader.CreateAsync(File.OpenRead(dsoPath));
-            var symbolDict = await ReadDictAsync(symbolsReader);
-            var dsoDict = await ReadDictAsync(dsoReader);
-            symbolDict.Add(ulong.MaxValue, "???");
-            symbolDict.Add(0, "null");
+            var dropTimes = await ReadAuxDataLossAsync(auxPath);
 
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
-            using var addressReader = await ParquetReader.CreateAsync(File.OpenRead(addressesPath));
 
-            var addrEnum = ReadAllAddressesAsync(addressReader).GetAsyncEnumerator();
+            var ids = new List<ulong>();
+            var perfIds = new List<ulong>();
+            var pids = new List<uint>();
+            var tids = new List<uint>();
+            var times = new List<ulong>();
+            var cpus = new List<uint>();
+            var flags = new List<uint>();
+            var ips = new List<ulong>();
+            var addrs = new List<ulong>();
+            var periods = new List<ulong>();
+            var insnCnts = new List<ulong>();
+            var cycCnts = new List<ulong>();
+            var weights = new List<ulong>();
+            var cpumodes = new List<byte>();
+            var addrCorrelates = new List<byte>();
+            var eventIds = new List<ulong>();
+            var machinePids = new List<uint>();
+            var vcpus = new List<uint>();
+            var segmentIds = new List<int>();
+            var stacks = new List<ulong[]>();
 
-            var hasAddr = await addrEnum.MoveNextAsync();
-
-            var stack = new Stack<(AddressEntry, AddressEntry?)>(); // Stack of symbol string IDs
+            var stacksByTid = new Dictionary<uint, Stack<ulong>>();
+            var dropIndexByTid = new Dictionary<uint, int>();
+            var segmentByTid = new Dictionary<uint, int>();
 
             await foreach (var trace in ReadAllTracesAsync(traceReader))
             {
-                var (ip, address) = await GetIPAndAddress(addrEnum);
-                var isCall = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL);
-                var isRet = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN);
-                if (isCall)
+                var tid = trace.Tid;
+                if (!stacksByTid.TryGetValue(tid, out var stack))
                 {
-
-                    stack.Push((ip, address));
-                    var currentSymbolId = stack.Peek();
-                    if (stack.Count == 0)
-                    {
-                        Console.WriteLine("stack empty");
-                        continue;
-                    }
-                    symbolDict.TryGetValue(ip.SymStrId, out var ipSymbol);
-                    dsoDict.TryGetValue(ip.DsoStrId, out var ipDso);
-                    string? adressSym = null;
-                    string? addressDso = null;
-                    if (address.HasValue)
-                    {
-                        symbolDict.TryGetValue(address.Value.SymStrId, out adressSym);
-                        dsoDict.TryGetValue(address.Value.DsoStrId, out addressDso);
-                    }
-                    if (adressSym != null) adressSym = $"({adressSym})";
-                    if (addressDso != null) addressDso = $"{{{addressDso}}}";
-                    if (ipDso != null) ipDso = $"{{{ipDso}}}";
-                    string? dso = null;
-                    var line = $"{adressSym}{addressDso} {ipSymbol}{{{ipDso}}}";
-                    Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
-
+                    stack = new Stack<ulong>();
+                    stacksByTid[tid] = stack;
+                    dropIndexByTid[tid] = 0;
+                    segmentByTid[tid] = 0;
                 }
-                if (isRet)
+
+                if (dropTimes.TryGetValue(tid, out var drops))
+                {
+                    var idx = dropIndexByTid[tid];
+                    while (idx < drops.Count && trace.Time >= drops[idx])
+                    {
+                        idx++;
+                        stack.Clear();
+                        segmentByTid[tid]++;
+                    }
+                    dropIndexByTid[tid] = idx;
+                }
+
+                if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
+                {
+                    stack.Push(trace.Id);
+                }
+
+                ids.Add(trace.Id);
+                perfIds.Add(trace.PerfId);
+                pids.Add(trace.Pid);
+                tids.Add(trace.Tid);
+                times.Add(trace.Time);
+                cpus.Add(trace.Cpu);
+                flags.Add((uint)trace.Flags);
+                ips.Add(trace.Ip);
+                addrs.Add(trace.Addr);
+                periods.Add(trace.Period);
+                insnCnts.Add(trace.InsnCnt);
+                cycCnts.Add(trace.CycCnt);
+                weights.Add(trace.Weight);
+                cpumodes.Add(trace.Cpumode);
+                addrCorrelates.Add(trace.AddrCorrelatesSym);
+                eventIds.Add(trace.EventId);
+                machinePids.Add(trace.MachinePid);
+                vcpus.Add(trace.Vcpu);
+                segmentIds.Add(segmentByTid[tid]);
+                stacks.Add(stack.Reverse().ToArray());
+
+                if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) && stack.Count > 0)
                 {
                     stack.Pop();
                 }
-
-                
-
             }
+
+            var schema = TraceWithStackSchema.Schema;
+            var outputFile = Path.Combine(outputDir, "traces_with_stack.parquet");
+            using var writer = await ParquetWriter.CreateAsync(schema, File.Create(outputFile));
+            using var rowGroup = writer.CreateRowGroup();
+
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Id, ids.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.PerfId, perfIds.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Pid, pids.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Tid, tids.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Time, times.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Cpu, cpus.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Flags, flags.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Ip, ips.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Addr, addrs.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Period, periods.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.InsnCnt, insnCnts.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.CycCnt, cycCnts.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Weight, weights.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Cpumode, cpumodes.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.AddrCorrelatesSym, addrCorrelates.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.EventId, eventIds.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.MachinePid, machinePids.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Vcpu, vcpus.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceWithStackSchema.SegmentId, segmentIds.ToArray()));
+            await rowGroup.WriteColumnAsync(new DataColumn(TraceWithStackSchema.Stack, stacks.ToArray()));
+
+            Console.WriteLine($"Wrote processed traces to {outputFile}");
         }
         catch (Exception ex)
         {
@@ -266,6 +315,36 @@ class Program
             {
                 dict.Add((ulong)((IList)idColumn.Data)[j]!, (string)((IList)symbolColumn.Data)[j]!);
             }
+        }
+        return dict;
+    }
+    public static async Task<Dictionary<uint, List<ulong>>> ReadAuxDataLossAsync(string auxPath)
+    {
+        var dict = new Dictionary<uint, List<ulong>>();
+        using var reader = await ParquetReader.CreateAsync(File.OpenRead(auxPath));
+        for (int i = 0; i < reader.RowGroupCount; i++)
+        {
+            using var rowGroup = reader.OpenRowGroupReader(i);
+            var timeColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Time);
+            var tidColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Tid);
+            var flagsColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Flags);
+            for (int j = 0; j < rowGroup.RowCount; j++)
+            {
+                var flags = (ulong)((IList)flagsColumn.Data)[j]!;
+                if (flags == 0) continue; // only keep drops
+                var tid = (uint)(ulong)((IList)tidColumn.Data)[j]!;
+                var time = (ulong)((IList)timeColumn.Data)[j]!;
+                if (!dict.TryGetValue(tid, out var list))
+                {
+                    list = new List<ulong>();
+                    dict[tid] = list;
+                }
+                list.Add(time);
+            }
+        }
+        foreach (var list in dict.Values)
+        {
+            list.Sort();
         }
         return dict;
     }
