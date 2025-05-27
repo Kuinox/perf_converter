@@ -4,6 +4,7 @@ using PerfConverter.Entry;
 using System.Collections;
 using PerfConverter.PerfStructs;
 using Temp.Schema;
+using Temp.Core;
 using System.Diagnostics;
 
 namespace PostProcess;
@@ -60,26 +61,20 @@ class Program
 
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
 
-            var ids = new List<ulong>();
-            var perfIds = new List<ulong>();
-            var pids = new List<uint>();
-            var tids = new List<uint>();
-            var times = new List<ulong>();
-            var cpus = new List<uint>();
-            var flags = new List<uint>();
-            var ips = new List<ulong>();
-            var addrs = new List<ulong>();
-            var periods = new List<ulong>();
-            var insnCnts = new List<ulong>();
-            var cycCnts = new List<ulong>();
-            var weights = new List<ulong>();
-            var cpumodes = new List<byte>();
-            var addrCorrelates = new List<byte>();
-            var eventIds = new List<ulong>();
-            var machinePids = new List<uint>();
-            var vcpus = new List<uint>();
-            var segmentIds = new List<int>();
-            var stacks = new List<ulong[]>();
+            var outputFile = Path.Combine(outputDir, "traces_with_stack.parquet");
+
+            int batchSize = 1_000_000;
+            string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
+            if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
+                batchSize = parsedBatch;
+
+            var compressionMethod = CompressionMethod.Snappy;
+            string? compressEnv = Environment.GetEnvironmentVariable("PARQUET_COMPRESSION");
+            if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
+                compressionMethod = parsedCompress;
+
+            var persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
+            var batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
 
             long processed = 0;
             int lastPercent = -10;
@@ -116,26 +111,30 @@ class Program
                     stack.Push(trace.Id);
                 }
 
-                ids.Add(trace.Id);
-                perfIds.Add(trace.PerfId);
-                pids.Add(trace.Pid);
-                tids.Add(trace.Tid);
-                times.Add(trace.Time);
-                cpus.Add(trace.Cpu);
-                flags.Add((uint)trace.Flags);
-                ips.Add(trace.Ip);
-                addrs.Add(trace.Addr);
-                periods.Add(trace.Period);
-                insnCnts.Add(trace.InsnCnt);
-                cycCnts.Add(trace.CycCnt);
-                weights.Add(trace.Weight);
-                cpumodes.Add(trace.Cpumode);
-                addrCorrelates.Add(trace.AddrCorrelatesSym);
-                eventIds.Add(trace.EventId);
-                machinePids.Add(trace.MachinePid);
-                vcpus.Add(trace.Vcpu);
-                segmentIds.Add(segmentByTid[tid]);
-                stacks.Add(stack.Reverse().ToArray());
+                var entry = new TraceWithStackEntry
+                {
+                    Id = trace.Id,
+                    PerfId = trace.PerfId,
+                    Pid = trace.Pid,
+                    Tid = trace.Tid,
+                    Time = trace.Time,
+                    Cpu = trace.Cpu,
+                    Flags = trace.Flags,
+                    Ip = trace.Ip,
+                    Addr = trace.Addr,
+                    Period = trace.Period,
+                    InsnCnt = trace.InsnCnt,
+                    CycCnt = trace.CycCnt,
+                    Weight = trace.Weight,
+                    Cpumode = trace.Cpumode,
+                    AddrCorrelatesSym = trace.AddrCorrelatesSym,
+                    EventId = trace.EventId,
+                    MachinePid = trace.MachinePid,
+                    Vcpu = trace.Vcpu,
+                    SegmentId = segmentByTid[tid],
+                    Stack = stack.Reverse().ToArray()
+                };
+                batcher.Persist(entry);
 
                 if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) && stack.Count > 0)
                 {
@@ -151,32 +150,7 @@ class Program
                 }
             }
 
-            var schema = TraceWithStackSchema.Schema;
-            var outputFile = Path.Combine(outputDir, "traces_with_stack.parquet");
-            using var writer = await ParquetWriter.CreateAsync(schema, File.Create(outputFile));
-            using var rowGroup = writer.CreateRowGroup();
-
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Id, ids.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.PerfId, perfIds.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Pid, pids.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Tid, tids.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Time, times.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Cpu, cpus.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Flags, flags.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Ip, ips.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Addr, addrs.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Period, periods.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.InsnCnt, insnCnts.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.CycCnt, cycCnts.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Weight, weights.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Cpumode, cpumodes.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.AddrCorrelatesSym, addrCorrelates.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.EventId, eventIds.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.MachinePid, machinePids.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceSampleSchema.Vcpu, vcpus.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceWithStackSchema.SegmentId, segmentIds.ToArray()));
-            await rowGroup.WriteColumnAsync(new DataColumn(TraceWithStackSchema.Stack, stacks.ToArray()));
-
+            await batcher.DisposeAsync();
             Console.WriteLine($"Wrote processed traces to {outputFile}");
         }
         catch (Exception ex)
