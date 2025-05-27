@@ -34,8 +34,7 @@
 	</Target>
 
 	<ItemGroup Condition="'$(OS)' == 'Unix'">
-		<NativeLibrary Include="$(BaseOutputPath)exports.o" />
-	</ItemGroup>
+		<NativeLibrary Include="$(BaseOutputPath)exports.o" /></ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Dapper" Version="2.1.66" />
@@ -46,6 +45,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\Temp.Core\Temp.Core.csproj" />
+    <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
+    <ProjectReference Include="..\Temp.Core\Temp.Core.csproj" />
 	</ItemGroup>
 </Project>

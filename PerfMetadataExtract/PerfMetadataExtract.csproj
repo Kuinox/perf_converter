@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
     <ProjectReference Include="..\Temp.Core\Temp.Core.csproj" />
   </ItemGroup>
 

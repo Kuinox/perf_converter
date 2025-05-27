@@ -1,8 +1,9 @@
 ﻿using Parquet;
+using Parquet.Data;
 using PerfConverter.Entry;
 using System.Collections;
 using PerfConverter.PerfStructs;
-using PerfConverter.Persistence.ParquetDotNet.Schemas;
+using Temp.Schema;
 using System.Diagnostics;
 
 namespace PostProcess;

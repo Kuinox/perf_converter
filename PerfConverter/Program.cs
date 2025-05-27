@@ -1,6 +1,7 @@
 ﻿using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
 using PerfConverter.Processor;
+using Temp.Core;
 using System.Runtime.InteropServices;
 
 namespace PerfConverter;
@@ -19,6 +20,7 @@ public unsafe class PerfDlFilter
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
     static IPersistenceLifetime _persistenceLifetime = null!;
+    static IPersister<int>? _statePersister;
 
     class State
     {
@@ -31,10 +33,12 @@ public unsafe class PerfDlFilter
         try
         {
             Console.SetError(new WrappingWriter(Console.Error));
-            var state = new State
-            {
-                EventCount = 0,
-            };
+        var state = new State
+        {
+            EventCount = 0,
+        };
+
+        _statePersister = new StatePersister("state.txt");
 
             string? maxTracesEnv = Environment.GetEnvironmentVariable("MAX_TRACES_TO_PROCESS");
             if (!string.IsNullOrEmpty(maxTracesEnv) && int.TryParse(maxTracesEnv, out int maxTraces))
@@ -100,6 +104,12 @@ public unsafe class PerfDlFilter
     {
         try
         {
+            var handle = GCHandle.FromIntPtr((IntPtr)rawState);
+            var state = (State)handle.Target!;
+            _statePersister?.Persist(state.EventCount);
+            handle.Free();
+
+            _statePersister?.DisposeAsync().AsTask().Wait();
             _persistenceLifetime.DisposeAsync().AsTask().Wait();
             Console.Error.WriteLine("Done.");
             return 0;
