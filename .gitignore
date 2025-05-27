@@ -9,3 +9,4 @@ src/artifacts
 
 /viewer/venv/Lib/
 /viewer/venv/share/
+dotnet-sdk-*.tar.gz
