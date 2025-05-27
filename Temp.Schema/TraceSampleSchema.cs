@@ -1,7 +1,7 @@
 using Parquet.Data;
 using Parquet.Schema;
 
-namespace PerfConverter.Persistence.ParquetDotNet.Schemas;
+namespace Temp.Schema;
 
 /// <summary>
 /// Provides Parquet schema for TraceSampleEntry.

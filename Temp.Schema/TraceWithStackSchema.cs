@@ -1,8 +1,8 @@
 using Parquet.Data;
 using Parquet.Schema;
-using PerfConverter.Persistence.ParquetDotNet.Schemas;
+using Temp.Schema;
 
-namespace PostProcess;
+namespace Temp.Schema;
 
 public static class TraceWithStackSchema
 {
