@@ -39,5 +39,6 @@ public class ParquetPersistenceLifetime(
         await commBatcher.DisposeAsync();
         await addressBatcher.DisposeAsync();
         await symbolBatcher.DisposeAsync();
+        await dsoBatcher.DisposeAsync();
     }
 }

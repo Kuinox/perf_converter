@@ -49,14 +49,17 @@ class Program
         try
         {
             // Load the symbol dictionary
-            string symbolsPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "symbols.parquet");
+            var symbolsPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "symbols.parquet");
+            var dsoPath = Path.Combine(Path.GetDirectoryName(addressesPath)!, "dso.parquet");
             if (!File.Exists(symbolsPath))
             {
                 Console.WriteLine($"Symbols file not found: {symbolsPath}");
                 return;
             }
             using var symbolsReader = await ParquetReader.CreateAsync(File.OpenRead(symbolsPath));
+            using var dsoReader = await ParquetReader.CreateAsync(File.OpenRead(dsoPath));
             var symbolDict = await ReadDictAsync(symbolsReader);
+            var dsoDict = await ReadDictAsync(dsoReader);
             symbolDict.Add(ulong.MaxValue, "???");
             symbolDict.Add(0, "null");
 
@@ -76,7 +79,7 @@ class Program
                 var isRet = trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN);
                 if (isCall)
                 {
-                    
+
                     stack.Push((ip, address));
                     var currentSymbolId = stack.Peek();
 
@@ -91,15 +94,20 @@ class Program
                     Console.WriteLine("stack empty");
                     continue;
                 }
-                symbolDict.TryGetValue(ip, out var ipName);
-                string? currentSymbol = null;
-                if(addr.HasValue)  symbolDict.TryGetValue(addr.Value, out currentSymbol);
-                if(currentSymbol != null) {
-                    currentSymbol = $"({currentSymbol})";
+                symbolDict.TryGetValue(ip.SymStrId, out var ipSymbol);
+                dsoDict.TryGetValue(ip.DsoStrId, out var ipDso);
+                string? adressSym = null;
+                string? addressDso = null;
+                if (address.HasValue)
+                {
+                    symbolDict.TryGetValue(address.Value.SymStrId, out adressSym);
+                    dsoDict.TryGetValue(address.Value.DsoStrId, out addressDso);
                 }
-                string? dso = null;
+                if (adressSym != null) adressSym = $"({adressSym})";
+                if (addressDso != null) addressDso = $"{{{addressDso}}}";
 
-                var line = $"{currentSymbol}{ipName}";
+                string? dso = null;
+                var line = $"{adressSym}{addressDso} {ipSymbol}{{{ipDso}}}";
                 Console.WriteLine("".PadLeft(stack.Count, ' ') + line);
 
             }
@@ -122,7 +130,7 @@ class Program
             await addrEnum.MoveNextAsync();
         }
         Debug.Assert(ipEntry.IsIp);
-        if(addressEntry.HasValue) Debug.Assert(!addressEntry.Value.IsIp);
+        if (addressEntry.HasValue) Debug.Assert(!addressEntry.Value.IsIp);
         return (ipEntry, addressEntry);
     }
 
