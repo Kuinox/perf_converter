@@ -1,47 +1,35 @@
 ﻿using Microsoft.LinuxTracepoints.Decode;
 using Parquet;
 using PerfMetadataExtract;
+using System.CommandLine;
 using Temp.Core;
 
 class Program
 {
     static async Task<int> Main(string[] args)
     {
-        if (args.Length < 2)
-        {
-            Console.Error.WriteLine("Usage: PerfMetadataExtract <inputFile> <outputFilePath> [compression] [batchSize]");
-            Console.Error.WriteLine("  inputFile:   Path to the input perf data file");
-            Console.Error.WriteLine("  outputFilePath: Path to the output file");
-            Console.Error.WriteLine("  compression: Compression method (None, Gzip, Snappy) (default: Snappy)");
-            Console.Error.WriteLine("  batchSize:   Batch size for processing (default: 2,000,000)");
-            return 1;
-        }
+        var inputArgument = new Argument<string>("inputFile", "Path to the input perf data file");
+        var outputArgument = new Argument<string>("outputFilePath", "Path to the output file");
+        var compressionOption = new Option<CompressionMethod>("--compression", () => CompressionMethod.Snappy, "Compression method (None, Gzip, Snappy)");
+        var batchSizeOption = new Option<int>("--batch-size", () => 2_000_000, "Batch size for processing");
 
-        string inputPath = args[0];
-        string outputPath = args[1];
+        var rootCommand = new RootCommand("Extract auxiliary data lost events")
+        {
+            inputArgument,
+            outputArgument,
+            compressionOption,
+            batchSizeOption
+        };
 
-        // Parse optional arguments
-        var compressionMethod = CompressionMethod.Snappy;
-        if (args.Length > 2 && Enum.TryParse<CompressionMethod>(args[2], true, out var parsedCompression))
-        {
-            compressionMethod = parsedCompression;
-        }
+        int exitCode = 0;
 
-        int batchSize = 2_000_000;
-        if (args.Length > 3 && int.TryParse(args[3], out var parsedBatchSize))
+        rootCommand.SetHandler(async (string inputFile, string outputFilePath, CompressionMethod compression, int batchSize) =>
         {
-            batchSize = parsedBatchSize;
-        }
+            exitCode = await ExtractAuxDataLostEvents(inputFile, outputFilePath, compression, batchSize);
+        }, inputArgument, outputArgument, compressionOption, batchSizeOption);
 
-        try
-        {
-            return await ExtractAuxDataLostEvents(inputPath, outputPath, compressionMethod, batchSize);
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"Error during extraction: {ex.Message}");
-            return 1;
-        }
+        await rootCommand.InvokeAsync(args);
+        return exitCode;
     }
 
     private static async Task<int> ExtractAuxDataLostEvents(string inputPath, string outputPath, CompressionMethod compressionMethod, int batchSize)
