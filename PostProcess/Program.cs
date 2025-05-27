@@ -50,6 +50,14 @@ class Program
         {
             var dropTimes = await ReadAuxDataLossAsync(auxPath);
 
+            using var traceReaderCount = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
+            long totalTraces = 0;
+            for (int i = 0; i < traceReaderCount.RowGroupCount; i++)
+            {
+                using var rg = traceReaderCount.OpenRowGroupReader(i);
+                totalTraces += rg.RowCount;
+            }
+
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
 
             var ids = new List<ulong>();
@@ -72,6 +80,9 @@ class Program
             var vcpus = new List<uint>();
             var segmentIds = new List<int>();
             var stacks = new List<ulong[]>();
+
+            long processed = 0;
+            int lastPercent = -10;
 
             var stacksByTid = new Dictionary<uint, Stack<ulong>>();
             var dropIndexByTid = new Dictionary<uint, int>();
@@ -129,6 +140,14 @@ class Program
                 if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) && stack.Count > 0)
                 {
                     stack.Pop();
+                }
+
+                processed++;
+                int percent = (int)(processed * 100 / totalTraces);
+                if (percent >= lastPercent + 10 || processed == totalTraces)
+                {
+                    Console.WriteLine($"Processed {percent}% ({processed}/{totalTraces})");
+                    lastPercent = percent;
                 }
             }
 
