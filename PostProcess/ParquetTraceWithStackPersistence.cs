@@ -3,8 +3,6 @@ using Parquet.Data;
 using Parquet.Schema;
 using Temp.Schema;
 using Temp.Core;
-using System.Buffers;
-using System.Runtime.InteropServices;
 
 namespace PostProcess;
 
@@ -35,7 +33,7 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
     List<ulong> _flattenedStacks = new();
     List<int> _repetitionLevels = new();
     List<int> _definitionLevels = new();
-    List<ulong[]> _pooledArrays = new();
+    List<PooledStack<ulong>.Snapshot> _snapshots = new();
 
     ParquetTraceWithStackPersistence(ParquetWriter writer, FileStream fileStream)
     {
@@ -53,7 +51,7 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         _flattenedStacks.Clear();
         _repetitionLevels.Clear();
         _definitionLevels.Clear();
-        _pooledArrays.Clear();
+        _snapshots.Clear();
         
         int i = 0;
         foreach (var entry in batch)
@@ -78,21 +76,25 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
             _vcpus[i] = entry.Vcpu;
             _segmentIds[i] = entry.SegmentId;
             
-            // Flatten stack and generate levels
-            var stack = entry.Stack.Span;
-            if (stack.Length > 0)
+            // Flatten stack from snapshot and generate levels
+            if (entry.StackSnapshot != null)
             {
-                for (int j = 0; j < stack.Length; j++)
+                _snapshots.Add(entry.StackSnapshot);
+                var stackValues = entry.StackSnapshot.Values.ToList();
+                if (stackValues.Count > 0)
                 {
-                    _flattenedStacks.Add(stack[j]);
-                    _repetitionLevels.Add(j == 0 ? 0 : 1);
-                    _definitionLevels.Add(1);
+                    for (int j = 0; j < stackValues.Count; j++)
+                    {
+                        _flattenedStacks.Add(stackValues[j]);
+                        _repetitionLevels.Add(j == 0 ? 0 : 1);
+                        _definitionLevels.Add(1);
+                    }
                 }
-                
-                // Track the underlying array for return to pool
-                if (MemoryMarshal.TryGetArray(entry.Stack, out var arraySegment))
+                else
                 {
-                    _pooledArrays.Add(arraySegment.Array!);
+                    _flattenedStacks.Add(0);
+                    _repetitionLevels.Add(0);
+                    _definitionLevels.Add(0);
                 }
             }
             else
@@ -127,10 +129,10 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         await groupWriter.WriteColumnAsync(new DataColumn(TraceWithStackSchema.SegmentId, _segmentIds));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceWithStackSchema.Stack, _flattenedStacks.ToArray(), _definitionLevels.ToArray(), _repetitionLevels.ToArray()));
         
-        // Return pooled arrays to ArrayPool
-        foreach (var pooledArray in _pooledArrays)
+        // Release PooledStack snapshots
+        foreach (var snapshot in _snapshots)
         {
-            ArrayPool<ulong>.Shared.Return(pooledArray);
+            snapshot.Release();
         }
     }
 

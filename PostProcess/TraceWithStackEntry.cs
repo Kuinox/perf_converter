@@ -23,5 +23,5 @@ public struct TraceWithStackEntry
     public uint MachinePid;
     public uint Vcpu;
     public int SegmentId;
-    public ReadOnlyMemory<ulong> Stack;
+    public PooledStack<ulong>.Snapshot? StackSnapshot;
 }

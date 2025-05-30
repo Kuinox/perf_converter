@@ -6,7 +6,6 @@ using PerfConverter.PerfStructs;
 using Temp.Schema;
 using Temp.Core;
 using System.Diagnostics;
-using System.Buffers;
 
 namespace PostProcess;
 
@@ -80,76 +79,20 @@ class Program
             long processed = 0;
             int lastPercent = -10;
 
-            var stacksByTid = new Dictionary<uint, Stack<ulong>>();
-            var dropIndexByTid = new Dictionary<uint, int>();
-            var segmentByTid = new Dictionary<uint, int>();
+            var segmentStacksByTid = new Dictionary<uint, SegmentStack>();
 
             await foreach (var trace in ReadAllTracesAsync(traceReader))
             {
                 var tid = trace.Tid;
-                if (!stacksByTid.TryGetValue(tid, out var stack))
+                if (!segmentStacksByTid.TryGetValue(tid, out var segmentStack))
                 {
-                    stack = new Stack<ulong>();
-                    stacksByTid[tid] = stack;
-                    dropIndexByTid[tid] = 0;
-                    segmentByTid[tid] = 0;
+                    segmentStack = new SegmentStack();
+                    segmentStacksByTid[tid] = segmentStack;
                 }
 
-                if (dropTimes.TryGetValue(tid, out var drops))
-                {
-                    var idx = dropIndexByTid[tid];
-                    while (idx < drops.Count && trace.Time >= drops[idx])
-                    {
-                        idx++;
-                        stack.Clear();
-                        segmentByTid[tid]++;
-                    }
-                    dropIndexByTid[tid] = idx;
-                }
-
-                if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
-                {
-                    stack.Push(trace.Id);
-                }
-
-                // Use ArrayPool to avoid allocation - rent array, copy stack data, wrap in ReadOnlyMemory
-                var stackArray = ArrayPool<ulong>.Shared.Rent(stack.Count);
-                var stackSpan = stackArray.AsSpan(0, stack.Count);
-                var stackIndex = stack.Count - 1;
-                foreach (var stackItem in stack)
-                {
-                    stackSpan[stackIndex--] = stackItem;
-                }
-
-                var entry = new TraceWithStackEntry
-                {
-                    Id = trace.Id,
-                    PerfId = trace.PerfId,
-                    Pid = trace.Pid,
-                    Tid = trace.Tid,
-                    Time = trace.Time,
-                    Cpu = trace.Cpu,
-                    Flags = trace.Flags,
-                    Ip = trace.Ip,
-                    Addr = trace.Addr,
-                    Period = trace.Period,
-                    InsnCnt = trace.InsnCnt,
-                    CycCnt = trace.CycCnt,
-                    Weight = trace.Weight,
-                    Cpumode = trace.Cpumode,
-                    AddrCorrelatesSym = trace.AddrCorrelatesSym,
-                    EventId = trace.EventId,
-                    MachinePid = trace.MachinePid,
-                    Vcpu = trace.Vcpu,
-                    SegmentId = segmentByTid[tid],
-                    Stack = new ReadOnlyMemory<ulong>(stackArray, 0, stack.Count)
-                };
+                dropTimes.TryGetValue(tid, out var drops);
+                var entry = segmentStack.ProcessTrace(trace, drops);
                 batcher.Persist(entry);
-
-                if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) && stack.Count > 0)
-                {
-                    stack.Pop();
-                }
 
                 processed++;
                 int percent = (int)(processed * 100 / totalTraces);

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet.exe build:*)",
+      "Bash(dotnet.exe run:*)"
+    ],
+    "deny": []
+  }
+}
