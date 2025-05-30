@@ -6,6 +6,7 @@ using PerfConverter.PerfStructs;
 using Temp.Schema;
 using Temp.Core;
 using System.Diagnostics;
+using System.Buffers;
 
 namespace PostProcess;
 
@@ -63,7 +64,7 @@ class Program
 
             var outputFile = Path.Combine(outputDir, "traces_with_stack.parquet");
 
-            int batchSize = 1_000_000;
+            int batchSize = 10_000_000;
             string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
             if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
                 batchSize = parsedBatch;
@@ -111,6 +112,15 @@ class Program
                     stack.Push(trace.Id);
                 }
 
+                // Use ArrayPool to avoid allocation - rent array, copy stack data, wrap in ReadOnlyMemory
+                var stackArray = ArrayPool<ulong>.Shared.Rent(stack.Count);
+                var stackSpan = stackArray.AsSpan(0, stack.Count);
+                var stackIndex = stack.Count - 1;
+                foreach (var stackItem in stack)
+                {
+                    stackSpan[stackIndex--] = stackItem;
+                }
+
                 var entry = new TraceWithStackEntry
                 {
                     Id = trace.Id,
@@ -132,7 +142,7 @@ class Program
                     MachinePid = trace.MachinePid,
                     Vcpu = trace.Vcpu,
                     SegmentId = segmentByTid[tid],
-                    Stack = stack.Reverse().ToArray()
+                    Stack = new ReadOnlyMemory<ulong>(stackArray, 0, stack.Count)
                 };
                 batcher.Persist(entry);
 
@@ -143,7 +153,7 @@ class Program
 
                 processed++;
                 int percent = (int)(processed * 100 / totalTraces);
-                if (percent >= lastPercent + 10 || processed == totalTraces)
+                if (percent >= lastPercent + 1 || processed == totalTraces)
                 {
                     Console.WriteLine($"Processed {percent}% ({processed}/{totalTraces})");
                     lastPercent = percent;
@@ -158,21 +168,6 @@ class Program
             Console.WriteLine($"Error processing parquet files: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
         }
-    }
-
-    async static ValueTask<(AddressEntry, AddressEntry?)> GetIPAndAddress(IAsyncEnumerator<AddressEntry> addrEnum)
-    {
-        var ipEntry = addrEnum.Current;
-        await addrEnum.MoveNextAsync();
-        AddressEntry? addressEntry = default;
-        if (!addrEnum.Current.IsIp)
-        {
-            addressEntry = addrEnum.Current;
-            await addrEnum.MoveNextAsync();
-        }
-        Debug.Assert(ipEntry.IsIp);
-        if (addressEntry.HasValue) Debug.Assert(!addressEntry.Value.IsIp);
-        return (ipEntry, addressEntry);
     }
 
     /// <summary>

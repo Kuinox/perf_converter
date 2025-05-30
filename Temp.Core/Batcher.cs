@@ -54,6 +54,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         {
             Console.Error.WriteLine(e);
             Console.Error.WriteLine(e.StackTrace);
+            Environment.FailFast("Batch processing failed", e);
         }
     }
 
