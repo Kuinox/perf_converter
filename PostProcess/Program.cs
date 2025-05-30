@@ -61,8 +61,6 @@ class Program
 
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
 
-            var outputFile = Path.Combine(outputDir, "traces_with_stack.parquet");
-
             int batchSize = 10_000_000;
             string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
             if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
@@ -73,25 +71,49 @@ class Program
             if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
                 compressionMethod = parsedCompress;
 
-            var persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
-            var batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
-
             long processed = 0;
             int lastPercent = -10;
 
-            var segmentStacksByTid = new Dictionary<uint, SegmentStack>();
-
+            var tid = uint.MaxValue;
+            List<ulong> drops = null!;
+            SegmentStack? segmentStack = null;
+            int currentSegmentId = 0;
+            
+            // Create initial persistence and batcher
+            var outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
+            var persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
+            var batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
+            
             await foreach (var trace in ReadAllTracesAsync(traceReader))
             {
-                var tid = trace.Tid;
-                if (!segmentStacksByTid.TryGetValue(tid, out var segmentStack))
+                if (tid == uint.MaxValue)
                 {
+                    tid = trace.Tid; // Initialize tid on first trace
+                    drops = dropTimes[tid];
                     segmentStack = new SegmentStack();
-                    segmentStacksByTid[tid] = segmentStack;
                 }
+                if(tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
 
-                dropTimes.TryGetValue(tid, out var drops);
-                var entry = segmentStack.ProcessTrace(trace, drops);
+                var entry = segmentStack!.ProcessTrace(trace, drops);
+                
+                // Check if we've moved to a new segment (drop occurred)
+                if (segmentStack.SegmentId != currentSegmentId)
+                {
+                    Console.WriteLine($"Trace cut detected at time {trace.Time}. Moving from segment {currentSegmentId} to {segmentStack.SegmentId}.");
+                    Console.WriteLine($"Disposing batcher for segment {currentSegmentId}...");
+                    
+                    // Dispose the current batcher (which also disposes persistence)
+                    await batcher.DisposeAsync();
+                    Console.WriteLine($"Batcher disposed for segment {currentSegmentId}");
+                    
+                    // Create new persistence and batcher for the new segment
+                    currentSegmentId = segmentStack.SegmentId;
+                    outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
+                    Console.WriteLine($"Creating new batcher for segment {currentSegmentId}...");
+                    persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
+                    batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
+                }
+                
                 batcher.Persist(entry);
 
                 processed++;
@@ -104,7 +126,7 @@ class Program
             }
 
             await batcher.DisposeAsync();
-            Console.WriteLine($"Wrote processed traces to {outputFile}");
+            Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
         }
         catch (Exception ex)
         {

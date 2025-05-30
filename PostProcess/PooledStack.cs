@@ -48,7 +48,23 @@ public class PooledStack<T>
     /// Creates a snapshot of the current stack state.
     /// </summary>
     public Snapshot CreateSnapshot()
-        => new Snapshot(_top);
+    {
+        if (_top is null)
+            return new Snapshot(null);
+
+        // Check if we already have a cached snapshot for this node
+        var cachedSnapshot = _top.GetCachedSnapshot();
+        if (cachedSnapshot is not null && !cachedSnapshot._released)
+        {
+            cachedSnapshot.AddRef();
+            return cachedSnapshot;
+        }
+
+        // Create new snapshot and cache it
+        var newSnapshot = new Snapshot(_top);
+        _top.CacheSnapshot(newSnapshot);
+        return newSnapshot;
+    }
 
     /// <summary>
     /// Represents a reference-counted snapshot of the stack.
@@ -56,14 +72,24 @@ public class PooledStack<T>
     /// </summary>
     public class Snapshot
     {
-        private Node? _root;
-        private bool _released;
+        internal Node? _root;
+        internal bool _released;
+        private int _refCount;
 
         internal Snapshot(Node? root)
         {
             _root = root;
+            _refCount = 1;
             if (_root is not null)
                 _root.AddRef();
+        }
+
+        /// <summary>
+        /// Increment reference count for shared snapshot usage.
+        /// </summary>
+        internal void AddRef()
+        {
+            Interlocked.Increment(ref _refCount);
         }
 
         /// <summary>
@@ -90,11 +116,14 @@ public class PooledStack<T>
             if (_released)
                 return;
 
-            if (_root is not null)
-                _root.Release();
+            if (Interlocked.Decrement(ref _refCount) == 0)
+            {
+                if (_root is not null)
+                    _root.Release();
 
-            _root = null;
-            _released = true;
+                _root = null;
+                _released = true;
+            }
         }
     }
 
@@ -105,6 +134,7 @@ public class PooledStack<T>
     {
         private static readonly ConcurrentBag<WeakReference<Node>> _pool = new();
         private int _refCount;
+        private WeakReference<Snapshot>? _cachedSnapshot;
 
         public T? Value;
         public Node? Next;
@@ -146,6 +176,24 @@ public class PooledStack<T>
         }
 
         /// <summary>
+        /// Get or create cached snapshot for this node.
+        /// </summary>
+        public Snapshot? GetCachedSnapshot()
+        {
+            if (_cachedSnapshot?.TryGetTarget(out var snapshot) == true)
+                return snapshot;
+            return null;
+        }
+
+        /// <summary>
+        /// Cache a snapshot for this node.
+        /// </summary>
+        public void CacheSnapshot(Snapshot snapshot)
+        {
+            _cachedSnapshot = new WeakReference<Snapshot>(snapshot);
+        }
+
+        /// <summary>
         /// Recursively reclaim this node and its successors if they have no other references.
         /// </summary>
         private void Reclaim()
@@ -153,6 +201,7 @@ public class PooledStack<T>
             var next = Next;
             Next = null;
             Value = default;
+            _cachedSnapshot = null;
 
             if (next is not null)
                 next.Release();

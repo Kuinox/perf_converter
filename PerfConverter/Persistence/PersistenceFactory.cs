@@ -24,7 +24,7 @@ public static class PersistenceFactory
 
         // we used to support sqlite but it was way too slow to be useful, due to lack of compression.
 
-        var compressionMethod = CompressionMethod.Snappy;
+        var compressionMethod = CompressionMethod.Gzip; // snappy bugged: https://github.com/aloneguid/parquet-dotnet/issues/393
         if (!string.IsNullOrEmpty(compressionEnv))
         {
             if (Enum.TryParse<CompressionMethod>(compressionEnv, true, out var parsedCompression))
