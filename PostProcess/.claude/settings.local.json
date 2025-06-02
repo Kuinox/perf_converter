@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(dotnet.exe build:*)",
-      "Bash(dotnet.exe run:*)"
+      "Bash(dotnet.exe run:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }

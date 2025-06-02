@@ -1,11 +1,13 @@
-﻿using Parquet;
+﻿using IronCompress;
+using Parquet;
 using Parquet.Data;
 using PerfConverter.Entry;
-using System.Collections;
 using PerfConverter.PerfStructs;
-using Temp.Schema;
-using Temp.Core;
+using System.Collections;
 using System.Diagnostics;
+using System.Reflection;
+using Temp.Core;
+using Temp.Schema;
 
 namespace PostProcess;
 
@@ -61,7 +63,7 @@ class Program
 
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
 
-            int batchSize = 10_000_000;
+            int batchSize = 1_000_000;
             string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
             if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
                 batchSize = parsedBatch;

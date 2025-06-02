@@ -47,12 +47,12 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         if (batch.Count == 0) return;
         if (_ids.Length != batch.Count)
             ResizeArrays(batch.Count);
-        
+
         _flattenedStacks.Clear();
         _repetitionLevels.Clear();
         _definitionLevels.Clear();
         _snapshots.Clear();
-        
+
         int i = 0;
         foreach (var entry in batch)
         {
@@ -75,27 +75,36 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
             _machinePids[i] = entry.MachinePid;
             _vcpus[i] = entry.Vcpu;
             _segmentIds[i] = entry.SegmentId;
-            
+
             // Flatten stack from snapshot and generate levels
             if (entry.StackSnapshot != null)
             {
                 _snapshots.Add(entry.StackSnapshot);
-                var stackValues = entry.StackSnapshot.Values.ToList();
-                if (stackValues.Count > 0)
+                try
                 {
-                    for (int j = 0; j < stackValues.Count; j++)
+
+                    var stackValues = entry.StackSnapshot.Values.ToList();
+                    if (stackValues.Count > 0)
                     {
-                        _flattenedStacks.Add(stackValues[j]);
-                        _repetitionLevels.Add(j == 0 ? 0 : 1);
-                        _definitionLevels.Add(1);
+                        for (int j = 0; j < stackValues.Count; j++)
+                        {
+                            _flattenedStacks.Add(stackValues[j]);
+                            _repetitionLevels.Add(j == 0 ? 0 : 1);
+                            _definitionLevels.Add(1);
+                        }
+                    }
+                    else
+                    {
+                        _flattenedStacks.Add(0);
+                        _repetitionLevels.Add(0);
+                        _definitionLevels.Add(0);
                     }
                 }
-                else
+                catch (Exception e)
                 {
-                    _flattenedStacks.Add(0);
-                    _repetitionLevels.Add(0);
-                    _definitionLevels.Add(0);
+                    var count = entry.StackSnapshot.Values.Count();
                 }
+
             }
             else
             {
@@ -103,7 +112,7 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
                 _repetitionLevels.Add(0);
                 _definitionLevels.Add(0);
             }
-            
+
             i++;
         }
 
@@ -128,7 +137,7 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Vcpu, _vcpus));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceWithStackSchema.SegmentId, _segmentIds));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceWithStackSchema.Stack, _flattenedStacks.ToArray(), _definitionLevels.ToArray(), _repetitionLevels.ToArray()));
-        
+
         // Release PooledStack snapshots
         foreach (var snapshot in _snapshots)
         {
