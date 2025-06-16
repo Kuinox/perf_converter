@@ -12,11 +12,6 @@ public unsafe class PerfDlFilter
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
     static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    static IStringProcessor _symProcessor = null!;
-    static IStringProcessor _commProcessor = null!;
-    static IStringProcessor _eventProcessor = null!;
-    static IStringProcessor _dsoProcessor = null!;
-    static IAddressProcessor _addressProcessor = null!;
     static ITraceProcessor _traceProcessor = null!;
     static int? _maxTracesToProcess = null;
     static IPersistenceLifetime _persistenceLifetime = null!;
@@ -52,12 +47,7 @@ public unsafe class PerfDlFilter
 
             _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
-            _symProcessor = new StringProcessor(_persistenceLifetime.SymbolBatcher);
-            _commProcessor = new StringProcessor(_persistenceLifetime.CommBatcher);
-            _eventProcessor = new StringProcessor(_persistenceLifetime.EventBatcher);
-            _dsoProcessor = new StringProcessor(_persistenceLifetime.DsoBatcher);
-            _addressProcessor = new AddressProcessor(_symProcessor, _commProcessor, _dsoProcessor, _persistenceLifetime.AddressBatcher);
-            _traceProcessor = new TraceProcessor(_eventProcessor, _persistenceLifetime.CreateTraceBatcher);
+            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
 
             return 0;
         }
@@ -82,14 +72,16 @@ public unsafe class PerfDlFilter
                 return -1; // Return negative error code to make perf exit early
             }
 
-            var id = _traceProcessor.FilterEventEarly(sample);
             var fns = get_perf_dlfilter_fns();
-
-            _addressProcessor.ProcessIp(fns, id, sample->pid, ctx);
+            var ip = fns->resolve_ip(ctx);
+            PerfDlfilterAl* addr = null;
             if (sample->addr_correlates_sym != 0)
             {
-                _addressProcessor.ProcessAddress(fns, id, sample->pid, ctx);
+                addr = fns->resolve_addr(ctx);
             }
+            var id = _traceProcessor.QueueData(sample, ip, addr);
+
+           
         }
         catch (Exception ex)
         {

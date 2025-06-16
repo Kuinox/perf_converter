@@ -2,8 +2,6 @@
 
 public struct AddressEntry
 {
-    public ulong Id;
-    public ulong TraceId;
     public ulong Address;
     public uint Pid;
     public bool IsIp;

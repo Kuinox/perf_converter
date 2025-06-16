@@ -11,25 +11,6 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
 
-    ulong[] _ids = []!;
-    ulong[] _perfIds = []!;
-    uint[] _pids = []!;
-    uint[] _tids = []!;
-    ulong[] _times = []!;
-    uint[] _cpus = []!;
-    uint[] _flags = []!;
-    ulong[] _ips = []!;
-    ulong[] _addrs = []!;
-    ulong[] _periods = []!;
-    ulong[] _insnCnts = []!;
-    ulong[] _cycCnts = []!;
-    ulong[] _weights = []!;
-    byte[] _cpumodes = []!;
-    byte[] _addrCorrelates = []!;
-    ulong[] _eventIds = []!;
-    uint[] _machinePids = []!;
-    uint[] _vcpus = []!;
-    int[] _segmentIds = []!;
     List<ulong> _flattenedStacks = new();
     List<int> _repetitionLevels = new();
     List<int> _definitionLevels = new();
@@ -117,6 +98,8 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         }
 
         using var groupWriter = _writer.CreateRowGroup();
+
+
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Id, _ids));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.PerfId, _perfIds));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Pid, _pids));
@@ -132,7 +115,7 @@ public class ParquetTraceWithStackPersistence : IBatchPersistence<TraceWithStack
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Weight, _weights));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Cpumode, _cpumodes));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.AddrCorrelatesSym, _addrCorrelates));
-        await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.EventId, _eventIds));
+        await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Event, _eventIds));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.MachinePid, _machinePids));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceSampleSchema.Vcpu, _vcpus));
         await groupWriter.WriteColumnAsync(new DataColumn(TraceWithStackSchema.SegmentId, _segmentIds));

@@ -1,10 +1,12 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using Parquet;
+﻿using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
-using Temp.Schema;
+using System.Diagnostics.CodeAnalysis;
+using System.Net;
+using System.Security.Cryptography;
 using Temp.Core;
+using Temp.Schema;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 
@@ -12,107 +14,73 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
 {
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
-
-    ulong[] _ids;
-    ulong[] _perfIds;
-    uint[] _pids;
-    uint[] _tids;
-    ulong[] _times;
-    uint[] _cpus;
-    uint[] _flags;
-    ulong[] _ips;
-    ulong[] _addrs;
-    ulong[] _periods;
-    ulong[] _insnCnts;
-    ulong[] _cycCnts;
-    ulong[] _weights;
-    byte[] _cpumodes;
-    byte[] _addrCorrelatesSyms;
-    ulong[] _eventIds;
-    uint[] _machinePids;
-    uint[] _vcpus;
-
-    ParquetTracePersistence(ParquetWriter writer, FileStream fileStream)
+    readonly TraceSampleSchema _schema;
+    ParquetTracePersistence(TraceSampleSchema schema, ParquetWriter writer, FileStream fileStream)
     {
         _writer = writer;
         _fileStream = fileStream;
-        ResizeArrays(0);
+        _schema = schema;
     }
 
+    int _prevSize;
     public async Task PersistAsync(IReadOnlyCollection<TraceSampleEntry> batch)
     {
         if (batch.Count == 0) return;
 
-        int count = batch.Count;
-
-        if (count != _ids.Length)
+        if (batch.Count != _prevSize)
         {
-            ResizeArrays(count);
+            _prevSize = batch.Count;
+            _schema.Resize(batch.Count);
         }
 
         int i = 0;
         foreach (var entry in batch)
         {
-            _ids[i] = entry.Id;
-            _perfIds[i] = entry.PerfId;
-            _pids[i] = entry.Pid;
-            _tids[i] = entry.Tid;
-            _times[i] = entry.Time;
-            _flags[i] = (uint)entry.Flags;
-            _cpus[i] = entry.Cpu;
-            _ips[i] = entry.Ip;
-            _addrs[i] = entry.Addr;
-            _periods[i] = entry.Period;
-            _insnCnts[i] = entry.InsnCnt;
-            _cycCnts[i] = entry.CycCnt;
-            _weights[i] = entry.Weight;
-            _cpumodes[i] = entry.Cpumode;
-            _addrCorrelatesSyms[i] = entry.AddrCorrelatesSym;
-            _eventIds[i] = entry.EventId;
-            _machinePids[i] = entry.MachinePid;
-            _vcpus[i] = entry.Vcpu;
+            _schema.Id.Buffer[i] = entry.Id;
+            _schema.PerfId.Buffer[i] = entry.PerfId;
+            _schema.Pid.Buffer[i] = entry.Pid;
+            _schema.Tid.Buffer[i] = entry.Tid;
+            _schema.Time.Buffer[i] = entry.Time;
+            _schema.Cpu.Buffer[i] = entry.Cpu;
+            _schema.Flags.Buffer[i] = (uint)entry.Flags;
+            _schema.Ip.Buffer[i] = entry.IpAddress;
+            _schema.Addr.Buffer[i] = entry.AddressAddress;
+            _schema.Period.Buffer[i] = entry.Period;
+            _schema.InsnCnt.Buffer[i] = entry.InsnCnt;
+            _schema.CycCnt.Buffer[i] = entry.CycCnt;
+            _schema.Weight.Buffer[i] = entry.Weight;
+            _schema.Cpumode.Buffer[i] = entry.Cpumode;
+            _schema.AddrCorrelatesSym.Buffer[i] = entry.AddrCorrelatesSym;
+            _schema.Event.Buffer[i] = entry.Event;
+            _schema.MachinePid.Buffer[i] = entry.MachinePid;
+            _schema.Vcpu.Buffer[i] = entry.Vcpu;
+            _schema.IpSymoff.Buffer[i] = entry.IpSymoff;
+            _schema.IpSym.Buffer[i] = entry.IpSym;
+            _schema.IpSymStart.Buffer[i] = entry.IpSymStart;
+            _schema.IpSymEnd.Buffer[i] = entry.IpSymEnd;
+            _schema.IpDso.Buffer[i] = entry.IpDso;
+            _schema.IpSymBinding.Buffer[i] = entry.IpSymBinding;
+            _schema.IpIs64Bit.Buffer[i] = entry.IpIs64Bit;
+            _schema.IpIsKernelIp.Buffer[i] = entry.IpIsKernelIp;
+            _schema.IpBuildId.Buffer[i] = entry.IpBuildId;
+            _schema.IpFiltered.Buffer[i] = entry.IpFiltered;
+            _schema.IpComm.Buffer[i] = entry.IpComm;
+            _schema.HaveAddress.Buffer[i] = entry.HaveAddress;
+            _schema.AddressSymoff.Buffer[i] = entry.AddressSymoff;
+            _schema.AddressSym.Buffer[i] = entry.AddressSym;
+            _schema.AddressSymStart.Buffer[i] = entry.AddressSymStart;
+            _schema.AddressSymEnd.Buffer[i] = entry.AddressSymEnd;
+            _schema.AddressDso.Buffer[i] = entry.AddressDso;
+            _schema.AddressSymBinding.Buffer[i] = entry.AddressSymBinding;
+            _schema.AddressIs64Bit.Buffer[i] = entry.AddressIs64Bit;
+            _schema.AddressIsKernelIp.Buffer[i] = entry.AddressIsKernelIp;
+            _schema.AddressBuildId.Buffer[i] = entry.AddressBuildId;
+            _schema.AddressFiltered.Buffer[i] = entry.AddressFiltered;
+            _schema.AddressComm.Buffer[i] = entry.AddressComm;
+
             i++;
         }
-
-        var idColumn = new DataColumn(TraceSampleSchema.Id, _ids);
-        var perfIdColumn = new DataColumn(TraceSampleSchema.PerfId, _perfIds);
-        var pidColumn = new DataColumn(TraceSampleSchema.Pid, _pids);
-        var tidColumn = new DataColumn(TraceSampleSchema.Tid, _tids);
-        var timeColumn = new DataColumn(TraceSampleSchema.Time, _times);
-        var cpuColumn = new DataColumn(TraceSampleSchema.Cpu, _cpus);
-        var flagsColumn = new DataColumn(TraceSampleSchema.Flags, _flags);
-        var ipColumn = new DataColumn(TraceSampleSchema.Ip, _ips);
-        var addrColumn = new DataColumn(TraceSampleSchema.Addr, _addrs);
-        var periodColumn = new DataColumn(TraceSampleSchema.Period, _periods);
-        var insnCntColumn = new DataColumn(TraceSampleSchema.InsnCnt, _insnCnts);
-        var cycCntColumn = new DataColumn(TraceSampleSchema.CycCnt, _cycCnts);
-        var weightColumn = new DataColumn(TraceSampleSchema.Weight, _weights);
-        var cpumodeColumn = new DataColumn(TraceSampleSchema.Cpumode, _cpumodes);
-        var addrCorrelatesSymColumn = new DataColumn(TraceSampleSchema.AddrCorrelatesSym, _addrCorrelatesSyms);
-        var eventIdColumn = new DataColumn(TraceSampleSchema.EventId, _eventIds);
-        var machinePidColumn = new DataColumn(TraceSampleSchema.MachinePid, _machinePids);
-        var vcpuColumn = new DataColumn(TraceSampleSchema.Vcpu, _vcpus);
-
-        using var groupWriter = _writer.CreateRowGroup();
-
-        await groupWriter.WriteColumnAsync(idColumn);
-        await groupWriter.WriteColumnAsync(perfIdColumn);
-        await groupWriter.WriteColumnAsync(pidColumn);
-        await groupWriter.WriteColumnAsync(tidColumn);
-        await groupWriter.WriteColumnAsync(timeColumn);
-        await groupWriter.WriteColumnAsync(cpuColumn);
-        await groupWriter.WriteColumnAsync(flagsColumn);
-        await groupWriter.WriteColumnAsync(ipColumn);
-        await groupWriter.WriteColumnAsync(addrColumn);
-        await groupWriter.WriteColumnAsync(periodColumn);
-        await groupWriter.WriteColumnAsync(insnCntColumn);
-        await groupWriter.WriteColumnAsync(cycCntColumn);
-        await groupWriter.WriteColumnAsync(weightColumn);
-        await groupWriter.WriteColumnAsync(cpumodeColumn);
-        await groupWriter.WriteColumnAsync(addrCorrelatesSymColumn);
-        await groupWriter.WriteColumnAsync(eventIdColumn);
-        await groupWriter.WriteColumnAsync(machinePidColumn);
-        await groupWriter.WriteColumnAsync(vcpuColumn);
+        await _schema.Writer(_writer);
     }
 
     public async ValueTask DisposeAsync()
@@ -121,58 +89,16 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         await _fileStream.DisposeAsync();
     }
 
-    [MemberNotNull(
-        nameof(_ids),
-        nameof(_perfIds),
-        nameof(_pids),
-        nameof(_tids),
-        nameof(_times),
-        nameof(_flags),
-        nameof(_cpus),
-        nameof(_ips),
-        nameof(_addrs),
-        nameof(_periods),
-        nameof(_insnCnts),
-        nameof(_cycCnts),
-        nameof(_weights),
-        nameof(_cpumodes),
-        nameof(_addrCorrelatesSyms),
-        nameof(_eventIds),
-        nameof(_machinePids),
-        nameof(_vcpus))]
-    void ResizeArrays(int newSize)
-    {
-        _ids = new ulong[newSize];
-        _perfIds = new ulong[newSize];
-        _pids = new uint[newSize];
-        _tids = new uint[newSize];
-        _times = new ulong[newSize];
-        _cpus = new uint[newSize];
-        _flags = new uint[newSize];
-        _ips = new ulong[newSize];
-        _addrs = new ulong[newSize];
-        _periods = new ulong[newSize];
-        _insnCnts = new ulong[newSize];
-        _cycCnts = new ulong[newSize];
-        _weights = new ulong[newSize];
-        _cpumodes = new byte[newSize];
-        _addrCorrelatesSyms = new byte[newSize];
-        _eventIds = new ulong[newSize];
-        _machinePids = new uint[newSize];
-        _vcpus = new uint[newSize];
-    }
-
     public static async Task<IBatchPersistence<TraceSampleEntry>> Create(string basePath, CompressionMethod compressionMethod)
     {
+        var schema = new TraceSampleSchema();
         Directory.CreateDirectory(basePath);
         var filePath = Path.Combine(basePath, "tracesamples.parquet");
 
-        var schema = TraceSampleSchema.Schema;
-
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = await ParquetWriter.CreateAsync(schema, fileStream);
+        var writer = await ParquetWriter.CreateAsync(schema.Schema, fileStream);
         writer.CompressionMethod = compressionMethod;
 
-        return new ParquetTracePersistence(writer, fileStream);
+        return new ParquetTracePersistence(schema, writer, fileStream);
     }
 }

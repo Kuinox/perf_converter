@@ -7,21 +7,10 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(
-    Batcher<StringEntry> symbolBatcher,
-    Batcher<StringEntry> commBatcher,
-    Batcher<StringEntry> eventBatcher,
-    Batcher<StringEntry> dsoBatcher,
-    Batcher<AddressEntry> addressBatcher,
-    Func<string, Batcher<TraceSampleEntry>> traceBatcherFactory) : IPersistenceLifetime
+public class ParquetPersistenceLifetime(Func<string, Batcher<TraceSampleEntry>> traceBatcherFactory) : IPersistenceLifetime
 {
     readonly Dictionary<string, Batcher<TraceSampleEntry>> _tracePersister = [];
 
-    public IPersister<StringEntry> SymbolBatcher => symbolBatcher;
-    public IPersister<StringEntry> CommBatcher => commBatcher;
-    public IPersister<StringEntry> EventBatcher => eventBatcher;
-    public IPersister<StringEntry> DsoBatcher => dsoBatcher;
-    public IPersister<AddressEntry> AddressBatcher => addressBatcher;
     public IPersister<TraceSampleEntry> CreateTraceBatcher(string key)
     {
         ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_tracePersister, key, out _);
@@ -35,10 +24,5 @@ public class ParquetPersistenceLifetime(
         {
             await entry.DisposeAsync();
         }
-        await eventBatcher.DisposeAsync();
-        await commBatcher.DisposeAsync();
-        await addressBatcher.DisposeAsync();
-        await symbolBatcher.DisposeAsync();
-        await dsoBatcher.DisposeAsync();
     }
 }

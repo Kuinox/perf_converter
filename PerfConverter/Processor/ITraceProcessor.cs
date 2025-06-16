@@ -4,5 +4,5 @@ namespace PerfConverter.Processor;
 
 public interface ITraceProcessor
 {
-    unsafe ulong FilterEventEarly(PerfDlFilterSample* sample);
+    unsafe ulong QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address);
 }

@@ -117,6 +117,7 @@ class Program
                 }
                 
                 batcher.Persist(entry);
+                
 
                 processed++;
                 int percent = (int)(processed * 100 / totalTraces);
@@ -164,7 +165,7 @@ class Program
             var weightColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Weight);
             var cpumodeColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Cpumode);
             var addrCorrelatesSymColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.AddrCorrelatesSym);
-            var eventColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.EventId);
+            var eventColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Event);
             var machinePidColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.MachinePid);
             var vcpuColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Vcpu);
 
