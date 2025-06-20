@@ -3,6 +3,7 @@ using Parquet;
 using Parquet.Data;
 using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
+using PerfConverter.Persistence.ParquetDotNet;
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;
@@ -83,7 +84,7 @@ class Program
             
             // Create initial persistence and batcher
             var outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
-            var persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
+            var persistence = await ParquetTracePersistence.Create(outputFile, compressionMethod);
             var batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
             
             await foreach (var trace in ReadAllTracesAsync(traceReader))

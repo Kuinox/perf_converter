@@ -1,7 +1,5 @@
 using Parquet;
 using Parquet.Schema;
-using System.Net;
-using System.Security.Cryptography;
 
 namespace Temp.Schema;
 
