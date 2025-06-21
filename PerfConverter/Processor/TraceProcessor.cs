@@ -20,7 +20,7 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persiste
         
         var eventString = Marshal.PtrToStringUTF8(sample->@event);
         var sym = Marshal.PtrToStringUTF8(ip->sym);
-        var dso = Marshal.PtrToStringUTF8(address->dso);
+        var dso = Marshal.PtrToStringUTF8(ip->dso);
         var ipBuildId = new Span<byte>(ip->buildid, ip->buildid_size).ToArray();
         var ipComm = Marshal.PtrToStringUTF8(ip->comm);
 

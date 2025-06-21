@@ -19,7 +19,7 @@ class Program
     {
         string basePath = args.Length > 0 ? args[0] : @"C:\Users\Kuinox\Documents\parquet_output";
         string outputPath = args.Length > 1 ? args[1] : Path.Combine(basePath, "processed");
-
+        Directory.Delete(outputPath, true);
         if (OperatingSystem.IsLinux() && basePath.StartsWith("C:"))
         {
             basePath = "/mnt/c" + basePath.Substring(2).Replace('\\', '/');
@@ -122,6 +122,7 @@ class Program
             }
 
             await batcher.DisposeAsync();
+            await Task.WhenAll(backgroundSaves);
             Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
         }
         catch (Exception ex)
