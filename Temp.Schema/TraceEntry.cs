@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace PerfConverter.Entry;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct TraceSampleEntry
+public struct TraceEntry
 {
     public ulong Id;
     public ulong PerfId;

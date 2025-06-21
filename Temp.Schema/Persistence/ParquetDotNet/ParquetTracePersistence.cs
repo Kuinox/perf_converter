@@ -10,7 +10,7 @@ using Temp.Schema;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 
-public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
+public class ParquetTracePersistence : IBatchPersistence<TraceEntry>
 {
     readonly ParquetWriter _writer;
     readonly FileStream _fileStream;
@@ -23,7 +23,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
     }
 
     int _prevSize;
-    public async Task PersistAsync(IReadOnlyCollection<TraceSampleEntry> batch)
+    public async Task PersistAsync(IReadOnlyCollection<TraceEntry> batch)
     {
         if (batch.Count == 0) return;
 
@@ -89,7 +89,7 @@ public class ParquetTracePersistence : IBatchPersistence<TraceSampleEntry>
         await _fileStream.DisposeAsync();
     }
 
-    public static async Task<IBatchPersistence<TraceSampleEntry>> Create(string basePath, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistence<TraceEntry>> Create(string basePath, CompressionMethod compressionMethod)
     {
         var schema = new TraceSampleSchema();
         Directory.CreateDirectory(basePath);

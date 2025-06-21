@@ -6,6 +6,7 @@ using PerfConverter.PerfStructs;
 using PerfConverter.Persistence.ParquetDotNet;
 using System.Collections;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Temp.Core;
 using Temp.Schema;
@@ -49,6 +50,8 @@ class Program
     static async Task ProcessAndSplit(string tracesPath, string auxPath, string outputDir)
     {
         Console.WriteLine("Processing traces and aux events...");
+        var inputReader = await ParquetReader.CreateAsync(tracesPath);
+        var inputSchema = new TraceSampleSchema();
 
         try
         {
@@ -69,56 +72,45 @@ class Program
             if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
                 batchSize = parsedBatch;
 
-            var compressionMethod = CompressionMethod.Snappy;
-            string? compressEnv = Environment.GetEnvironmentVariable("PARQUET_COMPRESSION");
-            if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
-                compressionMethod = parsedCompress;
-
             long processed = 0;
             int lastPercent = -10;
 
             var tid = uint.MaxValue;
-            List<ulong> drops = null!;
-            SegmentStack? segmentStack = null;
+            Stack<ulong> drops = null!;
             int currentSegmentId = 0;
-            
-            // Create initial persistence and batcher
-            var outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
-            var persistence = await ParquetTracePersistence.Create(outputFile, compressionMethod);
-            var batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
-            
-            await foreach (var trace in ReadAllTracesAsync(traceReader))
-            {
-                if (tid == uint.MaxValue)
-                {
-                    tid = trace.Tid; // Initialize tid on first trace
-                    drops = dropTimes[tid];
-                    segmentStack = new SegmentStack();
-                }
-                if(tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
 
-                var entry = segmentStack!.ProcessTrace(trace, drops);
-                
-                // Check if we've moved to a new segment (drop occurred)
-                if (segmentStack.SegmentId != currentSegmentId)
+            // Create initial persistence and batcher
+            var batcher = await CreateBatcher(outputDir, batchSize, currentSegmentId);
+            var backgroundSaves = new List<Task>();
+            await foreach (var trace in inputSchema.ReadAll(inputReader))
+            {
+                if (tid == uint.MaxValue)  // Initialize tid on first trace
                 {
-                    Console.WriteLine($"Trace cut detected at time {trace.Time}. Moving from segment {currentSegmentId} to {segmentStack.SegmentId}.");
-                    Console.WriteLine($"Disposing batcher for segment {currentSegmentId}...");
-                    
-                    // Dispose the current batcher (which also disposes persistence)
-                    await batcher.DisposeAsync();
-                    Console.WriteLine($"Batcher disposed for segment {currentSegmentId}");
-                    
-                    // Create new persistence and batcher for the new segment
-                    currentSegmentId = segmentStack.SegmentId;
-                    outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
-                    Console.WriteLine($"Creating new batcher for segment {currentSegmentId}...");
-                    persistence = await ParquetTraceWithStackPersistence.Create(outputFile, compressionMethod);
-                    batcher = Batcher<TraceWithStackEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
+                    tid = trace.Tid;
+                    drops = new(dropTimes[tid].OrderDescending());
                 }
-                
-                batcher.Persist(entry);
-                
+                if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
+                var smallestTime = drops.Peek();
+
+
+                if (smallestTime > trace.Time)
+                {
+                    drops.Pop();
+                    var savingSegmentId = currentSegmentId;
+                    currentSegmentId++;
+                    Console.WriteLine($"Trace cut detected at time {trace.Time}.");
+                    Console.WriteLine($"Saving segment {savingSegmentId} in background...");
+                    var task = batcher.DisposeAsync().AsTask().ContinueWith(t =>
+                    {
+                        Console.WriteLine($"Done saving segment {savingSegmentId}");
+                    });
+                    backgroundSaves.Add(task);
+
+                    batcher = await CreateBatcher(outputDir, batchSize, currentSegmentId);
+                }
+
+                batcher.Persist(trace);
+
 
                 processed++;
                 int percent = (int)(processed * 100 / totalTraces);
@@ -139,143 +131,30 @@ class Program
         }
     }
 
-    /// <summary>
-    /// Read all trace samples from the parquet file.
-    /// </summary>
-    /// <param name="reader">The parquet reader.</param>
-    /// <returns>An async enumerable of trace sample entries.</returns>
-    public static async IAsyncEnumerable<TraceSampleEntry> ReadAllTracesAsync(ParquetReader reader)
+    static bool _init;
+    public static CompressionMethod CompressionMethod
     {
-        for (int i = 0; i < reader.RowGroupCount; i++)
+        get
         {
-            using var rowGroup = reader.OpenRowGroupReader(i);
-
-            // Use the schema fields from TraceSampleSchema
-            var idColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Id);
-            var perfIdColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.PerfId);
-            var pidColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Pid);
-            var tidColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Tid);
-            var timeColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Time);
-            var cpuColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Cpu);
-            var flagsColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Flags);
-            var ipColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Ip);
-            var addrColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Addr);
-            var periodColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Period);
-            var insnCntColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.InsnCnt);
-            var cycCntColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.CycCnt);
-            var weightColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Weight);
-            var cpumodeColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Cpumode);
-            var addrCorrelatesSymColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.AddrCorrelatesSym);
-            var eventColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Event);
-            var machinePidColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.MachinePid);
-            var vcpuColumn = await rowGroup.ReadColumnAsync(TraceSampleSchema.Vcpu);
-
-            for (int j = 0; j < rowGroup.RowCount; j++)
-            {
-                yield return new TraceSampleEntry
-                {
-                    Id = (ulong)((IList)idColumn.Data)[j]!,
-                    PerfId = (ulong)((IList)perfIdColumn.Data)[j]!,
-                    Pid = (uint)((IList)pidColumn.Data)[j]!,
-                    Tid = (uint)((IList)tidColumn.Data)[j]!,
-                    Time = (ulong)((IList)timeColumn.Data)[j]!,
-                    Cpu = (uint)((IList)cpuColumn.Data)[j]!,
-                    Flags = (DLFilterFlag)((IList)flagsColumn.Data)[j]!,
-                    Ip = (ulong)((IList)ipColumn.Data)[j]!,
-                    Addr = (ulong)((IList)addrColumn.Data)[j]!,
-                    Period = (ulong)((IList)periodColumn.Data)[j]!,
-                    InsnCnt = (ulong)((IList)insnCntColumn.Data)[j]!,
-                    CycCnt = (ulong)((IList)cycCntColumn.Data)[j]!,
-                    Weight = (ulong)((IList)weightColumn.Data)[j]!,
-                    Cpumode = (byte)((IList)cpumodeColumn.Data)[j]!,
-                    AddrCorrelatesSym = (byte)((IList)addrCorrelatesSymColumn.Data)[j]!,
-                    EventId = (ulong)((IList)eventColumn.Data)[j]!,
-                    MachinePid = (uint)((IList)machinePidColumn.Data)[j]!,
-                    Vcpu = (uint)((IList)vcpuColumn.Data)[j]!
-                };
-            }
+            if (_init) return field;
+            _init = true;
+            field = CompressionMethod.Snappy;
+            string? compressEnv = Environment.GetEnvironmentVariable("PARQUET_COMPRESSION");
+            if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
+                field = parsedCompress;
+            return field;
         }
     }
 
-    /// <summary>
-    /// Read all address entries from the parquet file.
-    /// </summary>
-    /// <param name="reader">The parquet reader.</param>
-    /// <returns>An async enumerable of address entries.</returns>
-    public static async IAsyncEnumerable<AddressEntry> ReadAllAddressesAsync(ParquetReader reader)
+    private static async Task<Batcher<TraceEntry>> CreateBatcher(string outputDir, int batchSize, int currentSegmentId)
     {
-        for (int i = 0; i < reader.RowGroupCount; i++)
-        {
-            using var rowGroup = reader.OpenRowGroupReader(i);
-
-            // Use the schema fields from AddressSchema
-            var idColumn = await rowGroup.ReadColumnAsync(AddressSchema.Id);
-            var traceIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.TraceId);
-            var addressColumn = await rowGroup.ReadColumnAsync(AddressSchema.Address);
-            var pidColumn = await rowGroup.ReadColumnAsync(AddressSchema.Pid);
-            var isIpColumn = await rowGroup.ReadColumnAsync(AddressSchema.IsIp);
-            var sizeColumn = await rowGroup.ReadColumnAsync(AddressSchema.Size);
-            var symoffColumn = await rowGroup.ReadColumnAsync(AddressSchema.Symoff);
-            var symStrIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymStrId);
-            var symStartColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymStart);
-            var symEndColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymEnd);
-            var dsoColumn = await rowGroup.ReadColumnAsync(AddressSchema.DsoStrId);
-            var symBindingColumn = await rowGroup.ReadColumnAsync(AddressSchema.SymBinding);
-            var is64BitColumn = await rowGroup.ReadColumnAsync(AddressSchema.Is64Bit);
-            var isKernelIpColumn = await rowGroup.ReadColumnAsync(AddressSchema.IsKernelIp);
-            //var buildIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.BuildId);
-            var filteredColumn = await rowGroup.ReadColumnAsync(AddressSchema.Filtered);
-            var commStrIdColumn = await rowGroup.ReadColumnAsync(AddressSchema.CommStrId);
-            var privColumn = await rowGroup.ReadColumnAsync(AddressSchema.Priv);
-
-            // Yield each row
-            for (int j = 0; j < rowGroup.RowCount; j++)
-            {
-                yield return new AddressEntry
-                {
-                    Id = (ulong)((IList)idColumn.Data)[j]!,
-                    TraceId = (ulong)((IList)traceIdColumn.Data)[j]!,
-                    Address = (ulong)((IList)addressColumn.Data)[j]!,
-                    Pid = (uint)((IList)pidColumn.Data)[j]!,
-                    IsIp = (bool)((IList)isIpColumn.Data)[j]!,
-                    Size = (uint)((IList)sizeColumn.Data)[j]!,
-                    Symoff = (uint)((IList)symoffColumn.Data)[j]!,
-                    SymStrId = (ulong)((IList)symStrIdColumn.Data)[j]!,
-                    SymStart = (ulong)((IList)symStartColumn.Data)[j]!,
-                    SymEnd = (ulong)((IList)symEndColumn.Data)[j]!,
-                    DsoStrId = (ulong)((IList)dsoColumn.Data)[j]!,
-                    SymBinding = (byte)((IList)symBindingColumn.Data)[j]!,
-                    Is64Bit = (byte)((IList)is64BitColumn.Data)[j]!,
-                    IsKernelIp = (byte)((IList)isKernelIpColumn.Data)[j]!,
-                    //BuildId = (byte[])((IList)buildIdColumn.Data)[j]!,
-                    Filtered = (byte)((IList)filteredColumn.Data)[j]!,
-                    CommStrId = (ulong)((IList)commStrIdColumn.Data)[j]!,
-                    Priv = (ulong)((IList)privColumn.Data)[j]!
-                };
-            }
-        }
+        var outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
+        var persistence = await ParquetTracePersistence.Create(outputFile, CompressionMethod);
+        var batcher = Batcher<TraceEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
+        return batcher;
     }
 
-    /// <summary>
-    /// Read all dictionary entries from a parquet file and return them as a dictionary.
-    /// </summary>
-    /// <param name="reader">The parquet reader.</param>
-    /// <returns>A dictionary mapping string IDs to string values.</returns>
-    public static async Task<Dictionary<ulong, string>> ReadDictAsync(ParquetReader reader)
-    {
-        var dict = new Dictionary<ulong, string>();
-        for (int i = 0; i < reader.RowGroupCount; i++)
-        {
-            using var rowGroup = reader.OpenRowGroupReader(i);
-            var idColumn = await rowGroup.ReadColumnAsync(DictionarySchema.Id);
-            var symbolColumn = await rowGroup.ReadColumnAsync(DictionarySchema.Symbol);
-            for (int j = 0; j < rowGroup.RowCount; j++)
-            {
-                dict.Add((ulong)((IList)idColumn.Data)[j]!, (string)((IList)symbolColumn.Data)[j]!);
-            }
-        }
-        return dict;
-    }
+
     public static async Task<Dictionary<uint, List<ulong>>> ReadAuxDataLossAsync(string auxPath)
     {
         var dict = new Dictionary<uint, List<ulong>>();

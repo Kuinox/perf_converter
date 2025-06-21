@@ -5,10 +5,10 @@ using Temp.Core;
 
 namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> persistenceFactory) : ITraceProcessor
+public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persistenceFactory) : ITraceProcessor
 {
     ulong _totalSamples = 0;
-    readonly Dictionary<string, IPersister<TraceSampleEntry>> _persistence = [];
+    readonly Dictionary<string, IPersister<TraceEntry>> _persistence = [];
     readonly Dictionary<(int, int), string> _keys = [];
     public ulong QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
@@ -24,7 +24,7 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceSampleEntry>> pe
         var ipBuildId = new Span<byte>(ip->buildid, ip->buildid_size).ToArray();
         var ipComm = Marshal.PtrToStringUTF8(ip->comm);
 
-        var entry = new TraceSampleEntry
+        var entry = new TraceEntry
         {
             Id = id,
             PerfId = sample->id,

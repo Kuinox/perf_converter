@@ -7,5 +7,5 @@ namespace PerfConverter.Persistence;
 /// </summary>
 public interface IPersistenceLifetime : IAsyncDisposable
 {
-    IPersister<Entry.TraceSampleEntry> CreateTraceBatcher(string key);
+    IPersister<Entry.TraceEntry> CreateTraceBatcher(string key);
 }
