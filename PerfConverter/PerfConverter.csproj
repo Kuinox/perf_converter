@@ -41,7 +41,6 @@
 		<PackageReference Include="Dapper.AOT" Version="1.0.48" />
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.1" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.3" />
-		<PackageReference Include="Parquet.Net" Version="5.1.1" />
 	</ItemGroup>
 
 	<ItemGroup>

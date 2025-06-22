@@ -67,7 +67,7 @@ class Program
 
             using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
 
-            int batchSize = 1_000_000;
+            int batchSize = 2_000_000;
             string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
             if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
                 batchSize = parsedBatch;
@@ -90,10 +90,10 @@ class Program
                     drops = new(dropTimes[tid].OrderDescending());
                 }
                 if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
-                var smallestTime = drops.Peek();
+                var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
 
 
-                if (smallestTime > trace.Time)
+                if (smallestTime < trace.Time)
                 {
                     drops.Pop();
                     var savingSegmentId = currentSegmentId;
