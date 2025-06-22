@@ -8,6 +8,52 @@ namespace Temp.Schema;
 
 public class TraceSampleSchema
 {
+    public TraceSampleSchema()
+    {
+        Schema = new ParquetSchema(
+            Id.Field,
+            PerfId.Field,
+            Pid.Field,
+            Tid.Field,
+            Time.Field,
+            Cpu.Field,
+            Flags.Field,
+            Ip.Field,
+            Addr.Field,
+            Period.Field,
+            InsnCnt.Field,
+            CycCnt.Field,
+            Weight.Field,
+            Cpumode.Field,
+            AddrCorrelatesSym.Field,
+            Event.Field,
+            MachinePid.Field,
+            Vcpu.Field,
+            IpSymoff.Field,
+            IpSym.Field,
+            IpSymStart.Field,
+            IpSymEnd.Field,
+            IpDso.Field,
+            IpSymBinding.Field,
+            IpIs64Bit.Field,
+            IpIsKernelIp.Field,
+            IpBuildId.Field,
+            IpFiltered.Field,
+            IpComm.Field,
+            HaveAddress.Field,
+            AddressSymoff.Field,
+            AddressSym.Field,
+            AddressSymStart.Field,
+            AddressSymEnd.Field,
+            AddressDso.Field,
+            AddressSymBinding.Field,
+            AddressIs64Bit.Field,
+            AddressIsKernelIp.Field,
+            AddressBuildId.Field,
+            AddressFiltered.Field,
+            AddressComm.Field
+        );
+    }
     public ParquetColumn<ulong> Id { get; } = new("id");
     public ParquetColumn<ulong> PerfId { get; } = new("perfId");
     public ParquetColumn<uint> Pid { get; } = new("pid");
@@ -244,47 +290,5 @@ public class TraceSampleSchema
         AddressComm.Resize(newSize);
     }
 
-    public ParquetSchema Schema => new ParquetSchema(
-        Id.Field,
-        PerfId.Field,
-        Pid.Field,
-        Tid.Field,
-        Time.Field,
-        Cpu.Field,
-        Flags.Field,
-        Ip.Field,
-        Addr.Field,
-        Period.Field,
-        InsnCnt.Field,
-        CycCnt.Field,
-        Weight.Field,
-        Cpumode.Field,
-        AddrCorrelatesSym.Field,
-        Event.Field,
-        MachinePid.Field,
-        Vcpu.Field,
-        IpSymoff.Field,
-        IpSym.Field,
-        IpSymStart.Field,
-        IpSymEnd.Field,
-        IpDso.Field,
-        IpSymBinding.Field,
-        IpIs64Bit.Field,
-        IpIsKernelIp.Field,
-        IpBuildId.Field,
-        IpFiltered.Field,
-        IpComm.Field,
-        HaveAddress.Field,
-        AddressSymoff.Field,
-        AddressSym.Field,
-        AddressSymStart.Field,
-        AddressSymEnd.Field,
-        AddressDso.Field,
-        AddressSymBinding.Field,
-        AddressIs64Bit.Field,
-        AddressIsKernelIp.Field,
-        AddressBuildId.Field,
-        AddressFiltered.Field,
-        AddressComm.Field
-    );
+    public ParquetSchema Schema { get; }
 }
