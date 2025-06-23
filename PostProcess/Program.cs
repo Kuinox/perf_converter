@@ -96,46 +96,47 @@ class Program
 
     private static async Task ProcessTraceStream(IAsyncEnumerable<TraceEntry> traceStream, IReadOnlyDictionary<uint, IReadOnlyList<ulong>> dropTimes, long totalTraces, string outputDir)
     {
-        long processed = 0;
-        int lastPercent = -10;
+        //long processed = 0;
+        //int lastPercent = -10;
 
-        var tid = uint.MaxValue;
-        Stack<ulong> drops = null!;
-        int currentSegmentId = 0;
+        //var tid = uint.MaxValue;
+        //Stack<ulong> drops = null!;
+        //int currentSegmentId = 0;
 
-        var backgroundSaves = new List<Task>();
-
-
-        await foreach (var trace in traceStream)
-        {
-            if (tid == uint.MaxValue)  // Initialize tid on first trace
-            {
-                tid = trace.Tid;
-            }
-            if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
-            var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
+        //var backgroundSaves = new List<Task>();
 
 
-            if (smallestTime < trace.Time)
-            {
-                drops.Pop();
-                Console.WriteLine($"Trace cut detected at time {trace.Time}.");
-                backgroundSaves.Add(currentTraceSegment.DisposeAsync().AsTask());
-
-                currentSegmentId++;
-                currentTraceSegment = await TraceSegment.CreateAsync(outputDir, currentSegmentId);
-            }
-
-            currentTraceSegment.Process(trace);
+        //await foreach (var trace in traceStream)
+        //{
+        //    if (tid == uint.MaxValue)  // Initialize tid on first trace
+        //    {
+        //        tid = trace.Tid;
+        //    }
+        //    if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
+        //    var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
 
 
-            processed++;
-            UpdateProgress(processed, totalTraces, ref lastPercent);
-        }
+        //    if (smallestTime < trace.Time)
+        //    {
+        //        drops.Pop();
+        //        Console.WriteLine($"Trace cut detected at time {trace.Time}.");
+        //        backgroundSaves.Add(currentTraceSegment.DisposeAsync().AsTask());
 
-        await currentTraceSegment.DisposeAsync();
-        await Task.WhenAll(backgroundSaves);
-        Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
+        //        currentSegmentId++;
+        //        currentTraceSegment = await TraceSegment.CreateAsync(outputDir, currentSegmentId);
+        //    }
+
+        //    currentTraceSegment.Process(trace);
+
+
+        //    processed++;
+        //    UpdateProgress(processed, totalTraces, ref lastPercent);
+        //}
+
+        //await currentTraceSegment.DisposeAsync();
+        //await Task.WhenAll(backgroundSaves);
+        //Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
+
     }
 
     private static void UpdateProgress(long processed, long totalTraces, ref int lastPercent)
