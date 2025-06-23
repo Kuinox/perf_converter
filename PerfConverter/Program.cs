@@ -26,6 +26,7 @@ public unsafe class PerfDlFilter
     {
         try
         {
+            
             var fns = get_perf_dlfilter_fns();
             int argCount;
             var argsPtr = fns->args(data, &argCount);
@@ -35,7 +36,7 @@ public unsafe class PerfDlFilter
                 args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
             }
             Console.WriteLine("args count:" + argCount);
-            foreach (var arg in args)
+            foreach (var arg in Environment.GetCommandLineArgs())
             {
                 Console.Error.WriteLine(arg);
                 Console.WriteLine(arg);
