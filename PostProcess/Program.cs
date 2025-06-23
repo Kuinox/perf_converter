@@ -1,6 +1,7 @@
 ﻿using IronCompress;
 using Parquet;
 using Parquet.Data;
+using Parquet.Schema;
 using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
 using PerfConverter.Persistence.ParquetDotNet;
@@ -50,22 +51,46 @@ class Program
     static async Task ProcessAndSplit(string tracesPath, string auxPath, string outputDir)
     {
         Console.WriteLine("Processing traces and aux events...");
-        var inputReader = await ParquetReader.CreateAsync(tracesPath);
+        var reader = await ParquetReader.CreateAsync(tracesPath);
         var inputSchema = new TraceSampleSchema();
 
         try
         {
             var dropTimes = await AuxDataReader.ReadAuxDataLossAsync(auxPath);
 
-            long totalTraces = await GetTotalTraceCount(tracesPath);
+            var totalTraces = GetTotalTraceCount(reader);
+            var tid = await GetTraceTID(reader, inputSchema);
+            var drops = dropTimes[tid].Order().ToArray();
+            var segments = new List<(ulong, ulong)>();
+            for (var i = 1; i < drops.Length; i++)
+            {
+                segments.Add((drops[i - 1], drops[i]));
+            }
 
-            var traceStream = inputSchema.ReadAll(inputReader);
+            var traceStream = inputSchema.ReadAll(reader);
             await ProcessTraceStream(traceStream, dropTimes, totalTraces, outputDir);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error processing parquet files: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
+        }
+    }
+
+    private static async Task ProcessSegment(string outputDir, int segmentId, ulong start, ulong end, ParquetReader reader, TraceSampleSchema schema, Action<ulong> progress)
+    {
+        var currentTraceSegment = await TraceSegment.CreateAsync(outputDir, segmentId);
+        foreach (var rowGroup in reader.RowGroups)
+        {
+            var stats = rowGroup.GetStatistics(schema.Time.Field)!;
+            var isOverlapping = start <= (ulong)stats.MaxValue! && end >= (ulong)stats.MinValue!;
+            if (!isOverlapping) continue;
+
+            await foreach (var row in schema.ReadRowGroup(rowGroup))
+            {
+                currentTraceSegment.Process(row);
+                progress(row.Time);
+            }
         }
     }
 
@@ -78,14 +103,14 @@ class Program
         Stack<ulong> drops = null!;
         int currentSegmentId = 0;
 
-        var currentTraceSegment = await TraceSegment.CreateAsync(outputDir, currentSegmentId);
         var backgroundSaves = new List<Task>();
+
+
         await foreach (var trace in traceStream)
         {
             if (tid == uint.MaxValue)  // Initialize tid on first trace
             {
                 tid = trace.Tid;
-                drops = new(dropTimes[tid].OrderDescending());
             }
             if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
             var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
@@ -124,15 +149,24 @@ class Program
         }
     }
 
-    private static async Task<long> GetTotalTraceCount(string tracesPath)
+    private static long GetTotalTraceCount(ParquetReader reader)
     {
-        using var traceReaderCount = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
         long totalTraces = 0;
-        for (int i = 0; i < traceReaderCount.RowGroupCount; i++)
+        for (int i = 0; i < reader.RowGroupCount; i++)
         {
-            using var rg = traceReaderCount.OpenRowGroupReader(i);
+            using var rg = reader.OpenRowGroupReader(i);
             totalTraces += rg.RowCount;
         }
         return totalTraces;
+    }
+
+    private static async Task<uint> GetTraceTID(ParquetReader inputReader, TraceSampleSchema inputSchema)
+    {
+
+        using (var rowGroupReader = inputReader.OpenRowGroupReader(0))
+        {
+            var column = await rowGroupReader.ReadColumnAsync(inputSchema.Tid.Field);
+            return column.AsSpan<uint>()[0];
+        }
     }
 }

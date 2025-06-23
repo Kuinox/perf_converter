@@ -8,7 +8,7 @@ public unsafe struct PerfDlfilterFns
 {
     public delegate* unmanaged<void*, PerfDlfilterAl*> resolve_ip;
     public delegate* unmanaged<void*, PerfDlfilterAl*> resolve_addr;
-    public delegate* unmanaged<void*, int*, nint> args;
+    public delegate* unmanaged<void*, int*, char**> args;
     public delegate* unmanaged<void*, ulong, PerfDlfilterAl*, int> resolve_address;
     public delegate* unmanaged<void*, uint*, byte*> insn;
     public delegate* unmanaged<void*, uint*, nint> srcline;

@@ -26,10 +26,24 @@ public unsafe class PerfDlFilter
     {
         try
         {
-        var state = new State
-        {
-            EventCount = 0,
-        };
+            var fns = get_perf_dlfilter_fns();
+            int argCount;
+            var argsPtr = fns->args(data, &argCount);
+            var args = new string[argCount];
+            for (var i = 0; i < argCount; i++)
+            {
+                args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
+            }
+
+            foreach (var arg in args)
+            {
+                Console.Error.WriteLine(arg);
+            }
+
+            var state = new State
+            {
+                EventCount = 0,
+            };
 
             string? maxTracesEnv = Environment.GetEnvironmentVariable("MAX_TRACES_TO_PROCESS");
             if (!string.IsNullOrEmpty(maxTracesEnv) && int.TryParse(maxTracesEnv, out int maxTraces))
@@ -77,7 +91,7 @@ public unsafe class PerfDlFilter
             }
             var id = _traceProcessor.QueueData(sample, ip, addr);
 
-           
+
         }
         catch (Exception ex)
         {
