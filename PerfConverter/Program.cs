@@ -38,8 +38,9 @@ public unsafe class PerfDlFilter
             foreach (var arg in args)
             {
                 Console.Error.WriteLine(arg);
+                Console.WriteLine(arg);
             }
-
+            Environment.FailFast("exit");
             var state = new State
             {
                 EventCount = 0,
