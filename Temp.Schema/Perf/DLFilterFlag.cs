@@ -1,5 +1,6 @@
 ﻿namespace PerfConverter.PerfStructs;
 
+[Flags]
 public enum DLFilterFlag : uint
 {
     PERF_DLFILTER_FLAG_BRANCH = 1 << 0,

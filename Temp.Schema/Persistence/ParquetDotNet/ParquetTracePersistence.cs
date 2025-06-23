@@ -89,11 +89,9 @@ public class ParquetTracePersistence : IBatchPersistence<TraceEntry>
         await _fileStream.DisposeAsync();
     }
 
-    public static async Task<IBatchPersistence<TraceEntry>> Create(string basePath, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistence<TraceEntry>> Create(string filePath, CompressionMethod compressionMethod)
     {
         var schema = new TraceSampleSchema();
-        Directory.CreateDirectory(basePath);
-        var filePath = Path.Combine(basePath, "tracesamples.parquet");
 
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema.Schema, fileStream);

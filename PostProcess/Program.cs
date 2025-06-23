@@ -55,75 +55,12 @@ class Program
 
         try
         {
-            var dropTimes = await ReadAuxDataLossAsync(auxPath);
+            var dropTimes = await AuxDataReader.ReadAuxDataLossAsync(auxPath);
 
-            using var traceReaderCount = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
-            long totalTraces = 0;
-            for (int i = 0; i < traceReaderCount.RowGroupCount; i++)
-            {
-                using var rg = traceReaderCount.OpenRowGroupReader(i);
-                totalTraces += rg.RowCount;
-            }
+            long totalTraces = await GetTotalTraceCount(tracesPath);
 
-            using var traceReader = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
-
-            int batchSize = 2_000_000;
-            string? batchEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
-            if (!string.IsNullOrEmpty(batchEnv) && int.TryParse(batchEnv, out var parsedBatch))
-                batchSize = parsedBatch;
-
-            long processed = 0;
-            int lastPercent = -10;
-
-            var tid = uint.MaxValue;
-            Stack<ulong> drops = null!;
-            int currentSegmentId = 0;
-
-            // Create initial persistence and batcher
-            var batcher = await CreateBatcher(outputDir, batchSize, currentSegmentId);
-            var backgroundSaves = new List<Task>();
-            await foreach (var trace in inputSchema.ReadAll(inputReader))
-            {
-                if (tid == uint.MaxValue)  // Initialize tid on first trace
-                {
-                    tid = trace.Tid;
-                    drops = new(dropTimes[tid].OrderDescending());
-                }
-                if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
-                var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
-
-
-                if (smallestTime < trace.Time)
-                {
-                    drops.Pop();
-                    var savingSegmentId = currentSegmentId;
-                    currentSegmentId++;
-                    Console.WriteLine($"Trace cut detected at time {trace.Time}.");
-                    Console.WriteLine($"Saving segment {savingSegmentId} in background...");
-                    var task = batcher.DisposeAsync().AsTask().ContinueWith(t =>
-                    {
-                        Console.WriteLine($"Done saving segment {savingSegmentId}");
-                    });
-                    backgroundSaves.Add(task);
-
-                    batcher = await CreateBatcher(outputDir, batchSize, currentSegmentId);
-                }
-
-                batcher.Persist(trace);
-
-
-                processed++;
-                int percent = (int)(processed * 100 / totalTraces);
-                if (percent >= lastPercent + 1 || processed == totalTraces)
-                {
-                    Console.WriteLine($"Processed {percent}% ({processed}/{totalTraces})");
-                    lastPercent = percent;
-                }
-            }
-
-            await batcher.DisposeAsync();
-            await Task.WhenAll(backgroundSaves);
-            Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
+            var traceStream = inputSchema.ReadAll(inputReader);
+            await ProcessTraceStream(traceStream, dropTimes, totalTraces, outputDir);
         }
         catch (Exception ex)
         {
@@ -132,58 +69,70 @@ class Program
         }
     }
 
-    static bool _init;
-    public static CompressionMethod CompressionMethod
+    private static async Task ProcessTraceStream(IAsyncEnumerable<TraceEntry> traceStream, IReadOnlyDictionary<uint, IReadOnlyList<ulong>> dropTimes, long totalTraces, string outputDir)
     {
-        get
+        long processed = 0;
+        int lastPercent = -10;
+
+        var tid = uint.MaxValue;
+        Stack<ulong> drops = null!;
+        int currentSegmentId = 0;
+
+        var currentTraceSegment = await TraceSegment.CreateAsync(outputDir, currentSegmentId);
+        var backgroundSaves = new List<Task>();
+        await foreach (var trace in traceStream)
         {
-            if (_init) return field;
-            _init = true;
-            field = CompressionMethod.Snappy;
-            string? compressEnv = Environment.GetEnvironmentVariable("PARQUET_COMPRESSION");
-            if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
-                field = parsedCompress;
-            return field;
-        }
-    }
-
-    private static async Task<Batcher<TraceEntry>> CreateBatcher(string outputDir, int batchSize, int currentSegmentId)
-    {
-        var outputFile = Path.Combine(outputDir, $"traces_with_stack_segment_{currentSegmentId}.parquet");
-        var persistence = await ParquetTracePersistence.Create(outputFile, CompressionMethod);
-        var batcher = Batcher<TraceEntry>.Create(persistence, batchSize, BatchingMode.OnFull);
-        return batcher;
-    }
-
-
-    public static async Task<Dictionary<uint, List<ulong>>> ReadAuxDataLossAsync(string auxPath)
-    {
-        var dict = new Dictionary<uint, List<ulong>>();
-        using var reader = await ParquetReader.CreateAsync(File.OpenRead(auxPath));
-        for (int i = 0; i < reader.RowGroupCount; i++)
-        {
-            using var rowGroup = reader.OpenRowGroupReader(i);
-            var timeColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Time);
-            var tidColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Tid);
-            var flagsColumn = await rowGroup.ReadColumnAsync(AuxDataLostSchema.Flags);
-            for (int j = 0; j < rowGroup.RowCount; j++)
+            if (tid == uint.MaxValue)  // Initialize tid on first trace
             {
-                var flags = (ulong)((IList)flagsColumn.Data)[j]!;
-                if (flags == 0) continue; // only keep drops
-                var tid = (uint)(ulong)((IList)tidColumn.Data)[j]!;
-                var time = (ulong)((IList)timeColumn.Data)[j]!;
-                if (!dict.TryGetValue(tid, out var list))
-                {
-                    list = new List<ulong>();
-                    dict[tid] = list;
-                }
-                list.Add(time);
+                tid = trace.Tid;
+                drops = new(dropTimes[tid].OrderDescending());
             }
+            if (tid != trace.Tid) throw new InvalidDataException($"Trace TID changed from {tid} to {trace.Tid}. This should not happen in a single trace file.");
+            var smallestTime = drops.Count > 0 ? drops.Peek() : ulong.MaxValue;
+
+
+            if (smallestTime < trace.Time)
+            {
+                drops.Pop();
+                Console.WriteLine($"Trace cut detected at time {trace.Time}.");
+                backgroundSaves.Add(currentTraceSegment.DisposeAsync().AsTask());
+
+                currentSegmentId++;
+                currentTraceSegment = await TraceSegment.CreateAsync(outputDir, currentSegmentId);
+            }
+
+            currentTraceSegment.Process(trace);
+
+
+            processed++;
+            UpdateProgress(processed, totalTraces, ref lastPercent);
         }
-        foreach (var list in dict.Values)
+
+        await currentTraceSegment.DisposeAsync();
+        await Task.WhenAll(backgroundSaves);
+        Console.WriteLine($"Processing complete. Created {currentSegmentId + 1} segment file(s) in {outputDir}");
+    }
+
+    private static void UpdateProgress(long processed, long totalTraces, ref int lastPercent)
+    {
+        if (totalTraces == 0) return;
+        int percent = (int)(processed * 100 / totalTraces);
+        if (percent >= lastPercent + 1 || processed == totalTraces)
         {
-            list.Sort();
+            Console.WriteLine($"Processed {percent}% ({processed}/{totalTraces})");
+            lastPercent = percent;
         }
-        return dict;
+    }
+
+    private static async Task<long> GetTotalTraceCount(string tracesPath)
+    {
+        using var traceReaderCount = await ParquetReader.CreateAsync(File.OpenRead(tracesPath));
+        long totalTraces = 0;
+        for (int i = 0; i < traceReaderCount.RowGroupCount; i++)
+        {
+            using var rg = traceReaderCount.OpenRowGroupReader(i);
+            totalTraces += rg.RowCount;
+        }
+        return totalTraces;
     }
 }

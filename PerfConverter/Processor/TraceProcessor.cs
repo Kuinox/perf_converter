@@ -63,7 +63,7 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persiste
             var addrDso = Marshal.PtrToStringUTF8(address->dso);
             var addrBuildId = new Span<byte>(address->buildid, address->buildid_size).ToArray();
             var addrComm = Marshal.PtrToStringUTF8(address->comm);
-            
+            entry.HaveAddress = true;
             entry.AddressAddress = address->addr;
             entry.AddressSymoff = address->symoff;
             entry.AddressSym = addrSym;
