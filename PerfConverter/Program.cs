@@ -34,7 +34,7 @@ public unsafe class PerfDlFilter
             {
                 args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
             }
-
+            Console.WriteLine("args count:" + argCount);
             foreach (var arg in args)
             {
                 Console.Error.WriteLine(arg);
