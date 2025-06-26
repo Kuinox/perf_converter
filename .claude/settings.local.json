@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet add:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln add:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(dotnet publish:*)",
+      "Bash(dotnet --list-sdks)"
+    ],
+    "deny": []
+  }
+}

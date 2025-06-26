@@ -34,14 +34,10 @@
 	</Target>
 
 	<ItemGroup Condition="'$(OS)' == 'Unix'">
-		<NativeLibrary Include="$(BaseOutputPath)exports.o" /></ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="Microsoft.LinuxTracepoints.Decode" Version="0.2.0.24" />
-
+		<NativeLibrary Include="$(BaseOutputPath)exports.o" />
 	</ItemGroup>
 
 	<ItemGroup>
-    <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
+		<ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
 	</ItemGroup>
 </Project>

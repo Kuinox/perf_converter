@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<AssemblyName>perfconverter-cli</AssemblyName>
+		<PublishSingleFile>true</PublishSingleFile>
+		<SelfContained>false</SelfContained>
+		<RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\PerfConverter\PerfConverter.csproj" />
+	</ItemGroup>
+
+	<!-- Publish PerfConverter project before building CLI -->
+	<Target Name="PublishPerfConverter" BeforeTargets="Build">
+		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" 
+		         Targets="Publish" 
+		         Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64" />
+		<Message Text="Published PerfConverter project" Importance="high" />
+	</Target>
+
+	<!-- Copy PerfConverter.so to output directory after build and publish -->
+	<Target Name="CopyPerfConverterBinary" AfterTargets="Build;Publish" DependsOnTargets="PublishPerfConverter">
+		<PropertyGroup>
+			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
+			<DestinationDir Condition="'$(PublishDir)' != ''">$(PublishDir)</DestinationDir>
+			<DestinationDir Condition="'$(PublishDir)' == ''">$(OutputPath)</DestinationDir>
+		</PropertyGroup>
+		<Copy SourceFiles="$(PerfConverterSourcePath)" 
+		      DestinationFolder="$(DestinationDir)" 
+		      SkipUnchangedFiles="true" 
+		      Condition="Exists('$(PerfConverterSourcePath)')" />
+		<Message Text="Copied PerfConverter.so to $(DestinationDir)" Importance="high" Condition="Exists('$(PerfConverterSourcePath)')" />
+		<Warning Text="PerfConverter.so not found at $(PerfConverterSourcePath). Please publish PerfConverter project first with: dotnet publish ../PerfConverter/PerfConverter.csproj -c $(Configuration)" 
+		         Condition="!Exists('$(PerfConverterSourcePath)')" />
+	</Target>
+
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.LinuxTracepoints.Decode" Version="0.2.0.24" />
+		<PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+	</ItemGroup>
+
+</Project>
