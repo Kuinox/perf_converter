@@ -16,27 +16,40 @@
 	</ItemGroup>
 
 	<!-- Publish PerfConverter project before building CLI -->
-	<Target Name="PublishPerfConverter" BeforeTargets="Build">
+	<Target Name="PublishPerfConverterBeforeBuild" BeforeTargets="Build">
 		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" 
 		         Targets="Publish" 
-		         Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64" />
+		         Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\" />
 		<Message Text="Published PerfConverter project" Importance="high" />
 	</Target>
 
-	<!-- Copy PerfConverter.so to output directory after build and publish -->
-	<Target Name="CopyPerfConverterBinary" AfterTargets="Build;Publish" DependsOnTargets="PublishPerfConverter">
+	<!-- Copy PerfConverter.so to output directory after build -->
+	<Target Name="CopyPerfConverterBinaryAfterBuild" AfterTargets="Build" DependsOnTargets="PublishPerfConverterBeforeBuild">
 		<PropertyGroup>
 			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
-			<DestinationDir Condition="'$(PublishDir)' != ''">$(PublishDir)</DestinationDir>
-			<DestinationDir Condition="'$(PublishDir)' == ''">$(OutputPath)</DestinationDir>
 		</PropertyGroup>
 		<Copy SourceFiles="$(PerfConverterSourcePath)" 
-		      DestinationFolder="$(DestinationDir)" 
-		      SkipUnchangedFiles="true" 
-		      Condition="Exists('$(PerfConverterSourcePath)')" />
-		<Message Text="Copied PerfConverter.so to $(DestinationDir)" Importance="high" Condition="Exists('$(PerfConverterSourcePath)')" />
-		<Warning Text="PerfConverter.so not found at $(PerfConverterSourcePath). Please publish PerfConverter project first with: dotnet publish ../PerfConverter/PerfConverter.csproj -c $(Configuration)" 
-		         Condition="!Exists('$(PerfConverterSourcePath)')" />
+		      DestinationFolder="$(OutputPath)" 
+		      SkipUnchangedFiles="true" />
+		<Message Text="Copied PerfConverter.so to $(OutputPath)" Importance="high" />
+	</Target>
+
+	<!-- Copy PerfConverter.so to publish directory after publish -->
+	<Target Name="CopyPerfConverterBinaryAfterPublish" AfterTargets="Publish">
+		<PropertyGroup>
+			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
+		</PropertyGroup>
+		<!-- First ensure PerfConverter is published -->
+		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" 
+		         Targets="Publish" 
+		         Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\" />
+		<!-- Then copy the .so file -->
+		<Copy SourceFiles="$(PerfConverterSourcePath)" 
+		      DestinationFolder="$(PublishDir)" 
+		      SkipUnchangedFiles="true" />
+		<Message Text="Copied PerfConverter.so to $(PublishDir)" Importance="high" />
+		<Error Text="PerfConverter.so not found at $(PerfConverterSourcePath). The PerfConverter project must be published successfully to build the CLI." 
+		       Condition="!Exists('$(PerfConverterSourcePath)')" />
 	</Target>
 
 

@@ -9,7 +9,6 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<SelfContained>true</SelfContained>
 		<InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
-		<EventSourceSupport>true</EventSourceSupport>
 	</PropertyGroup>
 
 	<Target Name="CompileNative" BeforeTargets="Compile" Condition="'$(OS)' == 'Unix'">
