@@ -10,11 +10,13 @@
 		<SelfContained>true</SelfContained>
 		<InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
 	</PropertyGroup>
+	<!--NAOT cannot exports fields, we need to link against a binary that do it. -->
 
 	<Target Name="CompileNative" BeforeTargets="Compile" Condition="'$(OS)' == 'Unix'">
 		<Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
 	</Target>
 
+	<!--The exports file that dictate what field/method is exported to the linker need to be updated-->
 	<Target Name="TransformExportsFile" BeforeTargets="LinkNative" Condition="'$(OS)' == 'Unix'">
 		<Message Importance="high" Text="Transforming exports file: $(ExportsFile)" />
 		<PropertyGroup>
@@ -31,7 +33,8 @@
 
 		<WriteLinesToFile File="$(ExportsFile)" Lines="@(FileContents -&gt; Replace('global:', '$(NewContent)'))" Overwrite="true" />
 	</Target>
-
+	
+	<!-- Previously we only compiled the binary, this is to tell the NAOT Linker to link it.-->
 	<ItemGroup Condition="'$(OS)' == 'Unix'">
 		<NativeLibrary Include="$(BaseOutputPath)exports.o" />
 	</ItemGroup>
