@@ -4,6 +4,7 @@ using System.CommandLine.Invocation;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 
 namespace CLI
 {
@@ -14,7 +15,7 @@ namespace CLI
             var rootCommand = new RootCommand("PerfConverter CLI - Helper tool for running perf with PerfConverter DLFilter");
 
             var inputFileOption = new Option<FileInfo>(
-                new[] { "--input", "-i" },
+                ["--input", "-i"],
                 "Path to the perf data file")
             {
                 IsRequired = true
@@ -22,17 +23,17 @@ namespace CLI
 
 
             var perfArgsOption = new Option<string>(
-                new[] { "--perf-args", "-p" },
+                ["--perf-args", "-p"],
                 getDefaultValue: () => "-f --itrace=bei0ns",
                 "Additional arguments to pass to perf script");
 
             var outputOption = new Option<DirectoryInfo>(
-                new[] { "--output", "-o" },
+                ["--output", "-o"],
                 getDefaultValue: () => new DirectoryInfo("parquet_output"),
                 "Output directory for Parquet files");
 
             var dryRunOption = new Option<bool>(
-                new[] { "--dry-run", "-n" },
+                ["--dry-run", "-n"],
                 "Show the command that would be executed without running it");
 
             rootCommand.AddOption(inputFileOption);
@@ -55,30 +56,24 @@ namespace CLI
 
         private static async Task<int> RunPerfCommand(FileInfo inputFile, string perfArgs, DirectoryInfo outputDir, bool dryRun)
         {
-            // Validate input file
             if (!inputFile.Exists)
             {
                 Console.Error.WriteLine($"Error: Input file '{inputFile.FullName}' does not exist.");
                 return 1;
             }
 
-            // Find PerfConverter.so in the same directory as this executable
-            var exeDir = AppContext.BaseDirectory;
-            var dlFilterPath = Path.Combine(exeDir, "PerfConverter.so");
+            var dlFilterPath = Path.Combine(AppContext.BaseDirectory, "PerfConverter.so");
             
             if (!File.Exists(dlFilterPath))
             {
                 Console.Error.WriteLine($"Error: PerfConverter.so not found at '{dlFilterPath}'");
-                Console.Error.WriteLine("The PerfConverter.so file must be in the same directory as this CLI executable.");
                 return 1;
             }
 
             // Ensure output directory exists
             if (!outputDir.Exists)
-            {
                 outputDir.Create();
-            }
-
+                
             // Set environment variable for output directory
             Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
 

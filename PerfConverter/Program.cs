@@ -79,12 +79,12 @@ public unsafe class PerfDlFilter
 
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
-            PerfDlfilterAl* addr = null;
+            PerfDlfilterAl* address = null;
             if (sample->addr_correlates_sym != 0)
             {
-                addr = fns->resolve_addr(ctx);
+                address = fns->resolve_addr(ctx);
             }
-            var id = _traceProcessor.QueueData(sample, ip, addr);
+            var id = _traceProcessor.QueueData(sample, ip, address);
 
 
         }
