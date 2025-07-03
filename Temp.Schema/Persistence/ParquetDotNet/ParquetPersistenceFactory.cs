@@ -17,8 +17,10 @@ public static class ParquetPersistenceFactory
         return new ParquetPersistenceLifetime((key) =>
         {
             Console.Error.WriteLine($"Creating parquet persistence for {key}");
-            var subDir = Path.Combine(outputDirectory, key);
-            var persister = ParquetTracePersistence.Create(subDir, compressionMethod).GetAwaiter().GetResult();
+            var path = Path.Combine(outputDirectory, key);
+            var dir = Path.GetDirectoryName(path);
+            Directory.CreateDirectory(dir);
+            var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
             return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode);
         });
     }
