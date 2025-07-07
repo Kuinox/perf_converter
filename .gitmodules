@@ -1,4 +1,0 @@
-[submodule "parquet-dotnet"]
-	path = parquet-dotnet
-	url = https://github.com/Kuinox/parquet-dotnet
-	branch = master

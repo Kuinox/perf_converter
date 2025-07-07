@@ -14,13 +14,9 @@ namespace CLI
         {
             var rootCommand = new RootCommand("PerfConverter CLI - Helper tool for running perf with PerfConverter DLFilter");
 
-            var inputFileOption = new Option<FileInfo>(
-                ["--input", "-i"],
-                "Path to the perf data file")
-            {
-                IsRequired = true
-            };
-
+            var inputFileArgument = new Argument<FileInfo>(
+                name: "input-file",
+                description: "Path to the perf data file");
 
             var perfArgsOption = new Option<string>(
                 ["--perf-args", "-p"],
@@ -36,14 +32,14 @@ namespace CLI
                 ["--dry-run", "-n"],
                 "Show the command that would be executed without running it");
 
-            rootCommand.AddOption(inputFileOption);
+            rootCommand.AddArgument(inputFileArgument);
             rootCommand.AddOption(perfArgsOption);
             rootCommand.AddOption(outputOption);
             rootCommand.AddOption(dryRunOption);
 
             rootCommand.SetHandler(async (InvocationContext context) =>
             {
-                var inputFile = context.ParseResult.GetValueForOption(inputFileOption)!;
+                var inputFile = context.ParseResult.GetValueForArgument(inputFileArgument)!;
                 var perfArgs = context.ParseResult.GetValueForOption(perfArgsOption)!;
                 var outputDir = context.ParseResult.GetValueForOption(outputOption)!;
                 var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
@@ -70,14 +66,11 @@ namespace CLI
                 return 1;
             }
 
-            // Ensure output directory exists
             if (!outputDir.Exists)
                 outputDir.Create();
                 
-            // Set environment variable for output directory
             Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
 
-            // Build the perf command
             var perfCommand = $"perf script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}";
 
             if (dryRun)
@@ -103,35 +96,11 @@ namespace CLI
 
             processInfo.Environment["OUTPUT_DIRECTORY"] = outputDir.FullName;
 
+
+
             try
             {
-                using var process = Process.Start(processInfo);
-                if (process == null)
-                {
-                    Console.Error.WriteLine("Failed to start perf process.");
-                    return 1;
-                }
-
-                // Read output asynchronously
-                var outputTask = process.StandardOutput.ReadToEndAsync();
-                var errorTask = process.StandardError.ReadToEndAsync();
-
-                await process.WaitForExitAsync();
-
-                var output = await outputTask;
-                var error = await errorTask;
-
-                if (!string.IsNullOrWhiteSpace(output))
-                {
-                    Console.WriteLine(output);
-                }
-
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    Console.Error.WriteLine(error);
-                }
-
-                return process.ExitCode;
+                return await RunPerf(processInfo);
             }
             catch (Exception ex)
             {
@@ -140,5 +109,35 @@ namespace CLI
             }
         }
 
+        private static async Task<int> RunPerf(ProcessStartInfo processInfo)
+        {
+            using var process = Process.Start(processInfo);
+            if (process == null)
+            {
+                Console.Error.WriteLine("Failed to start perf process.");
+                return 1;
+            }
+
+            // Read output asynchronously
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+
+            await process.WaitForExitAsync();
+
+            var output = await outputTask;
+            var error = await errorTask;
+
+            if (!string.IsNullOrWhiteSpace(output))
+            {
+                Console.WriteLine(output);
+            }
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                Console.Error.WriteLine(error);
+            }
+
+            return process.ExitCode;
+        }
     }
 }
