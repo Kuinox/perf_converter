@@ -161,12 +161,16 @@ internal class Program
     private static async Task ReadStreamAsync(StreamReader reader, bool isErrorStream)
     {
         string? line;
-        while ((line = await reader.ReadLineAsync()) != null)
+        while (true)
         {
+            line = await reader.ReadLineAsync();
+            if (line == null)
+                break;
+            
             if (!isErrorStream && line.StartsWith("PROGRESS:"))
             {
                 // Parse and display progress information
-                if (line.Length > 9 && int.TryParse(line.Substring(9), out int eventCount))
+                if (int.TryParse(line.Substring(9), out int eventCount))
                     Console.Write($"\rProcessing events: {eventCount:N0}");
             }
             else
