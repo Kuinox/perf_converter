@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build test projects
+      run: |
+        dotnet build tests/Temp.Core.Tests/Temp.Core.Tests.csproj --no-restore
+        dotnet build tests/PerfConverter.Tests/PerfConverter.Tests.csproj --no-restore
+        dotnet build tests/CLI.Tests/CLI.Tests.csproj --no-restore
+        dotnet build tests/Integration.Tests/Integration.Tests.csproj --no-restore
+        
+    - name: Test Temp.Core
+      run: dotnet test tests/Temp.Core.Tests/Temp.Core.Tests.csproj --no-build --verbosity normal
+      
+    - name: Test PerfConverter
+      run: dotnet test tests/PerfConverter.Tests/PerfConverter.Tests.csproj --no-build --verbosity normal
+      
+    - name: Test CLI
+      run: dotnet test tests/CLI.Tests/CLI.Tests.csproj --no-build --verbosity normal
+      
+    - name: Test Integration
+      run: dotnet test tests/Integration.Tests/Integration.Tests.csproj --no-build --verbosity normal
+      
+    - name: Install perf (for integration testing info)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y linux-tools-generic
+        echo "Perf tools installed for future integration testing"
+        
+    - name: Create test summary
+      run: |
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Unit tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ CLI tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ Integration tests structure verified" >> $GITHUB_STEP_SUMMARY
+        echo "- ℹ️ Full integration testing requires bare metal Intel CPU with intel_pt" >> $GITHUB_STEP_SUMMARY

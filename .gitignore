@@ -7,6 +7,13 @@ src/artifacts
 **/Properties/launchSettings.json
 **/testenvironments.json
 
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+
 /viewer/venv/Lib/
 /viewer/venv/share/
 dotnet-sdk-*.tar.gz
