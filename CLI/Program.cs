@@ -174,13 +174,11 @@ internal class Program
                     Console.Write($"\rProcessing events: {eventCount:N0}");
             }
             else
-            {
                 // Display other output normally
                 if (isErrorStream)
                     Console.Error.WriteLine(line);
                 else
                     Console.WriteLine(line);
-            }
         }
         
         // Add a newline after progress to clean up the display
