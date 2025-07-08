@@ -127,15 +127,11 @@ internal class Program
             if (entry.HasValue)
             {
                 if (entry.Value.Flags != 0)
-                {
                     _dataLostTimes.Add(new AuxDataLost(entry.Value.Time, entry.Value.Tid, entry.Value.Pid));
-                }
             }
 
             if (DateTime.UtcNow - DateTime.MinValue > TimeSpan.FromMilliseconds(10))
-            {
                 Console.Write($"\rProcessed {entryCount} entries, found {_dataLostTimes.Count} aux data loss events.        ");
-            }
         });
         Console.WriteLine();
         return _dataLostTimes;
@@ -171,28 +167,20 @@ internal class Program
             {
                 // Parse and display progress information
                 if (line.Length > 9 && int.TryParse(line.Substring(9), out int eventCount))
-                {
                     Console.Write($"\rProcessing events: {eventCount:N0}");
-                }
             }
             else
             {
                 // Display other output normally
                 if (isErrorStream)
-                {
                     Console.Error.WriteLine(line);
-                }
                 else
-                {
                     Console.WriteLine(line);
-                }
             }
         }
         
         // Add a newline after progress to clean up the display
         if (!isErrorStream)
-        {
             Console.WriteLine();
-        }
     }
 }
