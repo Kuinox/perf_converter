@@ -29,17 +29,18 @@ namespace PostProcess
         }
 
         static bool _init;
+        static CompressionMethod _compressionMethod;
         public static CompressionMethod CompressionMethod
         {
             get
             {
-                if (_init) return field;
+                if (_init) return _compressionMethod;
                 _init = true;
-                field = CompressionMethod.Snappy;
+                _compressionMethod = CompressionMethod.Snappy;
                 string? compressEnv = Environment.GetEnvironmentVariable("PARQUET_COMPRESSION");
                 if (!string.IsNullOrEmpty(compressEnv) && Enum.TryParse<CompressionMethod>(compressEnv, true, out var parsedCompress))
-                    field = parsedCompress;
-                return field;
+                    _compressionMethod = parsedCompress;
+                return _compressionMethod;
             }
         }
     }
