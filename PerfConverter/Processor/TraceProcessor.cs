@@ -10,13 +10,17 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persiste
     ulong _totalSamples = 0;
     readonly Dictionary<string, IPersister<TraceEntry>> _persistence = [];
     readonly Dictionary<(int, int), string> _keys = [];
+    readonly TraceSegmentManager _segmentManager = new();
+
     public ulong QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
         var id = _totalSamples++;
-        ref var key = ref CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid), out _);
-        key ??= $"{sample->pid}/{sample->tid}";
-        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_persistence, key, out _);
-        persistence ??= persistenceFactory(key);
+        
+        // Generate segment-aware key using the new TraceSegmentManager
+        var segmentKey = _segmentManager.GenerateSegmentKey(sample->pid, (ulong)sample->tid, sample->time);
+        
+        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_persistence, segmentKey, out _);
+        persistence ??= persistenceFactory(segmentKey);
         
         var eventString = Marshal.PtrToStringUTF8(sample->@event);
         var sym = Marshal.PtrToStringUTF8(ip->sym);
