@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
@@ -13,14 +13,14 @@
 
 	<!-- Publish PerfConverter project before building CLI (Linux only) -->
 	<Target Name="PublishPerfConverterBeforeBuild" BeforeTargets="Build" Condition="'$(OS)' == 'Unix'">
-		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\" />
+		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net8.0\linux-x64\publish\" />
 		<Message Text="Published PerfConverter project" Importance="high" />
 	</Target>
 
 	<!-- Copy PerfConverter.so to output directory after build (Linux only) -->
 	<Target Name="CopyPerfConverterBinaryAfterBuild" AfterTargets="Build" DependsOnTargets="PublishPerfConverterBeforeBuild" Condition="'$(OS)' == 'Unix'">
 		<PropertyGroup>
-			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
+			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net8.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
 		</PropertyGroup>
 		<Copy SourceFiles="$(PerfConverterSourcePath)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
 		<Message Text="Copied PerfConverter.so to $(OutputPath)" Importance="high" />
@@ -29,10 +29,10 @@
 	<!-- Copy PerfConverter.so to publish directory after publish (Linux only) -->
 	<Target Name="CopyPerfConverterBinaryAfterPublish" AfterTargets="Publish" Condition="'$(OS)' == 'Unix'">
 		<PropertyGroup>
-			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
+			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net8.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
 		</PropertyGroup>
 		<!-- First ensure PerfConverter is published -->
-		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\" />
+		<MSBuild Projects="..\PerfConverter\PerfConverter.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=linux-x64;PublishDir=$(MSBuildProjectDirectory)\..\PerfConverter\bin\$(Configuration)\net8.0\linux-x64\publish\" />
 		<!-- Then copy the .so file -->
 		<Copy SourceFiles="$(PerfConverterSourcePath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
 		<Message Text="Copied PerfConverter.so to $(PublishDir)" Importance="high" />
