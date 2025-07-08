@@ -150,25 +150,49 @@ internal class Program
             return 1;
         }
 
-        // Read output asynchronously
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
+        // Read output and error streams line by line for real-time progress
+        var outputTask = ReadStreamAsync(process.StandardOutput, false);
+        var errorTask = ReadStreamAsync(process.StandardError, true);
 
         await process.WaitForExitAsync();
 
-        var output = await outputTask;
-        var error = await errorTask;
-
-        if (!string.IsNullOrWhiteSpace(output))
-        {
-            Console.WriteLine(output);
-        }
-
-        if (!string.IsNullOrWhiteSpace(error))
-        {
-            Console.Error.WriteLine(error);
-        }
+        // Wait for all output to be processed
+        await Task.WhenAll(outputTask, errorTask);
 
         return process.ExitCode;
+    }
+
+    private static async Task ReadStreamAsync(StreamReader reader, bool isErrorStream)
+    {
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            if (!isErrorStream && line.StartsWith("PROGRESS:"))
+            {
+                // Parse and display progress information
+                if (line.Length > 9 && int.TryParse(line.Substring(9), out int eventCount))
+                {
+                    Console.Write($"\rProcessing events: {eventCount:N0}");
+                }
+            }
+            else
+            {
+                // Display other output normally
+                if (isErrorStream)
+                {
+                    Console.Error.WriteLine(line);
+                }
+                else
+                {
+                    Console.WriteLine(line);
+                }
+            }
+        }
+        
+        // Add a newline after progress to clean up the display
+        if (!isErrorStream)
+        {
+            Console.WriteLine();
+        }
     }
 }
