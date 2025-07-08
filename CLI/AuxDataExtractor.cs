@@ -1,21 +1,22 @@
 ﻿using Microsoft.LinuxTracepoints.Decode;
 using Parquet;
-using PerfMetadataExtract;
 using System.CommandLine;
 using Temp.Core;
 
-class AuxDataLost
+namespace CLI;
+
+class AuxDataExtractor
 {
-    private static void ExtractAuxDataLostEvents(string inputPath, Action<AuxDataLostEntry?> onProcess)
+    public static void Process(string inputPath, Action<AuxDataEntry?> onEntry)
     {
         using var reader = new PerfDataFileReader();
         if (!reader.OpenFile(inputPath, PerfDataFileEventOrder.File))
             throw new InvalidDataException("Failed to open perf data file");
 
-        ProcessEvents(reader, onProcess);
+        ProcessEvents(reader, onEntry);
     }
 
-    private static void ProcessEvents(PerfDataFileReader reader, Action<AuxDataLostEntry?> onProcess)
+    private static void ProcessEvents(PerfDataFileReader reader, Action<AuxDataEntry?> onEntry)
     {
         while (true)
         {
@@ -24,22 +25,23 @@ class AuxDataLost
             if (result != PerfDataFileResult.Ok)
             {
                 if (result == PerfDataFileResult.EndOfFile)
-                    break;
+                    return;
                 throw new InvalidOperationException($"Error reading perf data file: {result}");
             }
 
-
             if (perfEvent.Header.Type != PerfEventHeaderType.Aux)
             {
-                onProcess(null);
-                return;
+                onEntry(null);
+                continue;
             }
+
             var eventResult = reader.GetNonSampleEventInfo(perfEvent, out var info);
             if (eventResult != PerfDataFileResult.Ok)
                 throw new InvalidOperationException($"Error reading perf data file: {eventResult}");
+
             var flagBytes = info.BytesSpan.Slice(24, 8);
 
-            onProcess(new AuxDataLostEntry
+            onEntry(new AuxDataEntry
             {
                 Time = info.Time,
                 Pid = info.Pid,

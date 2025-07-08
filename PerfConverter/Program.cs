@@ -13,12 +13,12 @@ public unsafe class PerfDlFilter
     static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
     static ITraceProcessor _traceProcessor = null!;
-    static int? _maxTracesToProcess = null;
     static IPersistenceLifetime _persistenceLifetime = null!;
 
     class State
     {
         public int EventCount { get; set; }
+        public DateTime LastReportTime { get; set; } = DateTime.UtcNow;
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -26,7 +26,6 @@ public unsafe class PerfDlFilter
     {
         try
         {
-            
             var fns = get_perf_dlfilter_fns();
             int argCount;
             var argsPtr = fns->args(data, &argCount);
@@ -38,17 +37,10 @@ public unsafe class PerfDlFilter
             var state = new State
             {
                 EventCount = 0,
+                LastReportTime = DateTime.UtcNow
             };
 
-            string? maxTracesEnv = Environment.GetEnvironmentVariable("MAX_TRACES_TO_PROCESS");
-            if (!string.IsNullOrEmpty(maxTracesEnv) && int.TryParse(maxTracesEnv, out int maxTraces))
-            {
-                _maxTracesToProcess = maxTraces;
-                Console.Error.WriteLine($"Will process maximum of {_maxTracesToProcess} traces");
-            }
-
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
-
 
             _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
@@ -71,12 +63,6 @@ public unsafe class PerfDlFilter
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             state.EventCount++;
-            if (_maxTracesToProcess.HasValue && state.EventCount > _maxTracesToProcess.Value)
-            {
-                Console.Error.WriteLine($"Reached trace limit of {_maxTracesToProcess.Value}. Exiting early.");
-                return -1; // Return negative error code to make perf exit early
-            }
-
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
             PerfDlfilterAl* address = null;
@@ -86,7 +72,13 @@ public unsafe class PerfDlFilter
             }
             var id = _traceProcessor.QueueData(sample, ip, address);
 
-
+            // Report progress 10 times per second
+            var now = DateTime.UtcNow;
+            if ((now - state.LastReportTime).TotalMilliseconds > 100)
+            {
+                Console.WriteLine($"PROGRESS:{state.EventCount}");
+                state.LastReportTime = now;
+            }
         }
         catch (Exception ex)
         {

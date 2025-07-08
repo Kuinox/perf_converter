@@ -1,6 +1,6 @@
-﻿namespace PerfMetadataExtract;
+﻿namespace CLI;
 
-public struct AuxDataLostEntry
+public struct AuxDataEntry
 {
     public ulong Time;
     public ulong Pid;
