@@ -150,25 +150,28 @@ internal class Program
             return 1;
         }
 
-        // Read output asynchronously
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
+        process.OutputDataReceived += OutputData;
+        process.ErrorDataReceived += ErrorData;
+
+        void OutputData(object sender, DataReceivedEventArgs e)
+        {
+            Console.Write("\r");
+            if (!e.Data!.StartsWith("PROGRESS:"))
+            {
+                Console.WriteLine(e.Data);
+                return;
+            }
+            var sliced = e.Data.AsSpan()[9..].Trim().ToString();
+            Console.Write("Events processed:");
+            Console.Write(sliced);
+        }
+
+        void ErrorData(object sender, DataReceivedEventArgs e)
+        {
+            Console.Error.WriteLine(e.Data);
+        }
 
         await process.WaitForExitAsync();
-
-        var output = await outputTask;
-        var error = await errorTask;
-
-        if (!string.IsNullOrWhiteSpace(output))
-        {
-            Console.WriteLine(output);
-        }
-
-        if (!string.IsNullOrWhiteSpace(error))
-        {
-            Console.Error.WriteLine(error);
-        }
-
         return process.ExitCode;
     }
 }

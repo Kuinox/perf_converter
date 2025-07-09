@@ -1,3 +1,3 @@
 ﻿namespace Temp.Schema;
 
-public record struct AuxDataLost(ulong Time, ulong Tid, ulong Pid);
+public readonly record struct AuxDataLost(ulong Time, int Tid, int Pid);

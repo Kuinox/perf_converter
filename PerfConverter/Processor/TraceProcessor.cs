@@ -1,28 +1,58 @@
-﻿using System.Runtime.InteropServices;
-using PerfConverter.Entry;
+﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text.Json;
 using Temp.Core;
+using Temp.Schema;
 
 namespace PerfConverter.Processor;
 
-public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persistenceFactory) : ITraceProcessor
+public unsafe class TraceProcessor : ITraceProcessor
 {
-    ulong _totalSamples = 0;
+    readonly IReadOnlyDictionary<(int, int), (List<ulong> items, int count)> _auxDataLoss;
     readonly Dictionary<string, IPersister<TraceEntry>> _persistence = [];
-    readonly Dictionary<(int, int), string> _keys = [];
+    readonly Dictionary<(int, int), int> _traceCountPerPidTid = [];
+    readonly Dictionary<(int, int, int), string> _keys = [];
+    readonly Dictionary<string, ulong> _counts = [];
+    readonly Func<string, IPersister<TraceEntry>> _persistenceFactory;
+
+    public TraceProcessor(Func<string, IPersister<TraceEntry>> persistenceFactory)
+    {
+        _persistenceFactory = persistenceFactory;
+        var auxDataLossJson = Environment.GetEnvironmentVariable("AUX_DATA_LOSS")!;
+        var auxDataLoss = JsonSerializer.Deserialize(auxDataLossJson, SourceGenerationContext.Default.AuxDataLostArray)!;
+        _auxDataLoss = auxDataLoss
+            .GroupBy(x => (x.Pid, x.Tid))
+            .ToDictionary(
+                x => x.Key,
+                x => x.Select(x => x.Time).Append(0uL).OrderDescending().ToList())
+            .ToDictionary(
+            x => x.Key,
+            x => (x.Value, x.Value.Count));
+    }
+
     public ulong QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        var id = _totalSamples++;
-        ref var key = ref CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid), out _);
-        key ??= $"{sample->pid}/{sample->tid}";
+        var (items, count) = _auxDataLoss[(sample->pid, sample->tid)];
+        var fileCount = count - items.Count;
+
+        var isNewTrace = items.Count > 0 && items[^1] < sample->time;
+
+        if (isNewTrace)
+            _auxDataLoss[(sample->pid, sample->tid)].items.Remove(0);
+
+        ref var key = ref CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid, fileCount), out _);
+        key ??= $"{sample->pid}/{sample->tid}/{fileCount}";
+
         ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_persistence, key, out _);
-        persistence ??= persistenceFactory(key);
+        persistence ??= _persistenceFactory(key);
+
+        ref var id = ref CollectionsMarshal.GetValueRefOrAddDefault(_counts, key, out _);
+        if(isNewTrace)
+            id = 0;
         
-        var eventString = Marshal.PtrToStringUTF8(sample->@event);
-        var sym = Marshal.PtrToStringUTF8(ip->sym);
-        var dso = Marshal.PtrToStringUTF8(ip->dso);
-        var ipBuildId = new Span<byte>(ip->buildid, ip->buildid_size).ToArray();
-        var ipComm = Marshal.PtrToStringUTF8(ip->comm);
+        id++;
 
         var entry = new TraceEntry
         {
@@ -39,25 +69,25 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> persiste
             Weight = sample->weight,
             Cpumode = sample->cpumode,
             AddrCorrelatesSym = sample->addr_correlates_sym,
-            Event = eventString,
+            Event = Marshal.PtrToStringUTF8(sample->@event),
             MachinePid = (uint)sample->machine_pid,
             Vcpu = (uint)sample->vcpu,
 
-            IpAddress = ip->addr ,
+            IpAddress = ip->addr,
             IpSymoff = ip->symoff,
-            IpSym = sym,
-            IpSymStart = ip->sym_start ,
-            IpSymEnd = ip->sym_end ,
-            IpDso = dso,
+            IpSym = Marshal.PtrToStringUTF8(ip->sym),
+            IpSymStart = ip->sym_start,
+            IpSymEnd = ip->sym_end,
+            IpDso = Marshal.PtrToStringUTF8(ip->dso),
             IpSymBinding = ip->sym_binding,
             IpIs64Bit = ip->is_64_bit,
             IpIsKernelIp = ip->is_kernel_ip,
-            IpBuildId = ipBuildId,
+            IpBuildId = new Span<byte>(ip->buildid, ip->buildid_size).ToArray(),
             IpFiltered = ip->filtered,
-            IpComm = ipComm
+            IpComm = Marshal.PtrToStringUTF8(ip->comm)
         };
 
-        if(address != null)
+        if (address != null)
         {
             var addrSym = Marshal.PtrToStringUTF8(address->sym);
             var addrDso = Marshal.PtrToStringUTF8(address->dso);
