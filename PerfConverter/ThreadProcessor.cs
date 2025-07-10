@@ -11,7 +11,7 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     int _currentSegmentId = 0;
     ulong _currentEntryId = 0;
     string _currentKey = null!;
-    IPersister<TraceEntry> _persister = null!;
+    IPersister<TraceEntry>? _persister;
 
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
@@ -22,7 +22,7 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
         if (isNewTrace)
         {
-            _persister.DisposeAsync().AsTask();
+            _persister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
             _currentKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
@@ -31,7 +31,7 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         }
 
         var entry = BuildEntry(sample, ip, address, ++_currentEntryId);
-        _persister.Persist(entry);
+        _persister!.Persist(entry);
     }
 
     private static TraceEntry BuildEntry(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
