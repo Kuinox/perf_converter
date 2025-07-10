@@ -168,10 +168,28 @@ internal class Program
         var errorLines = new ConcurrentQueue<string>();
         var isComplete = false;
 
+        // Set up Ctrl+C handler to kill the process
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true; // Prevent immediate termination
+            if (!process.HasExited)
+            {
+                try
+                {
+                    process.Kill(true); // Kill process tree
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]Error killing process: {ex.Message}[/]");
+                }
+            }
+            isComplete = true;
+        };
+
         // Create layout
         var layout = new Layout("Root")
             .SplitColumns(
-                new Layout("Left").Size(30),
+                new Layout("Left").Size(50),
                 new Layout("Right")
             );
 
@@ -228,8 +246,6 @@ internal class Program
                 {
                     while (!isComplete)
                     {
-                        Console.WriteLine("updating display");
-                        
                         try
                         {
                             // Update left panel (statistics)
@@ -243,8 +259,8 @@ internal class Program
                             var statsPanel = new Panel(
                                 new Markup($"[bold yellow]Event Statistics[/]\n\n" +
                                          $"[green]Total Events:[/] {currentEventCount:N0}\n" +
-                                         $"[blue]Overall Rate:[/] {rate:N0} events/sec\n" +
-                                         $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\n" +
+                                         $"[blue]Overall Rate (events/sec):[/] {rate:N0}\n" +
+                                         $"[cyan]Current Rate (events/sec):[/] {deltaRate:N0}\n" +
                                          $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
                                          $"[white]Process Status:[/] {processStatus}\n\n" +
                                          $"[dim]Press Ctrl+C to stop[/]"))
