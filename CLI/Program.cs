@@ -230,12 +230,12 @@ internal class Program
                         var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
                         
                         var statsPanel = new Panel(
-                            new Markup($\"[bold yellow]Event Statistics[/]\\n\\n\" +
-                                     $\"[green]Total Events:[/] {currentEventCount:N0}\\n\" +
-                                     $\"[blue]Overall Rate:[/] {rate:N0} events/sec\\n\" +
-                                     $\"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\\n\" +
-                                     $\"[yellow]Elapsed Time:[/] {elapsed:hh\\\\:mm\\\\:ss}\\n\\n\" +
-                                     $\"[dim]Press Ctrl+C to stop[/]\"))
+                            new Markup($"[bold yellow]Event Statistics[/]\\n\\n" +
+                                     $"[green]Total Events:[/] {currentEventCount:N0}\\n" +
+                                     $"[blue]Overall Rate:[/] {rate:N0} events/sec\\n" +
+                                     $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\\n" +
+                                     $"[yellow]Elapsed Time:[/] {elapsed:hh\\\\:mm\\\\:ss}\\n\\n" +
+                                     $"[dim]Press Ctrl+C to stop[/]"))
                         {
                             Header = new PanelHeader("[bold]Status[/]"),
                             Border = BoxBorder.Rounded
