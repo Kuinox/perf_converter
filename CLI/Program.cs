@@ -198,13 +198,13 @@ internal class Program
         // Create layout
         var layout = new Layout("Root")
             .SplitColumns(
-                new Layout("Left").Size(50),
-                new Layout("Right")
+                new Layout("Left").Ratio(1),
+                new Layout("Right").Ratio(1)
             );
         
         layout["Left"].SplitRows(
-            new Layout("Stats").Size(8),
-            new Layout("FileStatus")
+            new Layout("Stats").Ratio(1),
+            new Layout("FileStatus").Ratio(1)
         );
 
         // Set up process event handlers

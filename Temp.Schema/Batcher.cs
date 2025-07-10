@@ -9,13 +9,15 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
     readonly int _batchSize;
     readonly BatchingMode _batchingMode;
     readonly Channel<T> _channel;
+    readonly string _fileName;
     Task? _workLoop;
 
-    Batcher(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode)
+    Batcher(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode, string fileName)
     {
         _batchPersistence = batchPersistence;
         _batchSize = batchSize;
         _batchingMode = batchingMode;
+        _fileName = fileName;
         _channel = Channel.CreateBounded<T>(batchSize);
     }
 
@@ -71,9 +73,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         Stopwatch sw = Stopwatch.StartNew();
         try
         {
-            Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|FLUSHING|{batch.Count}");
+            Console.Error.WriteLine($"FILE_STATUS|{_fileName}|FLUSHING|{batch.Count}");
             await _batchPersistence.PersistAsync(batch);
-            Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|BUFFERING");
+            Console.Error.WriteLine($"FILE_STATUS|{_fileName}|BUFFERING");
         }
         catch (Exception e)
         {
@@ -93,9 +95,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         }
     }
 
-    public static Batcher<T> Create(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode)
+    public static Batcher<T> Create(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode, string fileName)
     {
-        var batcher = new Batcher<T>(batchPersistence, batchSize, batchingMode);
+        var batcher = new Batcher<T>(batchPersistence, batchSize, batchingMode, fileName);
         batcher.Start();
         return batcher;
     }
@@ -107,7 +109,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         {
             await _workLoop;
         }
-        Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|CLOSED");
+        Console.Error.WriteLine($"FILE_STATUS|{_fileName}|CLOSED");
         await _batchPersistence.DisposeAsync();
     }
 }

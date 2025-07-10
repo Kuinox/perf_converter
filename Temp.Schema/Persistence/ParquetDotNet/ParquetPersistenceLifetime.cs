@@ -42,7 +42,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
             var dir = Path.GetDirectoryName(path)!; // key can be a path.
             Directory.CreateDirectory(dir);
             var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
-            return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode);
+            return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode, key);
         });
     }
 }
