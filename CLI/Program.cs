@@ -172,7 +172,7 @@ internal class Program
 
         var chrono = Stopwatch.StartNew();
         var eventCount = 0L;
-        var lastEventCount = 0L;
+        var rateHistory = new Queue<(DateTime timestamp, long eventCount)>();
         var outputLines = new ConcurrentQueue<string>();
         var errorLines = new ConcurrentQueue<string>();
         var fileStatuses = new ConcurrentDictionary<string, FileStatus>();
@@ -198,13 +198,13 @@ internal class Program
 
         // Create layout
         var layout = new Layout("Root")
-            .SplitColumns(
-                new Layout("Left").Ratio(1),
-                new Layout("Right").Ratio(1)
+            .SplitRows(
+                new Layout("Top"),
+                new Layout("Logs").Size(8)
             );
         
-        layout["Left"].SplitRows(
-            new Layout("Stats").Size(10),
+        layout["Top"].SplitColumns(
+            new Layout("Stats").Size(50),
             new Layout("FileStatus")
         );
 
@@ -303,14 +303,35 @@ internal class Program
                             var currentEventCount = eventCount;
                             var elapsed = chrono.Elapsed;
                             var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
-                            var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
+                            
+                            // Calculate rolling average rate over last 5 seconds
+                            var now = DateTime.UtcNow;
+                            rateHistory.Enqueue((now, currentEventCount));
+                            
+                            // Remove entries older than 5 seconds
+                            while (rateHistory.Count > 0 && (now - rateHistory.Peek().timestamp).TotalSeconds > 5)
+                            {
+                                rateHistory.Dequeue();
+                            }
+                            
+                            var currentRate = 0;
+                            if (rateHistory.Count >= 2)
+                            {
+                                var oldest = rateHistory.First();
+                                var newest = rateHistory.Last();
+                                var timeDiff = (newest.timestamp - oldest.timestamp).TotalSeconds;
+                                if (timeDiff > 0)
+                                {
+                                    currentRate = (int)((newest.eventCount - oldest.eventCount) / timeDiff);
+                                }
+                            }
 
 
                             var statsPanel = new Panel(
                                 new Markup($"[bold yellow]Event Statistics[/]\n\n" +
                                          $"[green]Total Events:[/] {currentEventCount:N0}\n" +
                                          $"[blue]Overall Rate (events/sec):[/] {rate:N0}\n" +
-                                         $"[cyan]Current Rate (events/sec):[/] {deltaRate:N0}\n" +
+                                         $"[cyan]Current Rate (events/sec):[/] {currentRate:N0}\n" +
                                          $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
                                          $"[dim]Press Ctrl+C to stop[/]"))
                             {
@@ -318,56 +339,76 @@ internal class Program
                                 Border = BoxBorder.Rounded
                             };
 
-                            layout["Left"]["Stats"].Update(statsPanel);
+                            layout["Top"]["Stats"].Update(statsPanel);
                             
-                            // Update file status panel
-                            var fileStatusContent = new List<string>();
+                            // Update file status panel using Tree
+                            var now = DateTime.UtcNow;
+                            var filesToRemove = new List<string>();
                             
+                            // Clean up expired closed files
+                            foreach (var kvp in fileStatuses.ToArray())
+                            {
+                                var file = kvp.Value;
+                                if (file.Status == "CLOSED" && file.ClosedAt.HasValue && (now - file.ClosedAt.Value).TotalSeconds > 10)
+                                {
+                                    filesToRemove.Add(kvp.Key);
+                                }
+                            }
+                            
+                            foreach (var key in filesToRemove)
+                            {
+                                fileStatuses.TryRemove(key, out _);
+                            }
+                            
+                            Tree fileTree;
                             if (fileStatuses.IsEmpty)
                             {
-                                fileStatusContent.Add("[dim]No files opened yet...[/]");
+                                fileTree = new Tree("[dim]No files opened yet...[/]");
                             }
                             else
                             {
-                                var now = DateTime.UtcNow;
-                                var filesToRemove = new List<string>();
+                                fileTree = new Tree("Files");
                                 
-                                foreach (var kvp in fileStatuses.OrderBy(f => f.Key))
+                                // Group by PID
+                                var pidGroups = fileStatuses.GroupBy(f => f.Key.Split('/')[0]).OrderBy(g => g.Key);
+                                
+                                foreach (var pidGroup in pidGroups)
                                 {
-                                    var file = kvp.Value;
+                                    var pidNode = fileTree.AddNode($"[bold]PID {pidGroup.Key}[/]");
                                     
-                                    // Remove closed files after 10 seconds
-                                    if (file.Status == "CLOSED" && file.ClosedAt.HasValue && (now - file.ClosedAt.Value).TotalSeconds > 10)
+                                    // Group by TID within each PID
+                                    var tidGroups = pidGroup.GroupBy(f => f.Key.Split('/')[1]).OrderBy(g => g.Key);
+                                    
+                                    foreach (var tidGroup in tidGroups)
                                     {
-                                        filesToRemove.Add(kvp.Key);
-                                        continue;
+                                        var tidNode = pidNode.AddNode($"[bold cyan]TID {tidGroup.Key}[/]");
+                                        
+                                        // Add files for this TID
+                                        foreach (var kvp in tidGroup.OrderBy(f => f.Key))
+                                        {
+                                            var file = kvp.Value;
+                                            var statusColor = file.Status switch
+                                            {
+                                                "BUFFERING" => "[green]",
+                                                "FLUSHING" => "[yellow]",
+                                                "CLOSED" => "[dim green]",
+                                                _ => "[white]"
+                                            };
+                                            
+                                            var fileName = file.FileName.Split('/').Last();
+                                            tidNode.AddNode($"{statusColor}{file.Status}[/] [blue]{fileName}[/] [dim]({file.EntryCount:N0})[/]");
+                                        }
                                     }
-                                    
-                                    var statusColor = file.Status switch
-                                    {
-                                        "BUFFERING" => "[green]",
-                                        "FLUSHING" => "[yellow]",
-                                        "CLOSED" => "[dim green]",
-                                        _ => "[white]"
-                                    };
-                                    
-                                    fileStatusContent.Add($"{statusColor}{file.Status}[/] [blue]{file.FileName}[/] [dim]({file.EntryCount:N0})[/]");
-                                }
-                                
-                                // Remove expired closed files
-                                foreach (var key in filesToRemove)
-                                {
-                                    fileStatuses.TryRemove(key, out _);
                                 }
                             }
                             
-                            var fileStatusPanel = new Panel(new Markup(string.Join("\n", fileStatusContent)))
+                            var fileStatusPanel = new Panel(fileTree)
                             {
                                 Header = new PanelHeader("[bold]File Status[/]"),
                                 Border = BoxBorder.Rounded
                             };
                             
-                            layout["Left"]["FileStatus"].Update(fileStatusPanel);
+                            layout["Top"]["FileStatus"].Update(fileStatusPanel);
 
                             // Update right panel (console output)
                             var consoleLines = new List<string>();
@@ -398,8 +439,7 @@ internal class Program
                                 Border = BoxBorder.Rounded
                             };
 
-                            layout["Right"].Update(consolePanel);
-                            lastEventCount = currentEventCount;
+                            layout["Logs"].Update(consolePanel);
                             
                             ctx.Refresh();
                         }
