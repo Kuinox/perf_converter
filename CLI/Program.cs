@@ -6,7 +6,10 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using System.Text;
+using System.Collections.Concurrent;
 using Temp.Schema;
+using Spectre.Console;
 
 namespace CLI;
 
@@ -56,18 +59,18 @@ internal class Program
     {
         if (!inputFile.Exists)
         {
-            Console.Error.WriteLine($"Error: Input file '{inputFile.FullName}' does not exist.");
+            AnsiConsole.MarkupLine($"[red]Error: Input file '{inputFile.FullName}' does not exist.[/]");
             return 1;
         }
 
+        AnsiConsole.MarkupLine($"[yellow]Extracting auxiliary data loss events...[/]");
         var dataLost = GetAuxDataLost(inputFile.FullName);
-
 
         var dlFilterPath = Path.Combine(AppContext.BaseDirectory, "PerfConverter.so");
 
         if (!File.Exists(dlFilterPath))
         {
-            Console.Error.WriteLine($"Error: PerfConverter.so not found at '{dlFilterPath}'");
+            AnsiConsole.MarkupLine($"[red]Error: PerfConverter.so not found at '{dlFilterPath}'[/]");
             return 1;
         }
 
@@ -78,17 +81,19 @@ internal class Program
 
         var perfCommand = $"perf script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}";
         var auxDataLoss = JsonSerializer.Serialize(dataLost);
+        
         if (dryRun)
         {
-            Console.WriteLine("Would execute:");
-            Console.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
-            Console.WriteLine($"export AUX_DATA_LOSS='{auxDataLoss}'");
-            Console.WriteLine(perfCommand);
+            AnsiConsole.MarkupLine("[green]Would execute:[/]");
+            AnsiConsole.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
+            AnsiConsole.WriteLine($"export AUX_DATA_LOSS='{auxDataLoss}'");
+            AnsiConsole.WriteLine(perfCommand);
             return 0;
         }
 
-        Console.WriteLine($"Executing: {perfCommand}");
-        Console.WriteLine($"Output directory: {outputDir.FullName}");
+        AnsiConsole.MarkupLine($"[green]Executing:[/] {perfCommand}");
+        AnsiConsole.MarkupLine($"[blue]Output directory:[/] {outputDir.FullName}");
+        AnsiConsole.WriteLine();
 
         // Execute the command
         var processInfo = new ProcessStartInfo
@@ -105,11 +110,11 @@ internal class Program
 
         try
         {
-            return await RunPerf(processInfo);
+            return await RunPerfWithLayout(processInfo);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error executing perf command: {ex.Message}");
+            AnsiConsole.MarkupLine($"[red]Error executing perf command: {ex.Message}[/]");
             return 1;
         }
     }
@@ -119,74 +124,167 @@ internal class Program
     {
         List<AuxDataLost> _dataLostTimes = [];
         var entryCount = 0L;
-        var lastPrint = DateTime.MinValue;
+        var lastUpdate = DateTime.UtcNow;
 
-        AuxDataExtractor.Process(perfFilePath, entry =>
-        {
-            entryCount++;
-            if (entry.HasValue)
+        return AnsiConsole.Status()
+            .Start("Processing aux data...", ctx =>
             {
-                if (entry.Value.Flags != 0)
+                AuxDataExtractor.Process(perfFilePath, entry =>
                 {
-                    _dataLostTimes.Add(new AuxDataLost(entry.Value.Time, entry.Value.Tid, entry.Value.Pid));
-                }
-            }
+                    entryCount++;
+                    if (entry.HasValue)
+                    {
+                        if (entry.Value.Flags != 0)
+                        {
+                            _dataLostTimes.Add(new AuxDataLost(entry.Value.Time, entry.Value.Tid, entry.Value.Pid));
+                        }
+                    }
 
-            if (DateTime.UtcNow - DateTime.MinValue > TimeSpan.FromMilliseconds(10))
-            {
-                Console.Write($"\rProcessed {entryCount} entries, found {_dataLostTimes.Count} aux data loss events.        ");
-            }
-        });
-        Console.WriteLine();
-        return _dataLostTimes;
+                    if (DateTime.UtcNow - lastUpdate > TimeSpan.FromMilliseconds(100))
+                    {
+                        ctx.Status($"Processed {entryCount:N0} entries, found {_dataLostTimes.Count} aux data loss events");
+                        lastUpdate = DateTime.UtcNow;
+                    }
+                });
+                
+                ctx.Status($"Completed: {entryCount:N0} entries processed, {_dataLostTimes.Count} aux data loss events found");
+                return _dataLostTimes;
+            });
     }
 
-    private static async Task<int> RunPerf(ProcessStartInfo processInfo)
+    private static async Task<int> RunPerfWithLayout(ProcessStartInfo processInfo)
     {
         using var process = Process.Start(processInfo);
         if (process == null)
         {
-            Console.Error.WriteLine("Failed to start perf process.");
+            AnsiConsole.MarkupLine("[red]Failed to start perf process.[/]");
             return 1;
         }
 
-        process.OutputDataReceived += OutputData;
-        process.ErrorDataReceived += ErrorData;
+        var chrono = Stopwatch.StartNew();
+        var eventCount = 0L;
+        var lastEventCount = 0L;
+        var outputLines = new ConcurrentQueue<string>();
+        var errorLines = new ConcurrentQueue<string>();
+        var isComplete = false;
+
+        // Create layout
+        var layout = new Layout("Root")
+            .SplitColumns(
+                new Layout("Left").Size(30),
+                new Layout("Right")
+            );
+
+        // Set up process event handlers
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (string.IsNullOrEmpty(e.Data)) return;
+            
+            if (e.Data.StartsWith("PROGRESS:"))
+            {
+                var sliced = e.Data.AsSpan()[9..].Trim().ToString();
+                if (long.TryParse(sliced, out var count))
+                {
+                    Interlocked.Exchange(ref eventCount, count);
+                }
+            }
+            else
+            {
+                outputLines.Enqueue(e.Data);
+                // Keep only last 50 lines
+                if (outputLines.Count > 50)
+                {
+                    outputLines.TryDequeue(out _);
+                }
+            }
+        };
+
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
+            {
+                errorLines.Enqueue($"[red]{e.Data}[/]");
+                // Keep only last 20 lines
+                if (errorLines.Count > 20)
+                {
+                    errorLines.TryDequeue(out _);
+                }
+            }
+        };
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        var lineLength = 0;
-        var chrono = Stopwatch.StartNew();
-        void OutputData(object sender, DataReceivedEventArgs e)
+        // Live display task
+        var displayTask = Task.Run(async () =>
         {
-            if (!e.Data!.StartsWith("PROGRESS:"))
-            {
-                Console.Write(e.Data);
-                Console.Write(new string(' ', lineLength)); // Clear progress line
-                return;
-            }
-            var sliced = e.Data.AsSpan()[9..].Trim().ToString();
-            var eventCount = int.Parse(sliced);
-            var rate = ((int)(eventCount / chrono.Elapsed.TotalSeconds)).ToString();
-            var eventProcessed = "Events processed:";
-            var at = " at";
-            var eventsSec = "events/sec";
-            lineLength = eventProcessed.Length + sliced.Length + at.Length + rate.Length + eventsSec.Length;
-            Console.Write(eventProcessed);
-            Console.Write(sliced);
-            Console.Write(at);
-            Console.Write(rate);
-            Console.Write(eventsSec);
-            Console.Write("\r");
-        }
+            await AnsiConsole.Live(layout)
+                .StartAsync(async ctx =>
+                {
+                    while (!isComplete || !process.HasExited)
+                    {
+                        // Update left panel (statistics)
+                        var currentEventCount = Interlocked.Read(ref eventCount);
+                        var elapsed = chrono.Elapsed;
+                        var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
+                        var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
+                        
+                        var statsPanel = new Panel(
+                            new Markup($\"[bold yellow]Event Statistics[/]\\n\\n\" +
+                                     $\"[green]Total Events:[/] {currentEventCount:N0}\\n\" +
+                                     $\"[blue]Overall Rate:[/] {rate:N0} events/sec\\n\" +
+                                     $\"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\\n\" +
+                                     $\"[yellow]Elapsed Time:[/] {elapsed:hh\\\\:mm\\\\:ss}\\n\\n\" +
+                                     $\"[dim]Press Ctrl+C to stop[/]\"))
+                        {
+                            Header = new PanelHeader("[bold]Status[/]"),
+                            Border = BoxBorder.Rounded
+                        };
 
-        void ErrorData(object sender, DataReceivedEventArgs e)
-        {
-            Console.Error.WriteLine(e.Data);
-        }
+                        layout["Left"].Update(statsPanel);
 
+                        // Update right panel (console output)
+                        var consoleLines = new List<string>();
+                        
+                        // Add output lines
+                        foreach (var line in outputLines.ToArray())
+                        {
+                            consoleLines.Add(line);
+                        }
+                        
+                        // Add error lines
+                        foreach (var line in errorLines.ToArray())
+                        {
+                            consoleLines.Add(line);
+                        }
+
+                        // Take only the most recent lines that fit
+                        var maxLines = Math.Max(1, Console.WindowHeight - 10);
+                        var displayLines = consoleLines.TakeLast(maxLines).ToArray();
+                        
+                        var consoleContent = displayLines.Length > 0 
+                            ? string.Join("\\n", displayLines)
+                            : "[dim]Waiting for output...[/]";
+
+                        var consolePanel = new Panel(new Markup(consoleContent))
+                        {
+                            Header = new PanelHeader("[bold]Perf Output[/]"),
+                            Border = BoxBorder.Rounded
+                        };
+
+                        layout["Right"].Update(consolePanel);
+
+                        ctx.Refresh();
+                        lastEventCount = currentEventCount;
+                        await Task.Delay(1000); // Update every second
+                    }
+                });
+        });
+
+        // Wait for process to complete
         await process.WaitForExitAsync();
+        isComplete = true;
+        
         return process.ExitCode;
     }
 }
