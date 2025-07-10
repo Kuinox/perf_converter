@@ -37,10 +37,15 @@ public class ParquetStackRangePersistence : IBatchPersistence<StackRange>
         await _schema.Writer(_writer);
     }
 
+    Task _dispose;
+
     public async ValueTask DisposeAsync()
     {
-        await _writer.DisposeAsync();
-        await _fileStream.DisposeAsync();
+        _dispose ??= Task.WhenAll(
+            _writer.DisposeAsync().AsTask(),
+            _fileStream.DisposeAsync().AsTask()
+        );
+        await _dispose;
     }
 
     public static async Task<IBatchPersistence<StackRange>> Create(string filepath, CompressionMethod compressionMethod)

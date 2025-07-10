@@ -203,8 +203,8 @@ internal class Program
             );
         
         layout["Left"].SplitRows(
-            new Layout("Stats").Ratio(1),
-            new Layout("FileStatus").Ratio(1)
+            new Layout("Stats"),
+            new Layout("FileStatus")
         );
 
         // Set up process event handlers
@@ -335,13 +335,7 @@ internal class Program
                                         _ => "[white]"
                                     };
                                     
-                                    var fileName = Path.GetFileName(file.FileName);
-                                    if (fileName.Length > 25)
-                                    {
-                                        fileName = fileName[..22] + "...";
-                                    }
-                                    
-                                    fileStatusContent.Add($"{statusColor}{file.Status}[/] [blue]{fileName}[/] [dim]({file.EntryCount:N0})[/]");
+                                    fileStatusContent.Add($"{statusColor}{file.Status}[/] [blue]{file.FileName}[/] [dim]({file.EntryCount:N0})[/]");
                                 }
                             }
                             

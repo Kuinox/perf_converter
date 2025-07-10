@@ -22,6 +22,7 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
         if (isNewTrace)
         {
+            _persister.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
             _currentKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
