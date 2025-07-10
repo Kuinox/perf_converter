@@ -240,7 +240,7 @@ internal class Program
                              $"[green]Total Events:[/] {currentEventCount:N0}\\n" +
                              $"[blue]Overall Rate:[/] {rate:N0} events/sec\\n" +
                              $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\\n" +
-                             $"[yellow]Elapsed Time:[/] {elapsed:hh\\\\:mm\\\\:ss}\\n" +
+                             $"[yellow]Elapsed Time:[/] {elapsed.ToString(@"hh\:mm\:ss")}\\n" +
                              $"[white]Process Status:[/] {processStatus}\\n\\n" +
                              $"[dim]Press Ctrl+C to stop[/]"))
                 {
@@ -284,7 +284,7 @@ internal class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.WriteLine($"Display update error: {ex.Message}");
+                AnsiConsole.WriteLine($"Display update error: {ex}");
             }
         }
 
