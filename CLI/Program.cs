@@ -236,12 +236,12 @@ internal class Program
                 var processStatus = process.HasExited ? "[red]Exited[/]" : "[green]Running[/]";
                 
                 var statsPanel = new Panel(
-                    new Markup($"[bold yellow]Event Statistics[/]\\n\\n" +
-                             $"[green]Total Events:[/] {currentEventCount:N0}\\n" +
-                             $"[blue]Overall Rate:[/] {rate:N0} events/sec\\n" +
-                             $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\\n" +
-                             $"[yellow]Elapsed Time:[/] {elapsed.ToString(@"hh\:mm\:ss")}\\n" +
-                             $"[white]Process Status:[/] {processStatus}\\n\\n" +
+                    new Markup($"[bold yellow]Event Statistics[/]\n\n" +
+                             $"[green]Total Events:[/] {currentEventCount:N0}\n" +
+                             $"[blue]Overall Rate:[/] {rate:N0} events/sec\n" +
+                             $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\n" +
+                             $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
+                             $"[white]Process Status:[/] {processStatus}\n\n" +
                              $"[dim]Press Ctrl+C to stop[/]"))
                 {
                     Header = new PanelHeader("[bold]Status[/]"),
@@ -270,8 +270,8 @@ internal class Program
                 var displayLines = consoleLines.TakeLast(maxLines).ToArray();
                 
                 var consoleContent = displayLines.Length > 0 
-                    ? string.Join("\\n", displayLines)
-                    : $"[dim]Waiting for perf output...\\nProcess started at {elapsed:hh\\\\:mm\\\\:ss}[/]";
+                    ? string.Join("\n", displayLines)
+                    : $"[dim]Waiting for perf output...\nProcess started at {elapsed:hh\\:mm\\:ss}[/]";
 
                 var consolePanel = new Panel(new Markup(consoleContent))
                 {
