@@ -203,7 +203,7 @@ internal class Program
             );
         
         layout["Left"].SplitRows(
-            new Layout("Stats"),
+            new Layout("Stats").Size(10),
             new Layout("FileStatus")
         );
 
