@@ -208,72 +208,6 @@ internal class Program
             }
         };
 
-        void UpdateDisplay()
-        {
-            if (isComplete) return;
-
-            try
-            {
-                // Update left panel (statistics)
-                var currentEventCount = eventCount;
-                var elapsed = chrono.Elapsed;
-                var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
-                var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
-
-                var processStatus = process.HasExited ? "[red]Exited[/]" : "[green]Running[/]";
-
-                var statsPanel = new Panel(
-                    new Markup($"[bold yellow]Event Statistics[/]\n\n" +
-                             $"[green]Total Events:[/] {currentEventCount:N0}\n" +
-                             $"[blue]Overall Rate:[/] {rate:N0} events/sec\n" +
-                             $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\n" +
-                             $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
-                             $"[white]Process Status:[/] {processStatus}\n\n" +
-                             $"[dim]Press Ctrl+C to stop[/]"))
-                {
-                    Header = new PanelHeader("[bold]Status[/]"),
-                    Border = BoxBorder.Rounded
-                };
-
-                layout["Left"].Update(statsPanel);
-
-                // Update right panel (console output)
-                var consoleLines = new List<string>();
-
-                // Add output lines
-                foreach (var line in outputLines.ToArray())
-                {
-                    consoleLines.Add(line);
-                }
-
-                // Add error lines
-                foreach (var line in errorLines.ToArray())
-                {
-                    consoleLines.Add(line);
-                }
-
-                // Take only the most recent lines that fit
-                var maxLines = Math.Max(1, Console.WindowHeight - 10);
-                var displayLines = consoleLines.TakeLast(maxLines).ToArray();
-
-                var consoleContent = displayLines.Length > 0
-                    ? string.Join("\n", displayLines)
-                    : $"[dim]Waiting for perf output...\nProcess started at {elapsed:hh\\:mm\\:ss}[/]";
-
-                var consolePanel = new Panel(new Markup(consoleContent))
-                {
-                    Header = new PanelHeader("[bold]Perf Output[/]"),
-                    Border = BoxBorder.Rounded
-                };
-
-                layout["Right"].Update(consolePanel);
-                lastEventCount = currentEventCount;
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.WriteLine($"Display update error: {ex}");
-            }
-        }
 
         process.EnableRaisingEvents = true;
         process.Exited += (sender, e) =>
@@ -295,7 +229,71 @@ internal class Program
                     while (!isComplete)
                     {
                         Console.WriteLine("updating display");
-                        UpdateDisplay();
+                        
+                        try
+                        {
+                            // Update left panel (statistics)
+                            var currentEventCount = eventCount;
+                            var elapsed = chrono.Elapsed;
+                            var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
+                            var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
+
+                            var processStatus = process.HasExited ? "[red]Exited[/]" : "[green]Running[/]";
+
+                            var statsPanel = new Panel(
+                                new Markup($"[bold yellow]Event Statistics[/]\n\n" +
+                                         $"[green]Total Events:[/] {currentEventCount:N0}\n" +
+                                         $"[blue]Overall Rate:[/] {rate:N0} events/sec\n" +
+                                         $"[cyan]Current Rate:[/] {deltaRate:N0} events/sec\n" +
+                                         $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
+                                         $"[white]Process Status:[/] {processStatus}\n\n" +
+                                         $"[dim]Press Ctrl+C to stop[/]"))
+                            {
+                                Header = new PanelHeader("[bold]Status[/]"),
+                                Border = BoxBorder.Rounded
+                            };
+
+                            layout["Left"].Update(statsPanel);
+
+                            // Update right panel (console output)
+                            var consoleLines = new List<string>();
+
+                            // Add output lines
+                            foreach (var line in outputLines.ToArray())
+                            {
+                                consoleLines.Add(line);
+                            }
+
+                            // Add error lines
+                            foreach (var line in errorLines.ToArray())
+                            {
+                                consoleLines.Add(line);
+                            }
+
+                            // Take only the most recent lines that fit
+                            var maxLines = Math.Max(1, Console.WindowHeight - 10);
+                            var displayLines = consoleLines.TakeLast(maxLines).ToArray();
+
+                            var consoleContent = displayLines.Length > 0
+                                ? string.Join("\n", displayLines)
+                                : $"[dim]Waiting for perf output...\nProcess started at {elapsed:hh\\:mm\\:ss}[/]";
+
+                            var consolePanel = new Panel(new Markup(consoleContent))
+                            {
+                                Header = new PanelHeader("[bold]Perf Output[/]"),
+                                Border = BoxBorder.Rounded
+                            };
+
+                            layout["Right"].Update(consolePanel);
+                            lastEventCount = currentEventCount;
+                            
+                            ctx.Refresh();
+                        }
+                        catch (Exception ex)
+                        {
+                            AnsiConsole.WriteLine($"Display update error: {ex}");
+                        }
+                        
                         await Task.Delay(10);
                     }
                 });
