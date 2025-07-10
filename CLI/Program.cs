@@ -20,6 +20,7 @@ public class FileStatus
     public int EntryCount { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
     public DateTime? ClosedAt { get; set; }
+    public DateTime? LastActivity { get; set; }
 }
 
 internal class Program
@@ -232,14 +233,14 @@ internal class Program
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                // Parse FILE_STATUS lines: FILE_STATUS|filename|status|count?
-                if (e.Data.StartsWith("FILE_STATUS|"))
+                // Parse FILE_STATUS and FILE_ACTIVITY lines
+                if (e.Data.StartsWith("FILE_STATUS|") || e.Data.StartsWith("FILE_ACTIVITY|"))
                 {
                     var parts = e.Data.Split('|');
                     if (parts.Length >= 3)
                     {
                         var fileName = parts[1];
-                        var status = parts[2];
+                        var actionType = parts[2];
                         var entryCount = 0;
                         
                         if (parts.Length >= 4 && int.TryParse(parts[3], out var count))
@@ -247,22 +248,38 @@ internal class Program
                             entryCount = count;
                         }
                         
-                        fileStatuses.AddOrUpdate(fileName, 
-                            new FileStatus { FileName = fileName, Status = status, EntryCount = entryCount, ClosedAt = status == "CLOSED" ? DateTime.UtcNow : null },
-                            (key, existing) => 
-                            {
-                                existing.Status = status;
-                                existing.LastUpdated = DateTime.UtcNow;
-                                if (status == "CLOSED")
+                        if (e.Data.StartsWith("FILE_ACTIVITY|"))
+                        {
+                            // Handle buffering activity
+                            fileStatuses.AddOrUpdate(fileName,
+                                new FileStatus { FileName = fileName, Status = "BUFFERING", EntryCount = entryCount, LastActivity = DateTime.UtcNow },
+                                (key, existing) =>
                                 {
-                                    existing.ClosedAt = DateTime.UtcNow;
-                                }
-                                if (entryCount > 0)
-                                {
+                                    existing.LastActivity = DateTime.UtcNow;
                                     existing.EntryCount += entryCount;
-                                }
-                                return existing;
-                            });
+                                    return existing;
+                                });
+                        }
+                        else
+                        {
+                            // Handle status changes
+                            fileStatuses.AddOrUpdate(fileName, 
+                                new FileStatus { FileName = fileName, Status = actionType, EntryCount = entryCount, ClosedAt = actionType == "CLOSED" ? DateTime.UtcNow : null },
+                                (key, existing) => 
+                                {
+                                    existing.Status = actionType;
+                                    existing.LastUpdated = DateTime.UtcNow;
+                                    if (actionType == "CLOSED")
+                                    {
+                                        existing.ClosedAt = DateTime.UtcNow;
+                                    }
+                                    if (entryCount > 0)
+                                    {
+                                        existing.EntryCount += entryCount;
+                                    }
+                                    return existing;
+                                });
+                        }
                     }
                 }
                 else
@@ -373,21 +390,30 @@ internal class Program
                                 
                                 foreach (var pidGroup in pidGroups)
                                 {
-                                    var pidNode = fileTree.AddNode($"[bold]PID {pidGroup.Key}[/]");
+                                    // Check if any file in this PID has recent activity
+                                    var hasRecentActivity = pidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
+                                    var pidDisplay = hasRecentActivity ? $"[bold yellow on blue]PID {pidGroup.Key}[/]" : $"[bold]PID {pidGroup.Key}[/]";
+                                    var pidNode = fileTree.AddNode(pidDisplay);
                                     
                                     // Group by TID within each PID
                                     var tidGroups = pidGroup.GroupBy(f => f.Key.Split('/')[1]).OrderBy(g => g.Key);
                                     
                                     foreach (var tidGroup in tidGroups)
                                     {
-                                        var tidNode = pidNode.AddNode($"[bold cyan]TID {tidGroup.Key}[/]");
+                                        // Check if any file in this TID has recent activity
+                                        var tidHasActivity = tidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
+                                        var tidDisplay = tidHasActivity ? $"[bold yellow on blue]TID {tidGroup.Key}[/]" : $"[bold cyan]TID {tidGroup.Key}[/]";
+                                        var tidNode = pidNode.AddNode(tidDisplay);
                                         
                                         // Add files for this TID
                                         foreach (var kvp in tidGroup.OrderBy(f => f.Key))
                                         {
                                             var file = kvp.Value;
+                                            var hasActivity = file.LastActivity.HasValue && (now - file.LastActivity.Value).TotalMilliseconds < 500;
+                                            
                                             var statusColor = file.Status switch
                                             {
+                                                "BUFFERING" when hasActivity => "[green on yellow]",
                                                 "BUFFERING" => "[green]",
                                                 "FLUSHING" => "[yellow]",
                                                 "CLOSED" => "[dim green]",
@@ -395,7 +421,10 @@ internal class Program
                                             };
                                             
                                             var fileName = file.FileName.Split('/').Last();
-                                            tidNode.AddNode($"{statusColor}{file.Status}[/] [blue]{fileName}[/] [dim]({file.EntryCount:N0})[/]");
+                                            var fileDisplay = hasActivity ? 
+                                                $"{statusColor}{file.Status}[/] [blue on yellow]{fileName}[/] [dim]({file.EntryCount:N0})[/]" :
+                                                $"{statusColor}{file.Status}[/] [blue]{fileName}[/] [dim]({file.EntryCount:N0})[/]";
+                                            tidNode.AddNode(fileDisplay);
                                         }
                                     }
                                 }
@@ -409,7 +438,7 @@ internal class Program
                             
                             layout["Top"]["FileStatus"].Update(fileStatusPanel);
 
-                            // Update right panel (console output)
+                            // Update bottom panel (console output)
                             var consoleLines = new List<string>();
 
                             // Add output lines

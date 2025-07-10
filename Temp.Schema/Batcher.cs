@@ -23,6 +23,10 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
     void Start() => _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
 
+    readonly object _bufferReportLock = new();
+    int _bufferCount = 0;
+    DateTime _lastBufferReport = DateTime.UtcNow;
+    
     public void Persist(T val)
     {
         var sentMessage = false;
@@ -38,6 +42,19 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         if (sentMessage)
         {
             Console.Error.WriteLine($"Stalled queue completed.");
+        }
+        
+        // Report buffering activity every 10ms
+        lock (_bufferReportLock)
+        {
+            _bufferCount++;
+            var now = DateTime.UtcNow;
+            if ((now - _lastBufferReport).TotalMilliseconds >= 10)
+            {
+                Console.Error.WriteLine($"FILE_ACTIVITY|{_fileName}|BUFFERED|{_bufferCount}");
+                _bufferCount = 0;
+                _lastBufferReport = now;
+            }
         }
     }
 
