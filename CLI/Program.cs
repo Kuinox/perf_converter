@@ -152,7 +152,8 @@ internal class Program
 
         process.OutputDataReceived += OutputData;
         process.ErrorDataReceived += ErrorData;
-
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         void OutputData(object sender, DataReceivedEventArgs e)
         {
             Console.Write("\r");
