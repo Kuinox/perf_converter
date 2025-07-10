@@ -203,11 +203,11 @@ internal class Program
         var layout = new Layout("Root")
             .SplitRows(
                 new Layout("Top"),
-                new Layout("Logs").Size(8)
+                new Layout("Logs").Ratio(1)
             );
         
         layout["Top"].SplitColumns(
-            new Layout("Stats").Ratio(1),
+            new Layout("Stats").Size(50),
             new Layout("FileStatus").Ratio(2)
         );
 
@@ -252,13 +252,13 @@ internal class Program
                         
                         if (e.Data.StartsWith("FILE_ACTIVITY|"))
                         {
-                            // Handle buffering activity
+                            // Handle buffering activity - entryCount is current buffer size
                             fileStatuses.AddOrUpdate(fileName,
                                 new FileStatus { FileName = fileName, Status = "BUFFERING", BufferedCount = entryCount, LastActivity = DateTime.UtcNow },
                                 (key, existing) =>
                                 {
                                     existing.LastActivity = DateTime.UtcNow;
-                                    existing.BufferedCount += entryCount;
+                                    existing.BufferedCount = entryCount; // Set to current buffer size, not accumulate
                                     return existing;
                                 });
                         }
@@ -386,32 +386,24 @@ internal class Program
                             else
                             {
                                 fileTree = new Tree("Files");
-                                
                                 // Group by PID
                                 var pidGroups = fileStatuses.GroupBy(f => f.Key.Split('/')[0]).OrderBy(g => g.Key);
                                 
                                 foreach (var pidGroup in pidGroups)
                                 {
-                                    // Check if any file in this PID has recent activity
-                                    var hasRecentActivity = pidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
-                                    var pidDisplay = hasRecentActivity ? $"[bold on yellow]PID {pidGroup.Key}[/]" : $"[bold]PID {pidGroup.Key}[/]";
-                                    var pidNode = fileTree.AddNode(pidDisplay);
+                                    var pidNode = fileTree.AddNode($"[bold]PID {pidGroup.Key}[/]");
                                     
                                     // Group by TID within each PID
                                     var tidGroups = pidGroup.GroupBy(f => f.Key.Split('/')[1]).OrderBy(g => g.Key);
                                     
                                     foreach (var tidGroup in tidGroups)
                                     {
-                                        // Check if any file in this TID has recent activity
-                                        var tidHasActivity = tidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
-                                        var tidDisplay = tidHasActivity ? $"[bold cyan on yellow]TID {tidGroup.Key}[/]" : $"[bold cyan]TID {tidGroup.Key}[/]";
-                                        var tidNode = pidNode.AddNode(tidDisplay);
+                                        var tidNode = pidNode.AddNode($"[bold cyan]TID {tidGroup.Key}[/]");
                                         
                                         // Add files for this TID
                                         foreach (var kvp in tidGroup.OrderBy(f => f.Key))
                                         {
                                             var file = kvp.Value;
-                                            var hasActivity = file.LastActivity.HasValue && (now - file.LastActivity.Value).TotalMilliseconds < 500;
                                             
                                             var statusColor = file.Status switch
                                             {
@@ -428,10 +420,7 @@ internal class Program
                                                 statusText += $" ({file.BufferedCount:N0})";
                                             }
                                             
-                                            var fileDisplay = hasActivity ?
-                                                $"[on yellow]{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/][/]" :
-                                                $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
-                                            
+                                            var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
                                             tidNode.AddNode(fileDisplay);
                                         }
                                     }

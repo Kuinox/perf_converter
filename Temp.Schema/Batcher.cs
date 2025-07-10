@@ -24,7 +24,6 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
     void Start() => _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
 
     readonly object _bufferReportLock = new();
-    int _bufferCount = 0;
     DateTime _lastBufferReport = DateTime.UtcNow;
     
     public void Persist(T val)
@@ -44,15 +43,14 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
             Console.Error.WriteLine($"Stalled queue completed.");
         }
         
-        // Report buffering activity every 10ms
+        // Report current buffer size every 10ms
         lock (_bufferReportLock)
         {
-            _bufferCount++;
             var now = DateTime.UtcNow;
             if ((now - _lastBufferReport).TotalMilliseconds >= 10)
             {
-                Console.Error.WriteLine($"FILE_ACTIVITY|{_fileName}|BUFFERED|{_bufferCount}");
-                _bufferCount = 0;
+                var currentBufferSize = _channel.Reader.Count;
+                Console.Error.WriteLine($"FILE_ACTIVITY|{_fileName}|BUFFERED|{currentBufferSize}");
                 _lastBufferReport = now;
             }
         }
