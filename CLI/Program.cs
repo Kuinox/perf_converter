@@ -91,9 +91,9 @@ internal class Program
             return 0;
         }
 
-        AnsiConsole.MarkupLine($"[green]Executing:[/] {perfCommand}");
-        AnsiConsole.MarkupLine($"[blue]Output directory:[/] {outputDir.FullName}");
-        AnsiConsole.WriteLine();
+        //AnsiConsole.MarkupLine($"[green]Executing:[/] {perfCommand}");
+        //AnsiConsole.MarkupLine($"[blue]Output directory:[/] {outputDir.FullName}");
+        //AnsiConsole.WriteLine();
 
         // Execute the command
         var processInfo = new ProcessStartInfo
@@ -182,24 +182,13 @@ internal class Program
 
             if (e.Data.StartsWith("PROGRESS:"))
             {
-                try
-                {
-                    var sliced = e.Data.AsSpan()[9..].Trim().ToString();
-                    if (long.TryParse(sliced, out var count))
-                    {
-                        Interlocked.Exchange(ref eventCount, count);
-                    }
-                }
-                catch
-                {
-                    // Ignore parse errors for progress messages
-                }
+                var sliced = e.Data.AsSpan()[9..].Trim().ToString();
+                eventCount = long.Parse(sliced);
             }
             else
             {
                 outputLines.Enqueue(e.Data);
-                // Keep only last 50 lines
-                if (outputLines.Count > 50)
+                while (outputLines.Count > 50)
                 {
                     outputLines.TryDequeue(out _);
                 }
@@ -297,13 +286,15 @@ internal class Program
         process.BeginErrorReadLine();
 
         // Start the live display
+        Console.WriteLine("starting live display...");
         try
         {
             await AnsiConsole.Live(layout)
                 .StartAsync(async ctx =>
                 {
-                    while(!isComplete)
+                    while (!isComplete)
                     {
+                        Console.WriteLine("updating display");
                         UpdateDisplay();
                         await Task.Delay(10);
                     }
