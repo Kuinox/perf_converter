@@ -71,8 +71,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         Stopwatch sw = Stopwatch.StartNew();
         try
         {
+            Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|FLUSHING|{batch.Count}");
             await _batchPersistence.PersistAsync(batch);
-            Console.Error.WriteLine($"Wrote batch of {batch.Count} {typeof(T).Name} in {sw.ElapsedMilliseconds}ms");
+            Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|BUFFERING");
         }
         catch (Exception e)
         {
@@ -106,7 +107,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         {
             await _workLoop;
         }
-        
+        Console.Error.WriteLine($"FILE_STATUS|{_batchPersistence.GetType().Name}|CLOSED");
         await _batchPersistence.DisposeAsync();
     }
 }

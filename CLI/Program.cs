@@ -13,6 +13,14 @@ using Spectre.Console;
 
 namespace CLI;
 
+public class FileStatus
+{
+    public string FileName { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public int EntryCount { get; set; }
+    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+}
+
 internal class Program
 {
     static async Task<int> Main(string[] args)
@@ -166,6 +174,7 @@ internal class Program
         var lastEventCount = 0L;
         var outputLines = new ConcurrentQueue<string>();
         var errorLines = new ConcurrentQueue<string>();
+        var fileStatuses = new ConcurrentDictionary<string, FileStatus>();
         var isComplete = false;
 
         // Set up Ctrl+C handler to kill the process
@@ -181,9 +190,9 @@ internal class Program
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLine($"[red]Error killing process: {ex.Message}[/]");
+                    Environment.Exit(1);
                 }
             }
-            isComplete = true;
         };
 
         // Create layout
@@ -192,6 +201,11 @@ internal class Program
                 new Layout("Left").Size(50),
                 new Layout("Right")
             );
+        
+        layout["Left"].SplitRows(
+            new Layout("Stats").Size(8),
+            new Layout("FileStatus")
+        );
 
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
@@ -217,11 +231,43 @@ internal class Program
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                errorLines.Enqueue($"[red]{e.Data}[/]");
-                // Keep only last 20 lines
-                if (errorLines.Count > 20)
+                // Parse FILE_STATUS lines: FILE_STATUS|filename|status|count?
+                if (e.Data.StartsWith("FILE_STATUS|"))
                 {
-                    errorLines.TryDequeue(out _);
+                    var parts = e.Data.Split('|');
+                    if (parts.Length >= 3)
+                    {
+                        var fileName = parts[1];
+                        var status = parts[2];
+                        var entryCount = 0;
+                        
+                        if (parts.Length >= 4 && int.TryParse(parts[3], out var count))
+                        {
+                            entryCount = count;
+                        }
+                        
+                        fileStatuses.AddOrUpdate(fileName, 
+                            new FileStatus { FileName = fileName, Status = status, EntryCount = entryCount },
+                            (key, existing) => 
+                            {
+                                existing.Status = status;
+                                existing.LastUpdated = DateTime.UtcNow;
+                                if (entryCount > 0)
+                                {
+                                    existing.EntryCount += entryCount;
+                                }
+                                return existing;
+                            });
+                    }
+                }
+                else
+                {
+                    errorLines.Enqueue($"[red]{e.Data}[/]");
+                    // Keep only last 20 lines
+                    if (errorLines.Count > 20)
+                    {
+                        errorLines.TryDequeue(out _);
+                    }
                 }
             }
         };
@@ -254,7 +300,6 @@ internal class Program
                             var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
                             var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
 
-                            var processStatus = process.HasExited ? "[red]Exited[/]" : "[green]Running[/]";
 
                             var statsPanel = new Panel(
                                 new Markup($"[bold yellow]Event Statistics[/]\n\n" +
@@ -262,14 +307,51 @@ internal class Program
                                          $"[blue]Overall Rate (events/sec):[/] {rate:N0}\n" +
                                          $"[cyan]Current Rate (events/sec):[/] {deltaRate:N0}\n" +
                                          $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
-                                         $"[white]Process Status:[/] {processStatus}\n\n" +
                                          $"[dim]Press Ctrl+C to stop[/]"))
                             {
                                 Header = new PanelHeader("[bold]Status[/]"),
                                 Border = BoxBorder.Rounded
                             };
 
-                            layout["Left"].Update(statsPanel);
+                            layout["Left"]["Stats"].Update(statsPanel);
+                            
+                            // Update file status panel
+                            var fileStatusContent = new List<string>();
+                            
+                            if (fileStatuses.IsEmpty)
+                            {
+                                fileStatusContent.Add("[dim]No files opened yet...[/]");
+                            }
+                            else
+                            {
+                                foreach (var kvp in fileStatuses.OrderBy(f => f.Key))
+                                {
+                                    var file = kvp.Value;
+                                    var statusColor = file.Status switch
+                                    {
+                                        "BUFFERING" => "[green]",
+                                        "FLUSHING" => "[yellow]",
+                                        "CLOSED" => "[dim green]",
+                                        _ => "[white]"
+                                    };
+                                    
+                                    var fileName = Path.GetFileName(file.FileName);
+                                    if (fileName.Length > 25)
+                                    {
+                                        fileName = fileName[..22] + "...";
+                                    }
+                                    
+                                    fileStatusContent.Add($"{statusColor}{file.Status}[/] [blue]{fileName}[/] [dim]({file.EntryCount:N0})[/]");
+                                }
+                            }
+                            
+                            var fileStatusPanel = new Panel(new Markup(string.Join("\n", fileStatusContent)))
+                            {
+                                Header = new PanelHeader("[bold]File Status[/]"),
+                                Border = BoxBorder.Rounded
+                            };
+                            
+                            layout["Left"]["FileStatus"].Update(fileStatusPanel);
 
                             // Update right panel (console output)
                             var consoleLines = new List<string>();

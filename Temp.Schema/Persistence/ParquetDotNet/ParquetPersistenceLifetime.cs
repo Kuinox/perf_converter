@@ -37,7 +37,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
 
         return new ParquetPersistenceLifetime((key) =>
         {
-            Console.Error.WriteLine($"Creating parquet persistence for {key}");
+            Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
             var path = Path.Combine(outputDirectory, key);
             var dir = Path.GetDirectoryName(path)!; // key can be a path.
             Directory.CreateDirectory(dir);
