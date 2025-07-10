@@ -19,6 +19,7 @@ public class FileStatus
     public string Status { get; set; } = string.Empty;
     public int EntryCount { get; set; }
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    public DateTime? ClosedAt { get; set; }
 }
 
 internal class Program
@@ -247,11 +248,15 @@ internal class Program
                         }
                         
                         fileStatuses.AddOrUpdate(fileName, 
-                            new FileStatus { FileName = fileName, Status = status, EntryCount = entryCount },
+                            new FileStatus { FileName = fileName, Status = status, EntryCount = entryCount, ClosedAt = status == "CLOSED" ? DateTime.UtcNow : null },
                             (key, existing) => 
                             {
                                 existing.Status = status;
                                 existing.LastUpdated = DateTime.UtcNow;
+                                if (status == "CLOSED")
+                                {
+                                    existing.ClosedAt = DateTime.UtcNow;
+                                }
                                 if (entryCount > 0)
                                 {
                                     existing.EntryCount += entryCount;
@@ -324,9 +329,20 @@ internal class Program
                             }
                             else
                             {
+                                var now = DateTime.UtcNow;
+                                var filesToRemove = new List<string>();
+                                
                                 foreach (var kvp in fileStatuses.OrderBy(f => f.Key))
                                 {
                                     var file = kvp.Value;
+                                    
+                                    // Remove closed files after 10 seconds
+                                    if (file.Status == "CLOSED" && file.ClosedAt.HasValue && (now - file.ClosedAt.Value).TotalSeconds > 10)
+                                    {
+                                        filesToRemove.Add(kvp.Key);
+                                        continue;
+                                    }
+                                    
                                     var statusColor = file.Status switch
                                     {
                                         "BUFFERING" => "[green]",
@@ -336,6 +352,12 @@ internal class Program
                                     };
                                     
                                     fileStatusContent.Add($"{statusColor}{file.Status}[/] [blue]{file.FileName}[/] [dim]({file.EntryCount:N0})[/]");
+                                }
+                                
+                                // Remove expired closed files
+                                foreach (var key in filesToRemove)
+                                {
+                                    fileStatuses.TryRemove(key, out _);
                                 }
                             }
                             
