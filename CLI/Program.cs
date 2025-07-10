@@ -81,7 +81,7 @@ internal class Program
 
         var perfCommand = $"perf script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}";
         var auxDataLoss = JsonSerializer.Serialize(dataLost);
-        
+
         if (dryRun)
         {
             AnsiConsole.MarkupLine("[green]Would execute:[/]");
@@ -146,7 +146,7 @@ internal class Program
                         lastUpdate = DateTime.UtcNow;
                     }
                 });
-                
+
                 ctx.Status($"Completed: {entryCount:N0} entries processed, {_dataLostTimes.Count} aux data loss events found");
                 return _dataLostTimes;
             });
@@ -179,7 +179,7 @@ internal class Program
         process.OutputDataReceived += (sender, e) =>
         {
             if (string.IsNullOrEmpty(e.Data)) return;
-            
+
             if (e.Data.StartsWith("PROGRESS:"))
             {
                 try
@@ -219,12 +219,10 @@ internal class Program
             }
         };
 
-        var displayUpdateTimer = new Timer(_ => UpdateDisplay(), null, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
-        
         void UpdateDisplay()
         {
             if (isComplete) return;
-            
+
             try
             {
                 // Update left panel (statistics)
@@ -232,9 +230,9 @@ internal class Program
                 var elapsed = chrono.Elapsed;
                 var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
                 var deltaRate = elapsed.TotalSeconds > 1 ? (int)((currentEventCount - lastEventCount) / 1.0) : 0;
-                
+
                 var processStatus = process.HasExited ? "[red]Exited[/]" : "[green]Running[/]";
-                
+
                 var statsPanel = new Panel(
                     new Markup($"[bold yellow]Event Statistics[/]\n\n" +
                              $"[green]Total Events:[/] {currentEventCount:N0}\n" +
@@ -252,13 +250,13 @@ internal class Program
 
                 // Update right panel (console output)
                 var consoleLines = new List<string>();
-                
+
                 // Add output lines
                 foreach (var line in outputLines.ToArray())
                 {
                     consoleLines.Add(line);
                 }
-                
+
                 // Add error lines
                 foreach (var line in errorLines.ToArray())
                 {
@@ -268,8 +266,8 @@ internal class Program
                 // Take only the most recent lines that fit
                 var maxLines = Math.Max(1, Console.WindowHeight - 10);
                 var displayLines = consoleLines.TakeLast(maxLines).ToArray();
-                
-                var consoleContent = displayLines.Length > 0 
+
+                var consoleContent = displayLines.Length > 0
                     ? string.Join("\n", displayLines)
                     : $"[dim]Waiting for perf output...\nProcess started at {elapsed:hh\\:mm\\:ss}[/]";
 
@@ -292,8 +290,8 @@ internal class Program
         process.Exited += (sender, e) =>
         {
             isComplete = true;
-            displayUpdateTimer?.Dispose();
         };
+        isComplete = process.HasExited;
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
@@ -304,8 +302,11 @@ internal class Program
             await AnsiConsole.Live(layout)
                 .StartAsync(async ctx =>
                 {
-                    // Wait for process to complete
-                    await process.WaitForExitAsync();
+                    while(!isComplete)
+                    {
+                        UpdateDisplay();
+                        await Task.Delay(10);
+                    }
                 });
         }
         catch (Exception ex)
@@ -313,16 +314,11 @@ internal class Program
             AnsiConsole.WriteLine($"Display error: {ex.Message}");
             AnsiConsole.WriteLine($"Exception type: {ex.GetType().Name}");
             AnsiConsole.WriteLine($"Stack trace: {ex.StackTrace}");
-            
+
             // Wait for process without display
             await process.WaitForExitAsync();
         }
-        finally
-        {
-            displayUpdateTimer?.Dispose();
-            isComplete = true;
-        }
-        
+
         return process.ExitCode;
     }
 }
