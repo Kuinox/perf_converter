@@ -1,65 +1,46 @@
 ﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using Temp.Core;
-using Temp.Schema;
 
-namespace PerfConverter.Processor;
+namespace PerfConverter;
 
-public unsafe class TraceProcessor : ITraceProcessor
+unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> persistenceFactory)
 {
-    readonly IReadOnlyDictionary<(int, int), (List<ulong> items, int count)> _auxDataLoss;
-    readonly Dictionary<string, IPersister<TraceEntry>> _persistence = [];
-    readonly Dictionary<(int, int), int> _traceCountPerPidTid = [];
-    readonly Dictionary<(int, int, int), string> _keys = [];
-    readonly Dictionary<string, ulong> _counts = [];
-    readonly Func<string, IPersister<TraceEntry>> _persistenceFactory;
+    readonly Queue<ulong> auxDrop = new(auxDrop.Order());
+    int _currentSegmentId = 0;
+    ulong _currentEntryId = 0;
+    string _currentKey = null!;
+    IPersister<TraceEntry> _persister = null!;
 
-    public TraceProcessor(Func<string, IPersister<TraceEntry>> persistenceFactory)
+    public uint Tid { get; } = tid;
+    public uint Pid { get; } = pid;
+
+
+    public void QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        _persistenceFactory = persistenceFactory;
-        var auxDataLossJson = Environment.GetEnvironmentVariable("AUX_DATA_LOSS")!;
-        var auxDataLoss = JsonSerializer.Deserialize(auxDataLossJson, SourceGenerationContext.Default.AuxDataLostArray)!;
-        _auxDataLoss = auxDataLoss
-            .GroupBy(x => (x.Pid, x.Tid))
-            .ToDictionary(
-                x => x.Key,
-                x => x.Select(x => x.Time).Append(0uL).OrderDescending().ToList())
-            .ToDictionary(
-            x => x.Key,
-            x => (x.Value, x.Value.Count));
+        var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
+        if (isNewTrace)
+        {
+            auxDrop.Dequeue();
+            _currentSegmentId++;
+            _currentKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
+            _currentEntryId=0;
+            _persister = persistenceFactory(_currentKey);
+        }
+
+        var entry = BuildEntry(sample, ip, address, ++_currentEntryId);
+        _persister.Persist(entry);
     }
 
-    public ulong QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
+    private static TraceEntry BuildEntry(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
     {
-        var (items, count) = _auxDataLoss[(sample->pid, sample->tid)];
-        var fileCount = count - items.Count;
-
-        var isNewTrace = items.Count > 0 && items[^1] < sample->time;
-
-        if (isNewTrace)
-            _auxDataLoss[(sample->pid, sample->tid)].items.Remove(0);
-
-        ref var key = ref CollectionsMarshal.GetValueRefOrAddDefault(_keys, (sample->pid, sample->tid, fileCount), out _);
-        key ??= $"{sample->pid}/{sample->tid}/{fileCount}";
-
-        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_persistence, key, out _);
-        persistence ??= _persistenceFactory(key);
-
-        ref var id = ref CollectionsMarshal.GetValueRefOrAddDefault(_counts, key, out _);
-        if(isNewTrace)
-            id = 0;
-        
-        id++;
-
         var entry = new TraceEntry
         {
             Id = id,
             PerfId = sample->id,
-            Pid = (uint)sample->pid,
-            Tid = (uint)sample->tid,
+            Pid = sample->pid,
+            Tid = sample->tid,
             Time = sample->time,
             Cpu = (uint)sample->cpu,
             Flags = (DLFilterFlag)sample->flags,
@@ -108,8 +89,7 @@ public unsafe class TraceProcessor : ITraceProcessor
             entry.AddressComm = addrComm;
         }
 
-        persistence.Persist(entry);
-
-        return id;
+        return entry;
     }
+
 }

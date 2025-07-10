@@ -1,8 +1,8 @@
 ﻿using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
-using PerfConverter.Processor;
-using Temp.Core;
+using PerfConverter.Persistence.ParquetDotNet;
 using System.Runtime.InteropServices;
+using Temp.Core;
 
 namespace PerfConverter;
 
@@ -12,8 +12,8 @@ public unsafe class PerfDlFilter
     [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
     static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    static ITraceProcessor _traceProcessor = null!;
-    static IPersistenceLifetime _persistenceLifetime = null!;
+    static TraceProcessor _traceProcessor = null!;
+    static ParquetPersistenceLifetime _persistenceLifetime = null!;
 
     class State
     {
@@ -70,11 +70,10 @@ public unsafe class PerfDlFilter
             {
                 address = fns->resolve_addr(ctx);
             }
-            var id = _traceProcessor.QueueData(sample, ip, address);
+            _traceProcessor.QueueData(sample, ip, address);
 
-            // Report progress 10 times per second
             var now = DateTime.UtcNow;
-            if ((now - state.LastReportTime).TotalMilliseconds > 100)
+            if ((now - state.LastReportTime).TotalMilliseconds > 10)
             {
                 Console.WriteLine($"PROGRESS:{state.EventCount}");
                 state.LastReportTime = now;

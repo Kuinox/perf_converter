@@ -18,20 +18,6 @@ internal class TraceSegment : IAsyncDisposable
         _segmentId = segmentId;
     }
 
-    public static async Task<TraceSegment> CreateAsync(string outputDir, int segmentId)
-    {
-        var segmentDirectory = Path.Combine(outputDir, $"segment_{segmentId}");
-        Directory.CreateDirectory(segmentDirectory);
-
-        var traceOutputFile = Path.Combine(segmentDirectory, "traces.parquet");
-        var stackOutputFile = Path.Combine(segmentDirectory, "stack_range.parquet");
-        var tracePersistence = await ParquetTracePersistence.Create(traceOutputFile, Configuration.CompressionMethod);
-        var stackRangePersistence = await ParquetStackRangePersistence.Create(stackOutputFile, Configuration.CompressionMethod);
-        var traceBatcher = Batcher<TraceEntry>.Create(tracePersistence, Configuration.BatchSize, BatchingMode.OnFull);
-        var stackRangeBatcher = Batcher<StackRange>.Create(stackRangePersistence, Configuration.BatchSize, BatchingMode.OnFull);
-        return new TraceSegment(traceBatcher, stackRangeBatcher, segmentId);
-    }
-
     readonly Stack<long> _stackStarts = [];
     public void Process(TraceEntry trace)
     {

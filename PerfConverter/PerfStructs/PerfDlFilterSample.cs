@@ -22,11 +22,11 @@ public unsafe struct PerfDlFilterSample
     /// <summary>
     /// Process ID
     /// </summary>
-    public int pid;
+    public uint pid;
     /// <summary>
     /// Thread ID
     /// </summary>
-    public int tid;
+    public uint tid;
     /// <summary>
     /// Time, depends on clock used in the perf args
     public ulong time;

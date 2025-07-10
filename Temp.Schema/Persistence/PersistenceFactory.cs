@@ -9,7 +9,7 @@ public static class PersistenceFactory
     const string PERSISTENCE_TYPE_ENV = "PERSISTENCE_TYPE";
     const string OUTPUT_DIRECTORY_ENV = "OUTPUT_DIRECTORY";
     const string PARQUET_COMPRESS_ENV = "PARQUET_COMPRESSION";
-    public static IPersistenceLifetime CreatePersistence()
+    public static ParquetPersistenceLifetime CreatePersistence()
     {
         var batchSize = 10_000_000;
         string? batchSizeEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
@@ -33,6 +33,6 @@ public static class PersistenceFactory
                 Console.Error.WriteLine($"Invalid Parquet compression method: {compressionEnv}. Defaulting to Snappy.");
         }
         Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
-        return ParquetPersistenceFactory.CreatePersistence(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
+        return ParquetPersistenceLifetime.Create(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
     }
 }

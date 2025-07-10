@@ -1,3 +1,4 @@
+using Parquet;
 using PerfConverter.Entry;
 using System.Runtime.InteropServices;
 using Temp.Core;
@@ -24,5 +25,24 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
         {
             await entry.DisposeAsync();
         }
+    }
+
+    public static ParquetPersistenceLifetime Create(
+       string outputDirectory,
+       int batchSize,
+       BatchingMode batchingMode,
+       CompressionMethod compressionMethod)
+    {
+        Directory.CreateDirectory(outputDirectory);
+
+        return new ParquetPersistenceLifetime((key) =>
+        {
+            Console.Error.WriteLine($"Creating parquet persistence for {key}");
+            var path = Path.Combine(outputDirectory, key);
+            var dir = Path.GetDirectoryName(path)!; // key can be a path.
+            Directory.CreateDirectory(dir);
+            var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
+            return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode);
+        });
     }
 }

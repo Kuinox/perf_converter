@@ -56,41 +56,11 @@ class Program
 
         try
         {
-            var dropTimes = await AuxDataReader.ReadAuxDataLossAsync(auxPath);
-
-            var totalTraces = GetTotalTraceCount(reader);
-            var tid = await GetTraceTID(reader, inputSchema);
-            var drops = dropTimes[tid].Order().ToArray();
-            var segments = new List<(ulong, ulong)>();
-            for (var i = 1; i < drops.Length; i++)
-            {
-                segments.Add((drops[i - 1], drops[i]));
-            }
-
-            var traceStream = inputSchema.ReadAll(reader);
-            await ProcessTraceStream(traceStream, dropTimes, totalTraces, outputDir);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error processing parquet files: {ex.Message}");
             Console.WriteLine(ex.StackTrace);
-        }
-    }
-
-    private static async Task ProcessSegment(string outputDir, int segmentId, ulong start, ulong end, ParquetReader reader, TraceSampleSchema schema, Action<ulong> progress)
-    {
-        var currentTraceSegment = await TraceSegment.CreateAsync(outputDir, segmentId);
-        foreach (var rowGroup in reader.RowGroups)
-        {
-            var stats = rowGroup.GetStatistics(schema.Time.Field)!;
-            var isOverlapping = start <= (ulong)stats.MaxValue! && end >= (ulong)stats.MinValue!;
-            if (!isOverlapping) continue;
-
-            await foreach (var row in schema.ReadRowGroup(rowGroup))
-            {
-                currentTraceSegment.Process(row);
-                progress(row.Time);
-            }
         }
     }
 
