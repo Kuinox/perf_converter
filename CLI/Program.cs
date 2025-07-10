@@ -394,8 +394,8 @@ internal class Program
                                 {
                                     // Check if any file in this PID has recent activity
                                     var hasRecentActivity = pidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
-                                    var pidNode = fileTree.AddNode($"[bold]PID {pidGroup.Key}[/]");
-                                    if (hasRecentActivity) pidNode.Style("on yellow");
+                                    var pidDisplay = hasRecentActivity ? $"[bold on yellow]PID {pidGroup.Key}[/]" : $"[bold]PID {pidGroup.Key}[/]";
+                                    var pidNode = fileTree.AddNode(pidDisplay);
                                     
                                     // Group by TID within each PID
                                     var tidGroups = pidGroup.GroupBy(f => f.Key.Split('/')[1]).OrderBy(g => g.Key);
@@ -404,8 +404,8 @@ internal class Program
                                     {
                                         // Check if any file in this TID has recent activity
                                         var tidHasActivity = tidGroup.Any(f => f.Value.LastActivity.HasValue && (now - f.Value.LastActivity.Value).TotalMilliseconds < 500);
-                                        var tidNode = pidNode.AddNode($"[bold cyan]TID {tidGroup.Key}[/]");
-                                        if (tidHasActivity) tidNode.Style("on yellow");
+                                        var tidDisplay = tidHasActivity ? $"[bold cyan on yellow]TID {tidGroup.Key}[/]" : $"[bold cyan]TID {tidGroup.Key}[/]";
+                                        var tidNode = pidNode.AddNode(tidDisplay);
                                         
                                         // Add files for this TID
                                         foreach (var kvp in tidGroup.OrderBy(f => f.Key))
@@ -428,13 +428,11 @@ internal class Program
                                                 statusText += $" ({file.BufferedCount:N0})";
                                             }
                                             
-                                            var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
-                                            var fileNode = tidNode.AddNode(fileDisplay);
+                                            var fileDisplay = hasActivity ?
+                                                $"[on yellow]{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/][/]" :
+                                                $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
                                             
-                                            if (hasActivity)
-                                            {
-                                                fileNode.Style("on yellow");
-                                            }
+                                            tidNode.AddNode(fileDisplay);
                                         }
                                     }
                                 }
