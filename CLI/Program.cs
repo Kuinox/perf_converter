@@ -342,7 +342,6 @@ internal class Program
                             layout["Top"]["Stats"].Update(statsPanel);
                             
                             // Update file status panel using Tree
-                            var now = DateTime.UtcNow;
                             var filesToRemove = new List<string>();
                             
                             // Clean up expired closed files
