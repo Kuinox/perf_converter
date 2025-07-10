@@ -26,11 +26,14 @@ public unsafe class TraceProcessor
 
     public void QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        var auxDataLoss = _auxDataLoss[(sample->pid, sample->tid)];
 
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
-        processor ??= new ThreadProcessor(sample->tid, sample->pid, auxDataLoss, _persistenceFactory);
-
+        if (processor is null)
+        {
+            var auxDataLoss = _auxDataLoss.GetValueOrDefault((sample->pid, sample->tid), [0]);
+            processor = new ThreadProcessor(sample->tid, sample->pid, auxDataLoss, _persistenceFactory);
+        }
+        
         processor.QueueData(sample, ip, address);
     }
 }

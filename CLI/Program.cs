@@ -152,11 +152,12 @@ internal class Program
 
         process.OutputDataReceived += OutputData;
         process.ErrorDataReceived += ErrorData;
+
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
+
         void OutputData(object sender, DataReceivedEventArgs e)
         {
-            Console.Write("\r");
             if (!e.Data!.StartsWith("PROGRESS:"))
             {
                 Console.WriteLine(e.Data);
@@ -165,6 +166,7 @@ internal class Program
             var sliced = e.Data.AsSpan()[9..].Trim().ToString();
             Console.Write("Events processed:");
             Console.Write(sliced);
+            Console.Write("\r");
         }
 
         void ErrorData(object sender, DataReceivedEventArgs e)
