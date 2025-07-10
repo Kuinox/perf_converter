@@ -5,13 +5,16 @@ using Temp.Core;
 
 namespace PerfConverter;
 
-unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> persistenceFactory)
+unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
 {
     readonly Queue<ulong> auxDrop = new(auxDrop.Order());
     int _currentSegmentId = 0;
     ulong _currentEntryId = 0;
-    string _currentKey = null!;
-    IPersister<TraceEntry>? _persister;
+    string _currentTraceKey = null!;
+    string _currentStackRangeKey = null!;
+    IPersister<TraceEntry>? _tracePersister;
+    IPersister<StackRange>? _stackRangePersister;
+    readonly Stack<long> _stackStarts = new();
 
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
@@ -22,16 +25,23 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
         if (isNewTrace)
         {
-            _persister?.DisposeAsync().AsTask();
+            _tracePersister?.DisposeAsync().AsTask();
+            _stackRangePersister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
-            _currentKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
+            _currentTraceKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
+            _currentStackRangeKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}_stackranges.parquet";
             _currentEntryId=0;
-            _persister = persistenceFactory(_currentKey);
+            _tracePersister = tracePersistenceFactory(_currentTraceKey);
+            _stackRangePersister = stackRangePersistenceFactory(_currentStackRangeKey);
+            _stackStarts.Clear();
         }
 
         var entry = BuildEntry(sample, ip, address, ++_currentEntryId);
-        _persister!.Persist(entry);
+        _tracePersister!.Persist(entry);
+        
+        // Process stack tracking for call/return pairs
+        ProcessStackTracking(entry);
     }
 
     private static TraceEntry BuildEntry(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
@@ -91,6 +101,24 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         }
 
         return entry;
+    }
+
+    private void ProcessStackTracking(TraceEntry trace)
+    {
+        if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
+        {
+            _stackStarts.Push((long)trace.Id);
+        }
+        if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
+        {
+            var startTrace = _stackStarts.Count == 0 ? -1 : _stackStarts.Pop();
+            var stackRange = new StackRange()
+            {
+                StartTrace = startTrace,
+                EndTrace = (long)trace.Id
+            };
+            _stackRangePersister!.Persist(stackRange);
+        }
     }
 
 }

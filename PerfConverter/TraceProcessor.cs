@@ -10,11 +10,13 @@ public unsafe class TraceProcessor
 {
     readonly IReadOnlyDictionary<(uint, uint), ulong[]> _auxDataLoss;
     readonly Dictionary<(uint, uint), ThreadProcessor> _processors = [];
-    readonly Func<string, IPersister<TraceEntry>> _persistenceFactory;
+    readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory;
+    readonly Func<string, IPersister<StackRange>> _stackRangePersistenceFactory;
 
-    public TraceProcessor(Func<string, IPersister<TraceEntry>> persistenceFactory)
+    public TraceProcessor(Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
     {
-        _persistenceFactory = persistenceFactory;
+        _tracePersistenceFactory = tracePersistenceFactory;
+        _stackRangePersistenceFactory = stackRangePersistenceFactory;
         var auxDataLossJson = Environment.GetEnvironmentVariable("AUX_DATA_LOSS")!;
         var auxDataLoss = JsonSerializer.Deserialize(auxDataLossJson, SourceGenerationContext.Default.AuxDataLostArray)!;
         _auxDataLoss = auxDataLoss
@@ -31,7 +33,7 @@ public unsafe class TraceProcessor
         if (processor is null)
         {
             var auxDataLoss = _auxDataLoss.GetValueOrDefault((sample->pid, sample->tid), [0]);
-            processor = new ThreadProcessor(sample->tid, sample->pid, auxDataLoss, _persistenceFactory);
+            processor = new ThreadProcessor(sample->tid, sample->pid, auxDataLoss, _tracePersistenceFactory, _stackRangePersistenceFactory);
         }
         
         processor.QueueData(sample, ip, address);

@@ -1,4 +1,5 @@
 using Parquet;
+using PerfConverter.Entry;
 using PerfConverter.Persistence.ParquetDotNet;
 using Temp.Core;
 
@@ -34,5 +35,11 @@ public static class PersistenceFactory
         }
         Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
         return ParquetPersistenceLifetime.Create(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
+    }
+
+    public static (Func<string, IPersister<TraceEntry>>, Func<string, IPersister<StackRange>>) CreateDualPersistenceFactories()
+    {
+        var persistenceLifetime = CreatePersistence();
+        return (persistenceLifetime.CreateTraceBatcher, persistenceLifetime.CreateStackRangeBatcher);
     }
 }

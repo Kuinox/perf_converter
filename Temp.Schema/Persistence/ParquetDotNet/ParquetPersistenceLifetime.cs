@@ -8,9 +8,10 @@ namespace PerfConverter.Persistence.ParquetDotNet;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceBatcherFactory) : IAsyncDisposable
+public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IAsyncDisposable
 {
     readonly Dictionary<string, Batcher<TraceEntry>> _tracePersister = [];
+    readonly Dictionary<string, Batcher<StackRange>> _stackRangePersister = [];
 
     public IPersister<TraceEntry> CreateTraceBatcher(string key)
     {
@@ -19,12 +20,19 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
         return persistence;
     }
 
+    public IPersister<StackRange> CreateStackRangeBatcher(string key)
+    {
+        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_stackRangePersister, key, out _);
+        persistence ??= stackRangeBatcherFactory(key);
+        return persistence;
+    }
+
     public async ValueTask DisposeAsync()
     {
-        foreach (var entry in _tracePersister.Values)
-        {
-            await entry.DisposeAsync();
-        }
+        var traceTasks = _tracePersister.Values.Select(entry => entry.DisposeAsync().AsTask());
+        var stackRangeTasks = _stackRangePersister.Values.Select(entry => entry.DisposeAsync().AsTask());
+        
+        await Task.WhenAll(traceTasks.Concat(stackRangeTasks));
     }
 
     public static ParquetPersistenceLifetime Create(
@@ -35,14 +43,24 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
     {
         Directory.CreateDirectory(outputDirectory);
 
-        return new ParquetPersistenceLifetime((key) =>
-        {
-            Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
-            var path = Path.Combine(outputDirectory, key);
-            var dir = Path.GetDirectoryName(path)!; // key can be a path.
-            Directory.CreateDirectory(dir);
-            var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
-            return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode, key);
-        });
+        return new ParquetPersistenceLifetime(
+            traceBatcherFactory: (key) =>
+            {
+                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                var path = Path.Combine(outputDirectory, key);
+                var dir = Path.GetDirectoryName(path)!; // key can be a path.
+                Directory.CreateDirectory(dir);
+                var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
+                return Batcher<TraceEntry>.Create(persister, batchSize, batchingMode, key);
+            },
+            stackRangeBatcherFactory: (key) =>
+            {
+                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                var path = Path.Combine(outputDirectory, key);
+                var dir = Path.GetDirectoryName(path)!; // key can be a path.
+                Directory.CreateDirectory(dir);
+                var persister = ParquetStackRangePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
+                return Batcher<StackRange>.Create(persister, batchSize, batchingMode, key);
+            });
     }
 }

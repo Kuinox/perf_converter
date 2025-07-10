@@ -44,7 +44,7 @@ public unsafe class PerfDlFilter
 
             _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
-            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
+            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher, _persistenceLifetime.CreateStackRangeBatcher);
 
             return 0;
         }
