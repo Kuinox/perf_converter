@@ -156,16 +156,28 @@ internal class Program
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        var lineLength = 0;
+        var chrono = Stopwatch.StartNew();
         void OutputData(object sender, DataReceivedEventArgs e)
         {
             if (!e.Data!.StartsWith("PROGRESS:"))
             {
-                Console.WriteLine(e.Data);
+                Console.Write(e.Data);
+                Console.Write(new string(' ', lineLength)); // Clear progress line
                 return;
             }
             var sliced = e.Data.AsSpan()[9..].Trim().ToString();
-            Console.Write("Events processed:");
+            var eventCount = int.Parse(sliced);
+            var rate = ((int)(eventCount / chrono.Elapsed.TotalSeconds)).ToString();
+            var eventProcessed = "Events processed:";
+            var at = " at";
+            var eventsSec = "events/sec";
+            lineLength = eventProcessed.Length + sliced.Length + at.Length + rate.Length + eventsSec.Length;
+            Console.Write(eventProcessed);
             Console.Write(sliced);
+            Console.Write(at);
+            Console.Write(rate);
+            Console.Write(eventsSec);
             Console.Write("\r");
         }
 
