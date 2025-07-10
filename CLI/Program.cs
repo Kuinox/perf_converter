@@ -202,12 +202,12 @@ internal class Program
         // Create layout
         var layout = new Layout("Root")
             .SplitRows(
-                new Layout("Top"),
+                new Layout("Top").Ratio(2),
                 new Layout("Logs").Ratio(1)
             );
         
         layout["Top"].SplitColumns(
-            new Layout("Stats").Size(50),
+            new Layout("Stats").Ratio(1),
             new Layout("FileStatus").Ratio(2)
         );
 
