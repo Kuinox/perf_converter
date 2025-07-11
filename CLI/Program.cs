@@ -370,6 +370,7 @@ internal class Program
                 await Task.Delay(10000, exitTimeoutCts.Token);
                 if (!exitTimeoutCts.Token.IsCancellationRequested)
                 {
+                    Console.WriteLine("Process exited but did not see exit message, exiting.");
                     // Timeout reached, complete regardless of exit message
                     isComplete = true;
                 }
