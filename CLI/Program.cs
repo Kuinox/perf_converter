@@ -155,17 +155,7 @@ internal class Program
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
-        
-        // Set up GC event listener for the process
-        GcEventListener? gcEventListener = null;
-        try
-        {
-            gcEventListener = new GcEventListener(process.Id, viewModel);
-        }
-        catch (Exception ex)
-        {
-            AnsiConsole.MarkupLine($"[yellow]Warning: Could not start GC event listener: {ex.Message}[/]");
-        }
+        var gcEventListener = new GcEventListener(process.Id, viewModel);
 
         var exitTimeoutCts = new CancellationTokenSource();
 
