@@ -48,7 +48,7 @@ namespace CLI
                 source.Clr.Observe<GCStartTraceData>().Subscribe(gcData =>
                 {
                     // Only track blocking GCs (Type 1 = blocking, Type 0 = concurrent)
-                    if (gcData.Type == 1)
+                    if (gcData.Type == GCType.NonConcurrentGC)
                     {
                         _viewModel.GcActive = true;
                         _gcStartTime = DateTime.UtcNow;
@@ -57,31 +57,28 @@ namespace CLI
 
                 source.Clr.Observe<GCEndTraceData>().Subscribe(gcData =>
                 {
-                    // Only track blocking GCs (Type 1 = blocking, Type 0 = concurrent)
-                    if (gcData.Type == 1)
+                    _viewModel.GcActive = false;
+                    _viewModel.LastGcEvent = gcData.TimeStamp;
+
+                    // Calculate GC duration and add to total
+                    if (_gcStartTime != default)
                     {
-                        _viewModel.GcActive = false;
-                        _viewModel.LastGcEvent = gcData.TimeStamp;
+                        var gcDuration = DateTime.UtcNow - _gcStartTime;
+                        _viewModel.TotalGcTimeMs += gcDuration.TotalMilliseconds;
+                    }
 
-                        // Calculate GC duration and add to total
-                        if (_gcStartTime != default)
-                        {
-                            var gcDuration = DateTime.UtcNow - _gcStartTime;
-                            _viewModel.TotalGcTimeMs += gcDuration.TotalMilliseconds;
-                        }
-
-                        // Update generation counts based on the GC that just completed
-                        switch (gcData.Depth)
-                        {
-                            case 0:
-                                _viewModel.Gen0Count++;
-                                break;
-                            case 1:
-                                _viewModel.Gen1Count++;
-                                break;
-                            case 2:
-                                _viewModel.Gen2Count++;
-                                break;
+                    // Update generation counts based on the GC that just completed
+                    switch (gcData.Depth)
+                    {
+                        case 0:
+                            _viewModel.Gen0Count++;
+                            break;
+                        case 1:
+                            _viewModel.Gen1Count++;
+                            break;
+                        case 2:
+                            _viewModel.Gen2Count++;
+                            break;
                         }
                     }
                 });

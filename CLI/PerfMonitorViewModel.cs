@@ -21,6 +21,7 @@ public class PerfMonitorViewModel
     public bool ExitMessageReceived { get; set; }
     public double TotalGcTimeMs { get; set; }
     public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;
+    public string StatusMessage { get; set; } = string.Empty;
 
 
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
