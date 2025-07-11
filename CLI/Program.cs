@@ -1,23 +1,13 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Collections.Concurrent;
 using Temp.Schema;
 using Spectre.Console;
+using CLI.ViewModel;
+using CLI.Display;
+using CLI.Messages;
 
 namespace CLI;
-
-public class FileStatus
-{
-    public string FileName { get; set; } = string.Empty;
-    public string Status { get; set; } = string.Empty;
-    public int EntryCount { get; set; }
-    public int BufferedCount { get; set; }
-    public int FlushedCount { get; set; }
-    public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
-    public DateTime? ClosedAt { get; set; }
-    public DateTime? LastActivity { get; set; }
-}
 
 internal class Program
 {
@@ -97,11 +87,6 @@ internal class Program
             return 0;
         }
 
-        //AnsiConsole.MarkupLine($"[green]Executing:[/] {perfCommand}");
-        //AnsiConsole.MarkupLine($"[blue]Output directory:[/] {outputDir.FullName}");
-        //AnsiConsole.WriteLine();
-
-        // Execute the command
         var processInfo = new ProcessStartInfo
         {
             FileName = "perf",
@@ -116,7 +101,7 @@ internal class Program
 
         try
         {
-            return await RunPerfWithLayout(processInfo);
+            return await RunPerfWithMonitor(processInfo);
         }
         catch (Exception ex)
         {
@@ -158,7 +143,7 @@ internal class Program
             });
     }
 
-    private static async Task<int> RunPerfWithLayout(ProcessStartInfo processInfo)
+    private static async Task<int> RunPerfWithMonitor(ProcessStartInfo processInfo)
     {
         using var process = Process.Start(processInfo);
         if (process == null)
@@ -168,29 +153,22 @@ internal class Program
         }
 
         var chrono = Stopwatch.StartNew();
-        var eventCount = 0L;
-        var rateHistory = new Queue<(DateTime timestamp, long eventCount)>();
-        var outputLines = new ConcurrentQueue<string>();
-        var errorLines = new ConcurrentQueue<string>();
-        var fileStatuses = new ConcurrentDictionary<string, FileStatus>();
-        var isComplete = false;
-        
-        // GC tracking variables
-        var lastGcEvent = DateTime.MinValue;
-        var totalMemory = 0L;
-        var gen0Count = 0L;
-        var gen1Count = 0L;
-        var gen2Count = 0L;
+        var viewModel = new PerfMonitorViewModel();
+        var commandProcessor = new CommandProcessor(viewModel);
+        var messageHandler = new MessageHandler(viewModel, commandProcessor);
+        var display = new PerfMonitorDisplay(viewModel);
 
-        // Set up Ctrl+C handler to kill the process
+        var exitTimeoutCts = new CancellationTokenSource();
+
+        // Set up Ctrl+C handler
         Console.CancelKeyPress += (sender, e) =>
         {
-            e.Cancel = true; // Prevent immediate termination
+            e.Cancel = true;
             if (!process.HasExited)
             {
                 try
                 {
-                    process.Kill(true); // Kill process tree
+                    process.Kill(true);
                 }
                 catch (Exception ex)
                 {
@@ -200,97 +178,12 @@ internal class Program
             }
         };
 
-        // Create layout
-        var layout = new Layout("Root")
-            .SplitRows(
-                new Layout("Top").Ratio(2),
-                new Layout("Logs").Ratio(1)
-            );
-        
-        layout["Top"].SplitColumns(
-            new Layout("Stats").Ratio(2),
-            new Layout("FileStatus").Ratio(3)
-        );
-
-        // Track exit message and timeout
-        var exitMessageReceived = false;
-        var exitTimeoutCts = new CancellationTokenSource();
-
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
         {
-            if (string.IsNullOrEmpty(e.Data)) return;
-
-            if (e.Data.StartsWith("PROGRESS:"))
+            if (!string.IsNullOrEmpty(e.Data))
             {
-                var sliced = e.Data.AsSpan()[9..].Trim().ToString();
-                eventCount = long.Parse(sliced);
-            }
-            else if (e.Data.StartsWith("GC_EVENT:"))
-            {
-                lastGcEvent = DateTime.UtcNow;
-                // Parse GC event data
-                var gcData = e.Data.AsSpan()[9..].ToString();
-                var parts = gcData.Split(',');
-                foreach (var part in parts)
-                {
-                    var keyValue = part.Split('=');
-                    if (keyValue.Length == 2)
-                    {
-                        var key = keyValue[0];
-                        var value = keyValue[1];
-                        if (long.TryParse(value, out var longValue))
-                        {
-                            switch (key)
-                            {
-                                case "Gen0": gen0Count = longValue; break;
-                                case "Gen1": gen1Count = longValue; break;
-                                case "Gen2": gen2Count = longValue; break;
-                                case "Memory": totalMemory = longValue; break;
-                            }
-                        }
-                    }
-                }
-            }
-            else if (e.Data.StartsWith("MEMORY_STATS:"))
-            {
-                // Parse memory statistics
-                var memData = e.Data.AsSpan()[13..].ToString();
-                var parts = memData.Split(',');
-                foreach (var part in parts)
-                {
-                    var keyValue = part.Split('=');
-                    if (keyValue.Length == 2)
-                    {
-                        var key = keyValue[0];
-                        var value = keyValue[1];
-                        if (long.TryParse(value, out var longValue))
-                        {
-                            switch (key)
-                            {
-                                case "Total": totalMemory = longValue; break;
-                                case "Gen0": gen0Count = longValue; break;
-                                case "Gen1": gen1Count = longValue; break;
-                                case "Gen2": gen2Count = longValue; break;
-                            }
-                        }
-                    }
-                }
-            }
-            else if (e.Data == "EXIT_MESSAGE")
-            {
-                // Exit message received, complete after allowing time for final messages
-                exitMessageReceived = true;
-                exitTimeoutCts.Cancel(); // Cancel the timeout since we got the exit message
-                isComplete = true;
-            }
-            else
-            {
-                outputLines.Enqueue(e.Data);
-                while (outputLines.Count > 50)
-                {
-                    outputLines.TryDequeue(out _);
-                }
+                messageHandler.ProcessOutputMessage(e.Data);
             }
         };
 
@@ -298,289 +191,54 @@ internal class Program
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                // Parse FILE_STATUS and FILE_ACTIVITY lines
-                if (e.Data.StartsWith("FILE_STATUS|") || e.Data.StartsWith("FILE_ACTIVITY|"))
-                {
-                    var parts = e.Data.Split('|');
-                    if (parts.Length >= 3)
-                    {
-                        var fileName = parts[1];
-                        var actionType = parts[2];
-                        var entryCount = 0;
-                        
-                        if (parts.Length >= 4 && int.TryParse(parts[3], out var count))
-                        {
-                            entryCount = count;
-                        }
-                        
-                        if (e.Data.StartsWith("FILE_ACTIVITY|"))
-                        {
-                            // Handle buffering activity - entryCount is current buffer size
-                            fileStatuses.AddOrUpdate(fileName,
-                                new FileStatus { FileName = fileName, Status = "BUFFERING", BufferedCount = entryCount, LastActivity = DateTime.UtcNow },
-                                (key, existing) =>
-                                {
-                                    existing.LastActivity = DateTime.UtcNow;
-                                    existing.BufferedCount = entryCount; // Set to current buffer size, not accumulate
-                                    return existing;
-                                });
-                        }
-                        else
-                        {
-                            // Handle status changes
-                            fileStatuses.AddOrUpdate(fileName, 
-                                new FileStatus { FileName = fileName, Status = actionType, ClosedAt = actionType == "CLOSED" ? DateTime.UtcNow : null },
-                                (key, existing) => 
-                                {
-                                    existing.Status = actionType;
-                                    existing.LastUpdated = DateTime.UtcNow;
-                                    if (actionType == "CLOSED")
-                                    {
-                                        existing.ClosedAt = DateTime.UtcNow;
-                                    }
-                                    if (actionType == "FLUSHING" && entryCount > 0)
-                                    {
-                                        existing.FlushedCount += entryCount;
-                                    }
-                                    return existing;
-                                });
-                        }
-                    }
-                }
-                else
-                {
-                    errorLines.Enqueue($"[red]{e.Data}[/]");
-                    // Keep only last 20 lines
-                    if (errorLines.Count > 20)
-                    {
-                        errorLines.TryDequeue(out _);
-                    }
-                }
+                messageHandler.ProcessErrorMessage(e.Data);
             }
         };
-
 
         process.EnableRaisingEvents = true;
         
         process.Exited += (sender, e) =>
         {
-            // Start a 10-second timeout when process exits
             _ = Task.Run(async () =>
             {
                 await Task.Delay(10000, exitTimeoutCts.Token);
                 if (!exitTimeoutCts.Token.IsCancellationRequested)
                 {
                     Console.WriteLine("Process exited but did not see exit message, exiting.");
-                    // Timeout reached, complete regardless of exit message
-                    isComplete = true;
+                    viewModel.IsComplete = true;
                 }
             }, exitTimeoutCts.Token);
         };
-        isComplete = process.HasExited;
+
+        viewModel.IsComplete = process.HasExited;
 
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        // Start the live display
-        Console.WriteLine("starting live display...");
+        // Start background tasks
+        var displayTask = display.StartLiveDisplayAsync(exitTimeoutCts.Token);
+        var updateTask = Task.Run(async () =>
+        {
+            while (!viewModel.IsComplete)
+            {
+                viewModel.Elapsed = chrono.Elapsed;
+                viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
+                viewModel.UpdateRateHistory();
+                
+                await Task.Delay(100, exitTimeoutCts.Token);
+            }
+        }, exitTimeoutCts.Token);
+
         try
         {
-            await AnsiConsole.Live(layout)
-                .StartAsync(async ctx =>
-                {
-                    while (!isComplete)
-                    {
-                        try
-                        {
-                            // Update left panel (statistics)
-                            var currentEventCount = eventCount;
-                            var elapsed = chrono.Elapsed;
-                            var rate = elapsed.TotalSeconds > 0 ? (int)(currentEventCount / elapsed.TotalSeconds) : 0;
-                            
-                            // Calculate rolling average rate over last 5 seconds
-                            var now = DateTime.UtcNow;
-                            rateHistory.Enqueue((now, currentEventCount));
-                            
-                            // Remove entries older than 5 seconds
-                            while (rateHistory.Count > 0 && (now - rateHistory.Peek().timestamp).TotalSeconds > 5)
-                            {
-                                rateHistory.Dequeue();
-                            }
-                            
-                            var currentRate = 0;
-                            if (rateHistory.Count >= 2)
-                            {
-                                var oldest = rateHistory.First();
-                                var newest = rateHistory.Last();
-                                var timeDiff = (newest.timestamp - oldest.timestamp).TotalSeconds;
-                                if (timeDiff > 0)
-                                {
-                                    currentRate = (int)((newest.eventCount - oldest.eventCount) / timeDiff);
-                                }
-                            }
-
-
-                            // GC status indicator
-                            var gcStatus = "";
-                            var timeSinceLastGc = DateTime.UtcNow - lastGcEvent;
-                            if (lastGcEvent != DateTime.MinValue && timeSinceLastGc.TotalSeconds < 5)
-                            {
-                                gcStatus = "[red]🔥 GC ACTIVE[/]";
-                            }
-                            else if (lastGcEvent != DateTime.MinValue)
-                            {
-                                gcStatus = $"[dim]Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago[/]";
-                            }
-                            
-                            var memoryMB = totalMemory / 1024.0 / 1024.0;
-                            
-                            var statsPanel = new Panel(
-                                new Markup($"[bold yellow]Event Statistics[/]\n\n" +
-                                         $"[green]Total Events:[/] {currentEventCount:N0}\n" +
-                                         $"[blue]Overall Rate (events/sec):[/] {rate:N0}\n" +
-                                         $"[cyan]Current Rate (events/sec):[/] {currentRate:N0}\n" +
-                                         $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
-                                         $"\n[bold magenta]Memory & GC[/]\n" +
-                                         $"[white]Memory Usage:[/] {memoryMB:F1} MB\n" +
-                                         $"[white]GC Gen0/Gen1/Gen2:[/] {gen0Count}/{gen1Count}/{gen2Count}\n" +
-                                         $"{gcStatus}\n" +
-                                         $"[dim]Press Ctrl+C to stop[/]"))
-                            {
-                                Header = new PanelHeader("[bold]Status[/]"),
-                                Border = BoxBorder.Rounded
-                            };
-
-                            layout["Top"]["Stats"].Update(statsPanel);
-                            
-                            // Update file status panel using Tree
-                            var filesToRemove = new List<string>();
-                            
-                            // Clean up expired closed files
-                            foreach (var kvp in fileStatuses.ToArray())
-                            {
-                                var file = kvp.Value;
-                                if (file.Status == "CLOSED" && file.ClosedAt.HasValue && (now - file.ClosedAt.Value).TotalSeconds > 10)
-                                {
-                                    filesToRemove.Add(kvp.Key);
-                                }
-                            }
-                            
-                            foreach (var key in filesToRemove)
-                            {
-                                fileStatuses.TryRemove(key, out _);
-                            }
-                            
-                            Tree fileTree;
-                            if (fileStatuses.IsEmpty)
-                            {
-                                fileTree = new Tree("[dim]No files opened yet...[/]");
-                            }
-                            else
-                            {
-                                fileTree = new Tree("Files");
-                                // Group by PID
-                                var pidGroups = fileStatuses.GroupBy(f => f.Key.Split('/')[0]).OrderBy(g => g.Key);
-                                
-                                foreach (var pidGroup in pidGroups)
-                                {
-                                    var pidNode = fileTree.AddNode($"[bold]PID {pidGroup.Key}[/]");
-                                    
-                                    // Group by TID within each PID
-                                    var tidGroups = pidGroup.GroupBy(f => f.Key.Split('/')[1]).OrderBy(g => g.Key);
-                                    
-                                    foreach (var tidGroup in tidGroups)
-                                    {
-                                        var tidNode = pidNode.AddNode($"[bold cyan]TID {tidGroup.Key}[/]");
-                                        
-                                        // Add files for this TID
-                                        foreach (var kvp in tidGroup.OrderBy(f => f.Key))
-                                        {
-                                            var file = kvp.Value;
-                                            
-                                            var statusColor = file.Status switch
-                                            {
-                                                "BUFFERING" => "[green]",
-                                                "FLUSHING" => "[yellow]",
-                                                "CLOSED" => "[dim green]",
-                                                _ => "[white]"
-                                            };
-                                            
-                                            var fileName = file.FileName.Split('/').Last();
-                                            var statusText = file.Status;
-                                            if (file.Status == "BUFFERING" && file.BufferedCount > 0)
-                                            {
-                                                statusText += $" ({file.BufferedCount:N0})";
-                                            }
-                                            
-                                            var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
-                                            tidNode.AddNode(fileDisplay);
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            var fileStatusPanel = new Panel(fileTree)
-                            {
-                                Header = new PanelHeader("[bold]File Status[/]"),
-                                Border = BoxBorder.Rounded,
-                                
-                            };
-                            
-                            layout["Top"]["FileStatus"].Update(fileStatusPanel);
-
-                            // Update bottom panel (console output)
-                            var consoleLines = new List<string>();
-
-                            // Add output lines
-                            foreach (var line in outputLines.ToArray())
-                            {
-                                consoleLines.Add(line);
-                            }
-
-                            // Add error lines
-                            foreach (var line in errorLines.ToArray())
-                            {
-                                consoleLines.Add(line);
-                            }
-
-                            // Take only the most recent lines that fit
-                            var maxLines = Math.Max(1, Console.WindowHeight - 10);
-                            var displayLines = consoleLines.TakeLast(maxLines).ToArray();
-
-                            var consoleContent = displayLines.Length > 0
-                                ? string.Join("\n", displayLines)
-                                : $"[dim]Waiting for perf output...\nProcess started at {elapsed:hh\\:mm\\:ss}[/]";
-
-                            var consolePanel = new Panel(new Markup(consoleContent))
-                            {
-                                Header = new PanelHeader("[bold]Perf Output[/]"),
-                                Border = BoxBorder.Rounded
-                            };
-
-                            layout["Logs"].Update(consolePanel);
-                            
-                            ctx.Refresh();
-                        }
-                        catch (Exception ex)
-                        {
-                            AnsiConsole.WriteLine($"Display update error: {ex}");
-                        }
-                        
-                        await Task.Delay(10);
-                    }
-                });
+            await Task.WhenAny(displayTask, updateTask);
         }
         catch (Exception ex)
         {
-            AnsiConsole.WriteLine($"Display error: {ex.Message}");
-            AnsiConsole.WriteLine($"Exception type: {ex.GetType().Name}");
-            AnsiConsole.WriteLine($"Stack trace: {ex.StackTrace}");
-
-            // Wait for process without display
+            AnsiConsole.WriteLine($"Monitor error: {ex.Message}");
             await process.WaitForExitAsync();
         }
         
-        // Cancel the timeout since we're done
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
 
