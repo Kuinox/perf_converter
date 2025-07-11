@@ -1,6 +1,4 @@
-using CLI.ViewModel;
-
-namespace CLI.Messages;
+namespace CLI;
 
 public class MessageHandler
 {

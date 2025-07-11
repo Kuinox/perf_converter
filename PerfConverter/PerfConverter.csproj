@@ -9,6 +9,7 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<SelfContained>true</SelfContained>
 		<InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
+		<EventSourceSupport>true</EventSourceSupport>
 	</PropertyGroup>
 	<!--NAOT cannot exports fields, we need to link against a binary that do it. -->
 

@@ -2,15 +2,8 @@ using CLI.ViewModel;
 
 namespace CLI.Messages;
 
-public class CommandProcessor
+public class CommandProcessor(PerfMonitorViewModel viewModel)
 {
-    private readonly PerfMonitorViewModel _viewModel;
-
-    public CommandProcessor(PerfMonitorViewModel viewModel)
-    {
-        _viewModel = viewModel;
-    }
-
     public void ProcessCommand(string command)
     {
         switch (command)
@@ -29,8 +22,8 @@ public class CommandProcessor
                 break;
             default:
                 // Unknown command, treat as regular output
-                _viewModel.OutputLines.Enqueue(command);
-                _viewModel.TrimOutputLines();
+                viewModel.OutputLines.Enqueue(command);
+                viewModel.TrimOutputLines();
                 break;
         }
     }
@@ -40,7 +33,7 @@ public class CommandProcessor
         var progressData = command.AsSpan()[9..].Trim().ToString();
         if (long.TryParse(progressData, out var eventCount))
         {
-            _viewModel.EventCount = eventCount;
+            viewModel.EventCount = eventCount;
         }
     }
 
@@ -55,24 +48,21 @@ public class CommandProcessor
         var entryCount = 0;
         
         if (parts.Length >= 4 && int.TryParse(parts[3], out var count))
-        {
             entryCount = count;
-        }
         
-        _viewModel.FileStatuses.AddOrUpdate(fileName, 
+        viewModel.FileStatuses.AddOrUpdate(fileName, 
             new FileStatus { FileName = fileName, Status = actionType, ClosedAt = actionType == "CLOSED" ? DateTime.UtcNow : null },
             (key, existing) => 
             {
                 existing.Status = actionType;
                 existing.LastUpdated = DateTime.UtcNow;
+                
                 if (actionType == "CLOSED")
-                {
                     existing.ClosedAt = DateTime.UtcNow;
-                }
+                
                 if (actionType == "FLUSHING" && entryCount > 0)
-                {
                     existing.FlushedCount += entryCount;
-                }
+                
                 return existing;
             });
     }
@@ -87,11 +77,9 @@ public class CommandProcessor
         var entryCount = 0;
         
         if (parts.Length >= 4 && int.TryParse(parts[3], out var count))
-        {
             entryCount = count;
-        }
         
-        _viewModel.FileStatuses.AddOrUpdate(fileName,
+        viewModel.FileStatuses.AddOrUpdate(fileName,
             new FileStatus { FileName = fileName, Status = "BUFFERING", BufferedCount = entryCount, LastActivity = DateTime.UtcNow },
             (key, existing) =>
             {
@@ -103,8 +91,8 @@ public class CommandProcessor
 
     private void HandleExitMessage()
     {
-        _viewModel.ExitMessageReceived = true;
-        _viewModel.IsComplete = true;
+        viewModel.ExitMessageReceived = true;
+        viewModel.IsComplete = true;
     }
 
 }
