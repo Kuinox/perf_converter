@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Threading.Channels;
+using PerfConverter.Entry;
 
 namespace PerfConverter.Persistence;
 
@@ -88,6 +89,12 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
         sw.Restart();
         batch.Clear();
+        
+        // Clean up pools after flushing to release unused references
+        if (typeof(T) == typeof(TraceEntry))
+        {
+            TraceEntry.CleanupPools();
+        }
     }
 
     void AccumulateBatch(List<T> batch)

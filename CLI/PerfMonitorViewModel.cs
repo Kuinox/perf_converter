@@ -19,6 +19,10 @@ public class PerfMonitorViewModel
     public long Gen2Count { get; set; }
     public bool IsComplete { get; set; }
     public bool ExitMessageReceived { get; set; }
+
+    [DependsOn(nameof(ExitMessageReceived))]
+    public string Status => ExitMessageReceived ? "[red]Process exited[/]" : "[green]Running[/]";
+
     public double TotalGcTimeMs { get; set; }
     public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;
     public string StatusMessage { get; set; } = string.Empty;
@@ -56,30 +60,6 @@ public class PerfMonitorViewModel
                 return $"[dim]Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago[/]";
             }
             return "";
-        }
-    }
-
-
-    public void UpdateRateHistory()
-    {
-        var now = DateTime.UtcNow;
-        RateHistory.Enqueue((now, EventCount));
-        
-        // Remove entries older than 5 seconds
-        while (RateHistory.Count > 0 && (now - RateHistory.Peek().timestamp).TotalSeconds > 5)
-        {
-            RateHistory.Dequeue();
-        }
-        
-        if (RateHistory.Count >= 2)
-        {
-            var (oldestTimestamp, oldestEventCount) = RateHistory.First();
-            var (timestamp, eventCount) = RateHistory.Last();
-            var timeDiff = (timestamp - oldestTimestamp).TotalSeconds;
-            if (timeDiff > 0)
-            {
-                CurrentRate = (int)((eventCount - oldestEventCount) / timeDiff);
-            }
         }
     }
 

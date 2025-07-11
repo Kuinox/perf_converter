@@ -15,7 +15,7 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
             case var cmd when cmd.StartsWith("FILE_ACTIVITY|"):
                 HandleFileActivityCommand(cmd);
                 break;
-            case "EXIT_MESSAGE":
+            case var cmd when cmd.StartsWith("EXIT_MESSAGE"):
                 HandleExitMessage();
                 break;
             default:

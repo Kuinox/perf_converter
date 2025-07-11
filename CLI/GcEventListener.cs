@@ -28,7 +28,7 @@ namespace CLI
 
             var providers = new List<EventPipeProvider>
             {
-                new EventPipeProvider("Microsoft-Windows-DotNETRuntime",
+                new("Microsoft-Windows-DotNETRuntime",
                     EventLevel.Informational,
                     (long)ClrTraceEventParser.Keywords.GC)
             };

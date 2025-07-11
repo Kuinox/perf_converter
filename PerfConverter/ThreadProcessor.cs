@@ -2,6 +2,7 @@
 using PerfConverter.PerfStructs;
 using System.Runtime.InteropServices;
 using PerfConverter.Persistence;
+using System.Text;
 
 namespace PerfConverter;
 
@@ -15,6 +16,9 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     IPersister<TraceEntry>? _tracePersister;
     IPersister<StackRange>? _stackRangePersister;
     readonly Stack<long> _stackStarts = new();
+    
+    // Reuse StringBuilder to avoid string allocation on key generation
+    readonly StringBuilder _keyBuilder = new();
 
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
@@ -29,79 +33,28 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
             _stackRangePersister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
-            _currentTraceKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
-            _currentStackRangeKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}_stackranges.parquet";
+            // Use StringBuilder to avoid string concatenation allocations
+            _keyBuilder.Clear();
+            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append(".parquet");
+            _currentTraceKey = _keyBuilder.ToString();
+            
+            _keyBuilder.Clear();
+            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append("_stackranges.parquet");
+            _currentStackRangeKey = _keyBuilder.ToString();
             _currentEntryId=0;
             _tracePersister = tracePersistenceFactory(_currentTraceKey);
             _stackRangePersister = stackRangePersistenceFactory(_currentStackRangeKey);
             _stackStarts.Clear();
         }
 
-        var entry = BuildEntry(sample, ip, address, ++_currentEntryId);
+        var entry = TraceEntry.CreateFromPerf(sample, ip, address, ++_currentEntryId);
         _tracePersister!.Persist(entry);
         
         // Process stack tracking for call/return pairs
         ProcessStackTracking(entry);
     }
 
-    private static TraceEntry BuildEntry(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
-    {
-        var entry = new TraceEntry
-        {
-            Id = id,
-            PerfId = sample->id,
-            Pid = sample->pid,
-            Tid = sample->tid,
-            Time = sample->time,
-            Cpu = (uint)sample->cpu,
-            Flags = (DLFilterFlag)sample->flags,
-            Period = sample->period,
-            InsnCnt = sample->insn_cnt,
-            CycCnt = sample->cyc_cnt,
-            Weight = sample->weight,
-            Cpumode = sample->cpumode,
-            AddrCorrelatesSym = sample->addr_correlates_sym,
-            Event = Marshal.PtrToStringUTF8(sample->@event),
-            MachinePid = (uint)sample->machine_pid,
-            Vcpu = (uint)sample->vcpu,
-
-            IpAddress = ip->addr,
-            IpSymoff = ip->symoff,
-            IpSym = Marshal.PtrToStringUTF8(ip->sym),
-            IpSymStart = ip->sym_start,
-            IpSymEnd = ip->sym_end,
-            IpDso = Marshal.PtrToStringUTF8(ip->dso),
-            IpSymBinding = ip->sym_binding,
-            IpIs64Bit = ip->is_64_bit,
-            IpIsKernelIp = ip->is_kernel_ip,
-            IpBuildId = new Span<byte>(ip->buildid, ip->buildid_size).ToArray(),
-            IpFiltered = ip->filtered,
-            IpComm = Marshal.PtrToStringUTF8(ip->comm)
-        };
-
-        if (address != null)
-        {
-            var addrSym = Marshal.PtrToStringUTF8(address->sym);
-            var addrDso = Marshal.PtrToStringUTF8(address->dso);
-            var addrBuildId = new Span<byte>(address->buildid, address->buildid_size).ToArray();
-            var addrComm = Marshal.PtrToStringUTF8(address->comm);
-            entry.HaveAddress = true;
-            entry.AddressAddress = address->addr;
-            entry.AddressSymoff = address->symoff;
-            entry.AddressSym = addrSym;
-            entry.AddressSymStart = address->sym_start;
-            entry.AddressSymEnd = address->sym_end;
-            entry.AddressDso = addrDso;
-            entry.AddressSymBinding = address->sym_binding;
-            entry.AddressIs64Bit = address->is_64_bit;
-            entry.AddressIsKernelIp = address->is_kernel_ip;
-            entry.AddressBuildId = addrBuildId;
-            entry.AddressFiltered = address->filtered;
-            entry.AddressComm = addrComm;
-        }
-
-        return entry;
-    }
+    // BuildEntry method removed - now handled by TraceEntry.CreateFromPerf
 
     private void ProcessStackTracking(TraceEntry trace)
     {
