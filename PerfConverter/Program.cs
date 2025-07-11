@@ -129,8 +129,9 @@ public unsafe class PerfDlFilter
             Console.WriteLine("EXIT_MESSAGE");
             return 0;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"Exception in Stop: {ex}");
             return -1;
         }
     }

@@ -106,14 +106,22 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         return batcher;
     }
 
-    public async ValueTask DisposeAsync()
+    Task? _disposeTask;
+
+    private async Task DisposeAsyncCore()
     {
         _channel.Writer.Complete();
         if (_workLoop != null)
         {
             await _workLoop;
         }
-        Console.Error.WriteLine($"FILE_STATUS|{_fileName}|CLOSED");
         await _batchPersistence.DisposeAsync();
+        Console.Error.WriteLine($"FILE_STATUS|{_fileName}|CLOSED");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposeTask ??= DisposeAsyncCore();
+        await _disposeTask;
     }
 }
