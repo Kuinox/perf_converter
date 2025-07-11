@@ -19,6 +19,8 @@ public class PerfMonitorViewModel
     public long Gen2Count { get; set; }
     public bool IsComplete { get; set; }
     public bool ExitMessageReceived { get; set; }
+    public double TotalGcTimeMs { get; set; }
+    public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;
 
 
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
@@ -27,6 +29,16 @@ public class PerfMonitorViewModel
     public Queue<(DateTime timestamp, long eventCount)> RateHistory { get; } = new();
 
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
+    
+    [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]
+    public double GcPercentage
+    {
+        get
+        {
+            if (Elapsed.TotalMilliseconds <= 0) return 0;
+            return (TotalGcTimeMs / Elapsed.TotalMilliseconds) * 100;
+        }
+    }
 
     [DependsOn(nameof(GcActive), nameof(LastGcEvent))]
     public string GcStatus

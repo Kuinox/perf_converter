@@ -222,10 +222,11 @@ internal class Program
         {
             _ = Task.Run(async () =>
             {
+                viewModel.StatusMessage = "Process completed, waiting for cleanup...";
                 await Task.Delay(10000, exitTimeoutCts.Token);
                 if (!exitTimeoutCts.Token.IsCancellationRequested)
                 {
-                    Console.WriteLine("Process exited but did not see exit message, exiting.");
+                    viewModel.StatusMessage = "Done.";
                     viewModel.IsComplete = true;
                 }
             }, exitTimeoutCts.Token);
