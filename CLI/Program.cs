@@ -205,6 +205,10 @@ internal class Program
             new Layout("FileStatus").Ratio(3)
         );
 
+        // Track exit message and timeout
+        var exitMessageReceived = false;
+        var exitTimeoutCts = new CancellationTokenSource();
+
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
         {
@@ -300,11 +304,7 @@ internal class Program
 
         process.EnableRaisingEvents = true;
         
-        // Track exit message and timeout
-        var exitMessageReceived = false;
-        var exitTimeoutCts = new CancellationTokenSource();
-        
-        process.Exited += async (sender, e) =>
+        process.Exited += (sender, e) =>
         {
             // Start a 10-second timeout when process exits
             _ = Task.Run(async () =>
