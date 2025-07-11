@@ -25,6 +25,8 @@ public unsafe class PerfDlFilter
     {
         try
         {
+            Console.WriteLine("DOTNET_READY");
+
             var fns = get_perf_dlfilter_fns();
             int argCount;
             var argsPtr = fns->args(data, &argCount);

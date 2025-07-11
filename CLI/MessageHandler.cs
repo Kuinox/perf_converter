@@ -39,6 +39,7 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
                message.StartsWith("MEMORY_STATS:") ||
                message.StartsWith("FILE_STATUS|") ||
                message.StartsWith("FILE_ACTIVITY|") ||
-               message == "EXIT_MESSAGE";
+               message == "EXIT_MESSAGE" ||
+               message == "DOTNET_READY";
     }
 }

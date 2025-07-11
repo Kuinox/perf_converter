@@ -155,7 +155,25 @@ internal class Program
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
-        var gcEventListener = new GcEventListener(process.Id, viewModel);
+        
+        // GC event listener will be started when .NET runtime is ready
+        GcEventListener? gcEventListener = null;
+        
+        // Function to start GC listener when .NET runtime is ready
+        void StartGcListener()
+        {
+            if (gcEventListener == null)
+            {
+                try
+                {
+                    gcEventListener = new GcEventListener(process.Id, viewModel);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not start GC event listener: {ex.Message}");
+                }
+            }
+        }
 
         var exitTimeoutCts = new CancellationTokenSource();
 
@@ -182,6 +200,10 @@ internal class Program
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
+                if (e.Data == "DOTNET_READY")
+                {
+                    StartGcListener();
+                }
                 messageHandler.ProcessOutputMessage(e.Data);
             }
         };
