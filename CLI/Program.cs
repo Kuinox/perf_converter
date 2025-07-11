@@ -3,9 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using Temp.Schema;
 using Spectre.Console;
-using CLI.ViewModel;
 using CLI.Display;
-using CLI.Messages;
 
 namespace CLI;
 
@@ -158,8 +156,16 @@ internal class Program
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
         
-        // GC monitoring not available for native AOT shared library
-        // GC stats will be reported through the output stream instead
+        // Set up GC event listener for the process
+        GcEventListener? gcEventListener = null;
+        try
+        {
+            gcEventListener = new GcEventListener(process.Id, viewModel);
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[yellow]Warning: Could not start GC event listener: {ex.Message}[/]");
+        }
 
         var exitTimeoutCts = new CancellationTokenSource();
 
