@@ -1,6 +1,5 @@
 ﻿namespace PerfConverter.PerfStructs;
 
-using System;
 using System.Runtime.InteropServices;
 
 [StructLayout(LayoutKind.Sequential)]

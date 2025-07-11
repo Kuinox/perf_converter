@@ -1,12 +1,6 @@
-using System;
 using System.CommandLine;
-using System.CommandLine.Invocation;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Text.Json;
-using System.Text;
 using System.Collections.Concurrent;
 using Temp.Schema;
 using Spectre.Console;
@@ -207,8 +201,8 @@ internal class Program
             );
         
         layout["Top"].SplitColumns(
-            new Layout("Stats").Ratio(1),
-            new Layout("FileStatus").Ratio(2)
+            new Layout("Stats").Ratio(2),
+            new Layout("FileStatus").Ratio(3)
         );
 
         // Set up process event handlers
@@ -430,7 +424,8 @@ internal class Program
                             var fileStatusPanel = new Panel(fileTree)
                             {
                                 Header = new PanelHeader("[bold]File Status[/]"),
-                                Border = BoxBorder.Rounded
+                                Border = BoxBorder.Rounded,
+                                
                             };
                             
                             layout["Top"]["FileStatus"].Update(fileStatusPanel);

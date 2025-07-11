@@ -1,7 +1,6 @@
 using Parquet;
 using PerfConverter.Entry;
 using System.Runtime.InteropServices;
-using Temp.Core;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 

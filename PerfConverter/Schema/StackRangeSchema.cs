@@ -1,10 +1,8 @@
 using Parquet;
 using Parquet.Schema;
 using PerfConverter.Entry;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
-namespace Temp.Schema;
+namespace PerfConverter.Schema;
 
 public class StackRangeSchema
 {

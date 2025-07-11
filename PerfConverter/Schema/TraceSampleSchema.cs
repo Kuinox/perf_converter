@@ -2,9 +2,8 @@ using Parquet;
 using Parquet.Schema;
 using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
-using System.Security.Cryptography;
 
-namespace Temp.Schema;
+namespace PerfConverter.Schema;
 
 public class TraceSampleSchema
 {

@@ -2,7 +2,7 @@ using Parquet;
 using Parquet.Data;
 using Parquet.Schema;
 
-namespace Temp.Schema;
+namespace PerfConverter.Schema;
 
 public class ParquetColumn<T>(string name)
 {

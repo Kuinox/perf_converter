@@ -1,12 +1,6 @@
 ﻿using Parquet;
-using Parquet.Data;
-using Parquet.Schema;
 using PerfConverter.Entry;
-using System.Diagnostics.CodeAnalysis;
-using System.Net;
-using System.Security.Cryptography;
-using Temp.Core;
-using Temp.Schema;
+using PerfConverter.Schema;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 

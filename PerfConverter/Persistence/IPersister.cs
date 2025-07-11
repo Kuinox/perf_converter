@@ -1,4 +1,4 @@
-﻿namespace Temp.Core;
+﻿namespace PerfConverter.Persistence;
 
 public interface IPersister<T> : IAsyncDisposable
 {

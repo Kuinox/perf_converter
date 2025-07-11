@@ -1,7 +1,7 @@
 ﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
 using System.Runtime.InteropServices;
-using Temp.Core;
+using PerfConverter.Persistence;
 
 namespace PerfConverter;
 

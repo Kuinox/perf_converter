@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Threading.Channels;
 
-namespace Temp.Core;
+namespace PerfConverter.Persistence;
 
 public class Batcher<T> : IPersister<T>, IAsyncDisposable
 {

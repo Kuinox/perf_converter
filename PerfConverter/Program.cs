@@ -2,7 +2,6 @@
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.ParquetDotNet;
 using System.Runtime.InteropServices;
-using Temp.Core;
 
 namespace PerfConverter;
 

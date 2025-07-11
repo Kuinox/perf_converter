@@ -1,7 +1,6 @@
 using Parquet;
 using PerfConverter.Entry;
-using Temp.Core;
-using Temp.Schema;
+using PerfConverter.Schema;
 namespace PerfConverter.Persistence.ParquetDotNet;
 public class ParquetStackRangePersistence : IBatchPersistence<StackRange>
 {

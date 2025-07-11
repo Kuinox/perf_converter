@@ -1,7 +1,4 @@
 ﻿using Microsoft.LinuxTracepoints.Decode;
-using Parquet;
-using System.CommandLine;
-using Temp.Core;
 
 namespace CLI;
 
