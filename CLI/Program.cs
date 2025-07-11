@@ -174,6 +174,13 @@ internal class Program
         var errorLines = new ConcurrentQueue<string>();
         var fileStatuses = new ConcurrentDictionary<string, FileStatus>();
         var isComplete = false;
+        
+        // GC tracking variables
+        var lastGcEvent = DateTime.MinValue;
+        var totalMemory = 0L;
+        var gen0Count = 0L;
+        var gen1Count = 0L;
+        var gen2Count = 0L;
 
         // Set up Ctrl+C handler to kill the process
         Console.CancelKeyPress += (sender, e) =>
@@ -218,6 +225,57 @@ internal class Program
             {
                 var sliced = e.Data.AsSpan()[9..].Trim().ToString();
                 eventCount = long.Parse(sliced);
+            }
+            else if (e.Data.StartsWith("GC_EVENT:"))
+            {
+                lastGcEvent = DateTime.UtcNow;
+                // Parse GC event data
+                var gcData = e.Data.AsSpan()[9..].ToString();
+                var parts = gcData.Split(',');
+                foreach (var part in parts)
+                {
+                    var keyValue = part.Split('=');
+                    if (keyValue.Length == 2)
+                    {
+                        var key = keyValue[0];
+                        var value = keyValue[1];
+                        if (long.TryParse(value, out var longValue))
+                        {
+                            switch (key)
+                            {
+                                case "Gen0": gen0Count = longValue; break;
+                                case "Gen1": gen1Count = longValue; break;
+                                case "Gen2": gen2Count = longValue; break;
+                                case "Memory": totalMemory = longValue; break;
+                            }
+                        }
+                    }
+                }
+            }
+            else if (e.Data.StartsWith("MEMORY_STATS:"))
+            {
+                // Parse memory statistics
+                var memData = e.Data.AsSpan()[13..].ToString();
+                var parts = memData.Split(',');
+                foreach (var part in parts)
+                {
+                    var keyValue = part.Split('=');
+                    if (keyValue.Length == 2)
+                    {
+                        var key = keyValue[0];
+                        var value = keyValue[1];
+                        if (long.TryParse(value, out var longValue))
+                        {
+                            switch (key)
+                            {
+                                case "Total": totalMemory = longValue; break;
+                                case "Gen0": gen0Count = longValue; break;
+                                case "Gen1": gen1Count = longValue; break;
+                                case "Gen2": gen2Count = longValue; break;
+                            }
+                        }
+                    }
+                }
             }
             else if (e.Data == "EXIT_MESSAGE")
             {
@@ -361,12 +419,30 @@ internal class Program
                             }
 
 
+                            // GC status indicator
+                            var gcStatus = "";
+                            var timeSinceLastGc = DateTime.UtcNow - lastGcEvent;
+                            if (lastGcEvent != DateTime.MinValue && timeSinceLastGc.TotalSeconds < 5)
+                            {
+                                gcStatus = "[red]🔥 GC ACTIVE[/]";
+                            }
+                            else if (lastGcEvent != DateTime.MinValue)
+                            {
+                                gcStatus = $"[dim]Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago[/]";
+                            }
+                            
+                            var memoryMB = totalMemory / 1024.0 / 1024.0;
+                            
                             var statsPanel = new Panel(
                                 new Markup($"[bold yellow]Event Statistics[/]\n\n" +
                                          $"[green]Total Events:[/] {currentEventCount:N0}\n" +
                                          $"[blue]Overall Rate (events/sec):[/] {rate:N0}\n" +
                                          $"[cyan]Current Rate (events/sec):[/] {currentRate:N0}\n" +
                                          $"[yellow]Elapsed Time:[/] {elapsed:hh\\:mm\\:ss}\n" +
+                                         $"\n[bold magenta]Memory & GC[/]\n" +
+                                         $"[white]Memory Usage:[/] {memoryMB:F1} MB\n" +
+                                         $"[white]GC Gen0/Gen1/Gen2:[/] {gen0Count}/{gen1Count}/{gen2Count}\n" +
+                                         $"{gcStatus}\n" +
                                          $"[dim]Press Ctrl+C to stop[/]"))
                             {
                                 Header = new PanelHeader("[bold]Status[/]"),

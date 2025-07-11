@@ -18,6 +18,11 @@ public unsafe class PerfDlFilter
     {
         public int EventCount { get; set; }
         public DateTime LastReportTime { get; set; } = DateTime.UtcNow;
+        public DateTime LastGcReportTime { get; set; } = DateTime.UtcNow;
+        public long LastGen0Count { get; set; }
+        public long LastGen1Count { get; set; }
+        public long LastGen2Count { get; set; }
+        public long LastTotalMemory { get; set; }
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -76,6 +81,30 @@ public unsafe class PerfDlFilter
             {
                 Console.WriteLine($"PROGRESS:{state.EventCount}");
                 state.LastReportTime = now;
+            }
+            
+            // Report GC statistics every 1 second
+            if ((now - state.LastGcReportTime).TotalMilliseconds > 1000)
+            {
+                var gen0Count = GC.CollectionCount(0);
+                var gen1Count = GC.CollectionCount(1);
+                var gen2Count = GC.CollectionCount(2);
+                var totalMemory = GC.GetTotalMemory(false);
+                
+                // Check if any GC occurred
+                if (gen0Count != state.LastGen0Count || gen1Count != state.LastGen1Count || gen2Count != state.LastGen2Count)
+                {
+                    Console.WriteLine($"GC_EVENT:Gen0={gen0Count},Gen1={gen1Count},Gen2={gen2Count},Memory={totalMemory}");
+                }
+                
+                // Always report memory statistics
+                Console.WriteLine($"MEMORY_STATS:Total={totalMemory},Gen0={gen0Count},Gen1={gen1Count},Gen2={gen2Count}");
+                
+                state.LastGen0Count = gen0Count;
+                state.LastGen1Count = gen1Count;
+                state.LastGen2Count = gen2Count;
+                state.LastTotalMemory = totalMemory;
+                state.LastGcReportTime = now;
             }
         }
         catch (Exception ex)
