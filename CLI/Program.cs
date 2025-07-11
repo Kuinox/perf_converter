@@ -215,6 +215,13 @@ internal class Program
                 var sliced = e.Data.AsSpan()[9..].Trim().ToString();
                 eventCount = long.Parse(sliced);
             }
+            else if (e.Data == "EXIT_MESSAGE")
+            {
+                // Exit message received, complete after allowing time for final messages
+                exitMessageReceived = true;
+                exitTimeoutCts.Cancel(); // Cancel the timeout since we got the exit message
+                isComplete = true;
+            }
             else
             {
                 outputLines.Enqueue(e.Data);
@@ -292,9 +299,23 @@ internal class Program
 
 
         process.EnableRaisingEvents = true;
-        process.Exited += (sender, e) =>
+        
+        // Track exit message and timeout
+        var exitMessageReceived = false;
+        var exitTimeoutCts = new CancellationTokenSource();
+        
+        process.Exited += async (sender, e) =>
         {
-            isComplete = true;
+            // Start a 10-second timeout when process exits
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(10000, exitTimeoutCts.Token);
+                if (!exitTimeoutCts.Token.IsCancellationRequested)
+                {
+                    // Timeout reached, complete regardless of exit message
+                    isComplete = true;
+                }
+            }, exitTimeoutCts.Token);
         };
         isComplete = process.HasExited;
 
@@ -481,6 +502,10 @@ internal class Program
             // Wait for process without display
             await process.WaitForExitAsync();
         }
+        
+        // Cancel the timeout since we're done
+        exitTimeoutCts.Cancel();
+        exitTimeoutCts.Dispose();
 
         return process.ExitCode;
     }

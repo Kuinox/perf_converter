@@ -97,6 +97,7 @@ public unsafe class PerfDlFilter
 
             _persistenceLifetime.DisposeAsync().AsTask().Wait();
             Console.Error.WriteLine("Done.");
+            Console.WriteLine("EXIT_MESSAGE");
             return 0;
         }
         catch
