@@ -18,12 +18,6 @@ public class CommandProcessor
             case var cmd when cmd.StartsWith("PROGRESS:"):
                 HandleProgressCommand(cmd);
                 break;
-            case var cmd when cmd.StartsWith("GC_EVENT:"):
-                HandleGcEventCommand(cmd);
-                break;
-            case var cmd when cmd.StartsWith("MEMORY_STATS:"):
-                HandleMemoryStatsCommand(cmd);
-                break;
             case var cmd when cmd.StartsWith("FILE_STATUS|"):
                 HandleFileStatusCommand(cmd);
                 break;
@@ -50,18 +44,6 @@ public class CommandProcessor
         }
     }
 
-    private void HandleGcEventCommand(string command)
-    {
-        _viewModel.LastGcEvent = DateTime.UtcNow;
-        var gcData = command.AsSpan()[9..].ToString();
-        ParseGcData(gcData);
-    }
-
-    private void HandleMemoryStatsCommand(string command)
-    {
-        var memData = command.AsSpan()[13..].ToString();
-        ParseMemoryData(memData);
-    }
 
     private void HandleFileStatusCommand(string command)
     {
@@ -125,51 +107,4 @@ public class CommandProcessor
         _viewModel.IsComplete = true;
     }
 
-    private void ParseGcData(string gcData)
-    {
-        var parts = gcData.Split(',');
-        foreach (var part in parts)
-        {
-            var keyValue = part.Split('=');
-            if (keyValue.Length == 2)
-            {
-                var key = keyValue[0];
-                var value = keyValue[1];
-                if (long.TryParse(value, out var longValue))
-                {
-                    switch (key)
-                    {
-                        case "Gen0": _viewModel.Gen0Count = longValue; break;
-                        case "Gen1": _viewModel.Gen1Count = longValue; break;
-                        case "Gen2": _viewModel.Gen2Count = longValue; break;
-                        case "Memory": _viewModel.TotalMemory = longValue; break;
-                    }
-                }
-            }
-        }
-    }
-
-    private void ParseMemoryData(string memData)
-    {
-        var parts = memData.Split(',');
-        foreach (var part in parts)
-        {
-            var keyValue = part.Split('=');
-            if (keyValue.Length == 2)
-            {
-                var key = keyValue[0];
-                var value = keyValue[1];
-                if (long.TryParse(value, out var longValue))
-                {
-                    switch (key)
-                    {
-                        case "Total": _viewModel.TotalMemory = longValue; break;
-                        case "Gen0": _viewModel.Gen0Count = longValue; break;
-                        case "Gen1": _viewModel.Gen1Count = longValue; break;
-                        case "Gen2": _viewModel.Gen2Count = longValue; break;
-                    }
-                }
-            }
-        }
-    }
 }

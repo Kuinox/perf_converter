@@ -11,6 +11,7 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
     private int _overallRate;
     private int _currentRate;
     private DateTime _lastGcEvent = DateTime.MinValue;
+    private bool _gcActive = false;
     private long _totalMemory;
     private long _gen0Count;
     private long _gen1Count;
@@ -46,6 +47,12 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
     {
         get => _lastGcEvent;
         set => SetProperty(ref _lastGcEvent, value);
+    }
+
+    public bool GcActive
+    {
+        get => _gcActive;
+        set => SetProperty(ref _gcActive, value);
     }
 
     public long TotalMemory
@@ -95,13 +102,13 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
     {
         get
         {
-            var timeSinceLastGc = DateTime.UtcNow - LastGcEvent;
-            if (LastGcEvent != DateTime.MinValue && timeSinceLastGc.TotalSeconds < 5)
+            if (GcActive)
             {
                 return "[red]🔥 GC ACTIVE[/]";
             }
             else if (LastGcEvent != DateTime.MinValue)
             {
+                var timeSinceLastGc = DateTime.UtcNow - LastGcEvent;
                 return $"[dim]Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago[/]";
             }
             return "";
@@ -122,6 +129,13 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
 
         field = value;
         OnPropertyChanged(propertyName);
+        
+        // Trigger GcStatus update when GC-related properties change
+        if (propertyName == nameof(GcActive) || propertyName == nameof(LastGcEvent))
+        {
+            OnPropertyChanged(nameof(GcStatus));
+        }
+        
         return true;
     }
 
