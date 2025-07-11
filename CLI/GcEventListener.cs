@@ -80,7 +80,6 @@ namespace CLI
                             _viewModel.Gen2Count++;
                             break;
                         }
-                    }
                 });
 
                 source.Clr.Observe<GCHeapStatsTraceData>().Subscribe(heapData =>
