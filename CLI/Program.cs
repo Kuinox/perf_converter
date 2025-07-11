@@ -234,7 +234,6 @@ internal class Program
             {
                 viewModel.Elapsed = chrono.Elapsed;
                 viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
-                viewModel.UpdateRateHistory();
                 
                 await Task.Delay(100, exitTimeoutCts.Token);
             }

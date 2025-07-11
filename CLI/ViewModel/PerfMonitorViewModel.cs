@@ -1,95 +1,25 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using PropertyChanged;
 
 namespace CLI.ViewModel;
 
-public class PerfMonitorViewModel : INotifyPropertyChanged
+[AddINotifyPropertyChangedInterface]
+public class PerfMonitorViewModel
 {
-    private long _eventCount;
-    private TimeSpan _elapsed;
-    private int _overallRate;
-    private int _currentRate;
-    private DateTime _lastGcEvent = DateTime.MinValue;
-    private bool _gcActive = false;
-    private long _totalMemory;
-    private long _gen0Count;
-    private long _gen1Count;
-    private long _gen2Count;
-    private bool _isComplete;
-    private bool _exitMessageReceived;
+    public long EventCount { get; set; }
+    public TimeSpan Elapsed { get; set; }
+    public int OverallRate { get; set; }
+    public int CurrentRate { get; set; }
+    public DateTime LastGcEvent { get; set; } = DateTime.MinValue;
+    public bool GcActive { get; set; } = false;
+    public long TotalMemory { get; set; }
+    public long Gen0Count { get; set; }
+    public long Gen1Count { get; set; }
+    public long Gen2Count { get; set; }
+    public bool IsComplete { get; set; }
+    public bool ExitMessageReceived { get; set; }
 
-    public long EventCount
-    {
-        get => _eventCount;
-        set => SetProperty(ref _eventCount, value);
-    }
-
-    public TimeSpan Elapsed
-    {
-        get => _elapsed;
-        set => SetProperty(ref _elapsed, value);
-    }
-
-    public int OverallRate
-    {
-        get => _overallRate;
-        set => SetProperty(ref _overallRate, value);
-    }
-
-    public int CurrentRate
-    {
-        get => _currentRate;
-        set => SetProperty(ref _currentRate, value);
-    }
-
-    public DateTime LastGcEvent
-    {
-        get => _lastGcEvent;
-        set => SetProperty(ref _lastGcEvent, value);
-    }
-
-    public bool GcActive
-    {
-        get => _gcActive;
-        set => SetProperty(ref _gcActive, value);
-    }
-
-    public long TotalMemory
-    {
-        get => _totalMemory;
-        set => SetProperty(ref _totalMemory, value);
-    }
-
-    public long Gen0Count
-    {
-        get => _gen0Count;
-        set => SetProperty(ref _gen0Count, value);
-    }
-
-    public long Gen1Count
-    {
-        get => _gen1Count;
-        set => SetProperty(ref _gen1Count, value);
-    }
-
-    public long Gen2Count
-    {
-        get => _gen2Count;
-        set => SetProperty(ref _gen2Count, value);
-    }
-
-    public bool IsComplete
-    {
-        get => _isComplete;
-        set => SetProperty(ref _isComplete, value);
-    }
-
-    public bool ExitMessageReceived
-    {
-        get => _exitMessageReceived;
-        set => SetProperty(ref _exitMessageReceived, value);
-    }
 
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
     public ConcurrentQueue<string> OutputLines { get; } = new();
@@ -98,6 +28,7 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
 
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
 
+    [DependsOn(nameof(GcActive), nameof(LastGcEvent))]
     public string GcStatus
     {
         get
@@ -115,29 +46,6 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
         }
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
-
-    protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value))
-            return false;
-
-        field = value;
-        OnPropertyChanged(propertyName);
-        
-        // Trigger GcStatus update when GC-related properties change
-        if (propertyName == nameof(GcActive) || propertyName == nameof(LastGcEvent))
-        {
-            OnPropertyChanged(nameof(GcStatus));
-        }
-        
-        return true;
-    }
 
     public void UpdateRateHistory()
     {
@@ -152,12 +60,12 @@ public class PerfMonitorViewModel : INotifyPropertyChanged
         
         if (RateHistory.Count >= 2)
         {
-            var oldest = RateHistory.First();
+            var (oldestTimestamp, oldestEventCount) = RateHistory.First();
             var newest = RateHistory.Last();
-            var timeDiff = (newest.timestamp - oldest.timestamp).TotalSeconds;
+            var timeDiff = (newest.timestamp - oldestTimestamp).TotalSeconds;
             if (timeDiff > 0)
             {
-                CurrentRate = (int)((newest.eventCount - oldest.eventCount) / timeDiff);
+                CurrentRate = (int)((newest.eventCount - oldestEventCount) / timeDiff);
             }
         }
     }
