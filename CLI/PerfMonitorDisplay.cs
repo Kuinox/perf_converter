@@ -1,4 +1,3 @@
-using CLI.ViewModel;
 using Spectre.Console;
 
 namespace CLI.Display;

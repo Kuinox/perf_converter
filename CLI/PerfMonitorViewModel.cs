@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.ComponentModel;
 using PropertyChanged;
 
-namespace CLI.ViewModel;
+namespace CLI;
 
 [AddINotifyPropertyChangedInterface]
 public class PerfMonitorViewModel
@@ -61,11 +61,11 @@ public class PerfMonitorViewModel
         if (RateHistory.Count >= 2)
         {
             var (oldestTimestamp, oldestEventCount) = RateHistory.First();
-            var newest = RateHistory.Last();
-            var timeDiff = (newest.timestamp - oldestTimestamp).TotalSeconds;
+            var (timestamp, eventCount) = RateHistory.Last();
+            var timeDiff = (timestamp - oldestTimestamp).TotalSeconds;
             if (timeDiff > 0)
             {
-                CurrentRate = (int)((newest.eventCount - oldestEventCount) / timeDiff);
+                CurrentRate = (int)((eventCount - oldestEventCount) / timeDiff);
             }
         }
     }

@@ -1,28 +1,19 @@
 namespace CLI;
 
-public class MessageHandler
+public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor commandProcessor)
 {
-    private readonly PerfMonitorViewModel _viewModel;
-    private readonly CommandProcessor _commandProcessor;
-
-    public MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor commandProcessor)
-    {
-        _viewModel = viewModel;
-        _commandProcessor = commandProcessor;
-    }
-
     public void ProcessOutputMessage(string message)
     {
         if (string.IsNullOrEmpty(message)) return;
 
         if (IsCommand(message))
         {
-            _commandProcessor.ProcessCommand(message);
+            commandProcessor.ProcessCommand(message);
         }
         else
         {
-            _viewModel.OutputLines.Enqueue(message);
-            _viewModel.TrimOutputLines();
+            viewModel.OutputLines.Enqueue(message);
+            viewModel.TrimOutputLines();
         }
     }
 
@@ -32,12 +23,12 @@ public class MessageHandler
 
         if (IsCommand(message))
         {
-            _commandProcessor.ProcessCommand(message);
+            commandProcessor.ProcessCommand(message);
         }
         else
         {
-            _viewModel.ErrorLines.Enqueue($"[red]{message}[/]");
-            _viewModel.TrimErrorLines();
+            viewModel.ErrorLines.Enqueue($"[red]{message}[/]");
+            viewModel.TrimErrorLines();
         }
     }
 

@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Threading;
 using System.Threading.Tasks;
-using CLI.ViewModel;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
