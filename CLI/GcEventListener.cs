@@ -24,25 +24,16 @@ namespace CLI
             _viewModel = viewModel;
             _client = new DiagnosticsClient(processId);
             _cancellationTokenSource = new CancellationTokenSource();
-            
+
             var providers = new List<EventPipeProvider>
             {
-                new EventPipeProvider("Microsoft-Windows-DotNETRuntime", 
-                    EventLevel.Informational, 
+                new EventPipeProvider("Microsoft-Windows-DotNETRuntime",
+                    EventLevel.Informational,
                     (long)ClrTraceEventParser.Keywords.GC)
             };
 
-            try
-            {
-                _session = _client.StartEventPipeSession(providers, false);
-                _eventTask = Task.Run(ProcessEvents, _cancellationTokenSource.Token);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to start EventPipe session: {ex.Message}");
-                _session = null;
-                _eventTask = Task.CompletedTask;
-            }
+            _session = _client.StartEventPipeSession(providers, false);
+            _eventTask = Task.Run(ProcessEvents, _cancellationTokenSource.Token);
         }
 
         private void ProcessEvents()
@@ -52,7 +43,7 @@ namespace CLI
             try
             {
                 using var source = new EventPipeEventSource(_session.EventStream);
-                
+
                 source.Clr.Observe<GCStartTraceData>().Subscribe(gcData =>
                 {
                     _viewModel.GcActive = true;
@@ -62,7 +53,7 @@ namespace CLI
                 {
                     _viewModel.GcActive = false;
                     _viewModel.LastGcEvent = gcData.TimeStamp;
-                    
+
                     // Update generation counts based on the GC that just completed
                     switch (gcData.Depth)
                     {
@@ -95,11 +86,11 @@ namespace CLI
         public void Dispose()
         {
             if (_disposed) return;
-            
+
             _cancellationTokenSource.Cancel();
             _session?.Dispose();
             _cancellationTokenSource.Dispose();
-            
+
             try
             {
                 _eventTask.Wait(TimeSpan.FromSeconds(1));
@@ -108,7 +99,7 @@ namespace CLI
             {
                 // Ignore cancellation exceptions during shutdown
             }
-            
+
             _disposed = true;
         }
     }
