@@ -1,11 +1,13 @@
 using System;
 using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.Threading;
 using System.Threading.Tasks;
 using CLI.ViewModel;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
+using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 
 namespace CLI
 {
@@ -44,7 +46,7 @@ namespace CLI
             }
         }
 
-        private async Task ProcessEvents()
+        private void ProcessEvents()
         {
             if (_session == null) return;
 
@@ -52,17 +54,15 @@ namespace CLI
             {
                 using var source = new EventPipeEventSource(_session.EventStream);
                 
-                source.Clr.GCStart += (TraceEvent data) =>
+                source.Clr.Observe<GCStartTraceData>().Subscribe(gcData =>
                 {
                     _viewModel.GcActive = true;
-                };
+                });
 
-                source.Clr.GCEnd += (TraceEvent data) =>
+                source.Clr.Observe<GCEndTraceData>().Subscribe(gcData =>
                 {
-                    var gcData = (Microsoft.Diagnostics.Tracing.Parsers.Clr.GCEndTraceData)data;
-                    
                     _viewModel.GcActive = false;
-                    _viewModel.LastGcEvent = data.TimeStamp;
+                    _viewModel.LastGcEvent = gcData.TimeStamp;
                     
                     // Update generation counts based on the GC that just completed
                     switch (gcData.Depth)
@@ -77,15 +77,13 @@ namespace CLI
                             _viewModel.Gen2Count++;
                             break;
                     }
-                };
+                });
 
-                source.Clr.GCHeapStats += (TraceEvent data) =>
+                source.Clr.Observe<GCHeapStatsTraceData>().Subscribe(heapData =>
                 {
-                    var heapData = (Microsoft.Diagnostics.Tracing.Parsers.Clr.GCHeapStatsTraceData)data;
-                    
                     // Update total memory with the total heap size
                     _viewModel.TotalMemory = (long)heapData.TotalHeapSize;
-                };
+                });
 
                 source.Process();
             }
