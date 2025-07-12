@@ -74,7 +74,7 @@ public unsafe class PerfDlFilter
             _traceProcessor.QueueData(sample, ip, address);
 
             var now = DateTime.UtcNow;
-            if ((now - state.LastReportTime).TotalMilliseconds > 10)
+            if ((now - state.LastReportTime).TotalMilliseconds > 50)
             {
                 Console.WriteLine($"PROGRESS:{state.EventCount}");
                 state.LastReportTime = now;

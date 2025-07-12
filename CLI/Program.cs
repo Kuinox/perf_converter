@@ -185,6 +185,8 @@ internal class Program
         }
 
         var exitTimeoutCts = new CancellationTokenSource();
+        var stdoutDrained = false;
+        var stderrDrained = false;
 
         // Set up Ctrl+C handler
         Console.CancelKeyPress += (sender, e) =>
@@ -215,6 +217,15 @@ internal class Program
                 }
                 messageHandler.ProcessOutputMessage(e.Data);
             }
+            else
+            {
+                // e.Data is null when stdout is closed
+                stdoutDrained = true;
+                if (stdoutDrained && stderrDrained && process.HasExited)
+                {
+                    viewModel.PipesDrained = true;
+                }
+            }
         };
 
         process.ErrorDataReceived += (sender, e) =>
@@ -223,18 +234,45 @@ internal class Program
             {
                 messageHandler.ProcessErrorMessage(e.Data);
             }
+            else
+            {
+                // e.Data is null when stderr is closed
+                stderrDrained = true;
+                if (stdoutDrained && stderrDrained && process.HasExited)
+                {
+                    viewModel.PipesDrained = true;
+                }
+            }
         };
 
         process.EnableRaisingEvents = true;
 
         process.Exited += (sender, e) =>
         {
+            viewModel.ProcessHasExited = true;
+            viewModel.StatusMessage = "Process completed, waiting for pipes to drain...";
+            
+            // Check if pipes are already drained
+            if (stdoutDrained && stderrDrained)
+            {
+                viewModel.PipesDrained = true;
+            }
+            
             _ = Task.Run(async () =>
             {
-                viewModel.StatusMessage = "Process completed, waiting for cleanup...";
-                await Task.Delay(10000, exitTimeoutCts.Token);
+                // Wait for pipes to drain, but with a reasonable timeout
+                var maxWait = TimeSpan.FromSeconds(5);
+                var start = DateTime.UtcNow;
+                
+                while (!viewModel.PipesDrained && (DateTime.UtcNow - start) < maxWait && !exitTimeoutCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(100, exitTimeoutCts.Token);
+                }
+                
                 if (!exitTimeoutCts.Token.IsCancellationRequested)
                 {
+                    // Force completion even if pipes didn't drain cleanly
+                    viewModel.PipesDrained = true;
                     viewModel.StatusMessage = "Done.";
                     viewModel.IsComplete = true;
                 }

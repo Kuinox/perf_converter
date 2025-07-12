@@ -53,6 +53,10 @@ namespace CLI
                         _viewModel.GcActive = true;
                         _gcStartTime = DateTime.UtcNow;
                     }
+                    else
+                    {
+                        _gcStartTime = default;
+                    }
                 });
 
                 source.Clr.Observe<GCEndTraceData>().Subscribe(gcData =>
@@ -79,7 +83,7 @@ namespace CLI
                         case 2:
                             _viewModel.Gen2Count++;
                             break;
-                        }
+                    }
                 });
 
                 source.Clr.Observe<GCHeapStatsTraceData>().Subscribe(heapData =>
