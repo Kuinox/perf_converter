@@ -33,7 +33,7 @@ public unsafe class PerfDlFilter
             var args = new string[argCount];
             for (var i = 0; i < argCount; i++)
             {
-                args[i] = TraceEntry.GetOrInternStringFromPtr((nint)argsPtr[i]);
+                args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
             }
             var state = new State
             {
