@@ -264,19 +264,24 @@ internal class Program
                 var maxWait = TimeSpan.FromSeconds(5);
                 var start = DateTime.UtcNow;
                 
-                while (!viewModel.PipesDrained && (DateTime.UtcNow - start) < maxWait && !exitTimeoutCts.Token.IsCancellationRequested)
+                while (!viewModel.PipesDrained && (DateTime.UtcNow - start) < maxWait)
                 {
-                    await Task.Delay(100, exitTimeoutCts.Token);
+                    try
+                    {
+                        await Task.Delay(100);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // If we get disposed, just break out
+                        break;
+                    }
                 }
                 
-                if (!exitTimeoutCts.Token.IsCancellationRequested)
-                {
-                    // Force completion even if pipes didn't drain cleanly
-                    viewModel.PipesDrained = true;
-                    viewModel.StatusMessage = "Done.";
-                    viewModel.IsComplete = true;
-                }
-            }, exitTimeoutCts.Token);
+                // Force completion even if pipes didn't drain cleanly
+                viewModel.PipesDrained = true;
+                viewModel.StatusMessage = "Done.";
+                viewModel.IsComplete = true;
+            });
         };
 
         viewModel.IsComplete = process.HasExited;
