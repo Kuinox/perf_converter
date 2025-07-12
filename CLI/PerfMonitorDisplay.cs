@@ -73,6 +73,7 @@ public class PerfMonitorDisplay
                      $"[white]GC Gen0/Gen1/Gen2:[/] {_viewModel.Gen0Count}/{_viewModel.Gen1Count}/{_viewModel.Gen2Count}\n" +
                      $"[white]% Time in GC:[/] {_viewModel.GcPercentage:F1}%\n" +
                      $"{_viewModel.GcStatus}\n" +
+                     $"\n[bold]Process Status:[/] {_viewModel.Status}\n" +
                      $"[dim]Press Ctrl+C to stop[/]"))
         {
             Header = new PanelHeader("[bold]Status[/]"),
