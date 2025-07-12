@@ -11,42 +11,51 @@ internal class Program
 {
     static async Task<int> Main(string[] args)
     {
-        var rootCommand = new RootCommand("PerfConverter CLI - Helper tool for running perf with PerfConverter DLFilter");
-
-        var inputFileArgument = new Argument<FileInfo>(
-            name: "input-file",
-            description: "Path to the perf data file");
-
-        var perfArgsOption = new Option<string>(
-            ["--perf-args", "-p"],
-            getDefaultValue: () => "-f --itrace=bei0ns",
-            "Additional arguments to pass to perf script");
-
-        var outputOption = new Option<DirectoryInfo>(
-            ["--output", "-o"],
-            getDefaultValue: () => new DirectoryInfo("parquet_output"),
-            "Output directory for Parquet files");
-
-        var dryRunOption = new Option<bool>(
-            ["--dry-run", "-n"],
-            "Show the command that would be executed without running it");
-
-        rootCommand.AddArgument(inputFileArgument);
-        rootCommand.AddOption(perfArgsOption);
-        rootCommand.AddOption(outputOption);
-        rootCommand.AddOption(dryRunOption);
-
-        rootCommand.SetHandler(async context =>
+        try
         {
-            var inputFile = context.ParseResult.GetValueForArgument(inputFileArgument)!;
-            var perfArgs = context.ParseResult.GetValueForOption(perfArgsOption)!;
-            var outputDir = context.ParseResult.GetValueForOption(outputOption)!;
-            var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
 
-            await RunPerfCommand(inputFile, perfArgs, outputDir, dryRun);
-        });
+            var rootCommand = new RootCommand("PerfConverter CLI - Helper tool for running perf with PerfConverter DLFilter");
 
-        return await rootCommand.InvokeAsync(args);
+            var inputFileArgument = new Argument<FileInfo>(
+                name: "input-file",
+                description: "Path to the perf data file");
+
+            var perfArgsOption = new Option<string>(
+                ["--perf-args", "-p"],
+                getDefaultValue: () => "-f --itrace=bei0ns",
+                "Additional arguments to pass to perf script");
+
+            var outputOption = new Option<DirectoryInfo>(
+                ["--output", "-o"],
+                getDefaultValue: () => new DirectoryInfo("parquet_output"),
+                "Output directory for Parquet files");
+
+            var dryRunOption = new Option<bool>(
+                ["--dry-run", "-n"],
+                "Show the command that would be executed without running it");
+
+            rootCommand.AddArgument(inputFileArgument);
+            rootCommand.AddOption(perfArgsOption);
+            rootCommand.AddOption(outputOption);
+            rootCommand.AddOption(dryRunOption);
+
+            rootCommand.SetHandler(async context =>
+            {
+                var inputFile = context.ParseResult.GetValueForArgument(inputFileArgument)!;
+                var perfArgs = context.ParseResult.GetValueForOption(perfArgsOption)!;
+                var outputDir = context.ParseResult.GetValueForOption(outputOption)!;
+                var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
+
+                await RunPerfCommand(inputFile, perfArgs, outputDir, dryRun);
+            });
+
+            return await rootCommand.InvokeAsync(args);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            return 1;
+        }
     }
 
     private static async Task<int> RunPerfCommand(FileInfo inputFile, string perfArgs, DirectoryInfo outputDir, bool dryRun)
@@ -155,10 +164,10 @@ internal class Program
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
-        
+
         // GC event listener will be started when .NET runtime is ready
         GcEventListener? gcEventListener = null;
-        
+
         // Function to start GC listener when .NET runtime is ready
         void StartGcListener()
         {
@@ -217,7 +226,7 @@ internal class Program
         };
 
         process.EnableRaisingEvents = true;
-        
+
         process.Exited += (sender, e) =>
         {
             _ = Task.Run(async () =>
@@ -245,7 +254,7 @@ internal class Program
             {
                 viewModel.Elapsed = chrono.Elapsed;
                 viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
-                
+
                 await Task.Delay(100, exitTimeoutCts.Token);
             }
         }, exitTimeoutCts.Token);
@@ -259,10 +268,10 @@ internal class Program
             AnsiConsole.WriteLine($"Monitor error: {ex.Message}");
             await process.WaitForExitAsync();
         }
-        
+
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
-        
+
         // Clean up GC event listener
         gcEventListener?.Dispose();
 
