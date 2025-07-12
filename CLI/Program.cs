@@ -259,21 +259,19 @@ internal class Program
             }
         }, exitTimeoutCts.Token);
 
-        try
-        {
-            await Task.WhenAny(displayTask, updateTask);
-        }
-        catch (Exception ex)
-        {
-            AnsiConsole.WriteLine($"Monitor error: {ex.Message}");
-            await process.WaitForExitAsync();
-        }
+        await Task.WhenAny(displayTask, updateTask);
 
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
 
         // Clean up GC event listener
         gcEventListener?.Dispose();
+
+        // Ensure process has exited before accessing ExitCode
+        if (!process.HasExited)
+        {
+            await process.WaitForExitAsync();
+        }
 
         return process.ExitCode;
     }

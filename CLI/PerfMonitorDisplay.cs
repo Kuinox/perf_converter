@@ -36,7 +36,7 @@ public class PerfMonitorDisplay
         await AnsiConsole.Live(_layout)
             .StartAsync(async ctx =>
             {
-                while (!_viewModel.IsComplete && !cancellationToken.IsCancellationRequested)
+                while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
