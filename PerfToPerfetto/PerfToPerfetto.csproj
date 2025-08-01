@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Parquet.Net" Version="5.1.2-pre.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
+  </ItemGroup>
+
+</Project>

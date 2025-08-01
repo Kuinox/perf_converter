@@ -4,4 +4,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Parquet.Net" Version="5.1.2-pre.1" />
+	</ItemGroup>
 </Project>

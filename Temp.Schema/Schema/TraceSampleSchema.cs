@@ -178,7 +178,7 @@ public class TraceSampleSchema
         var ipSymBinding = await groupReader.ReadColumnAsync(IpSymBinding.Field);
         var ipIs64Bit = await groupReader.ReadColumnAsync(IpIs64Bit.Field);
         var ipIsKernelIp = await groupReader.ReadColumnAsync(IpIsKernelIp.Field);
-        var ipBuildId = await groupReader.ReadColumnAsync(IpBuildId.Field);
+        //var ipBuildId = await groupReader.ReadColumnAsync(IpBuildId.Field);
         var ipFiltered = await groupReader.ReadColumnAsync(IpFiltered.Field);
         var ipComm = await groupReader.ReadColumnAsync(IpComm.Field);
         var haveAddress = await groupReader.ReadColumnAsync(HaveAddress.Field);
@@ -190,7 +190,7 @@ public class TraceSampleSchema
         var addressSymBinding = await groupReader.ReadColumnAsync(AddressSymBinding.Field);
         var addressIs64Bit = await groupReader.ReadColumnAsync(AddressIs64Bit.Field);
         var addressIsKernelIp = await groupReader.ReadColumnAsync(AddressIsKernelIp.Field);
-        var addressBuildId = await groupReader.ReadColumnAsync(AddressBuildId.Field);
+        //var addressBuildId = await groupReader.ReadColumnAsync(AddressBuildId.Field);
         var addressFiltered = await groupReader.ReadColumnAsync(AddressFiltered.Field);
         var addressComm = await groupReader.ReadColumnAsync(AddressComm.Field);
 
@@ -225,7 +225,7 @@ public class TraceSampleSchema
                 IpSymBinding = ipSymBinding.AsSpan<byte>()[i],
                 IpIs64Bit = ipIs64Bit.AsSpan<byte>()[i],
                 IpIsKernelIp = ipIsKernelIp.AsSpan<byte>()[i],
-                IpBuildId = ipBuildId.AsSpan<byte[]>()[i],
+                //IpBuildId = ipBuildId.AsSpan<byte[]>()[i],
                 IpFiltered = ipFiltered.AsSpan<byte>()[i],
                 IpComm = ipComm.AsSpan<string>()[i],
                 HaveAddress = haveAddress.AsSpan<bool>()[i],
@@ -237,7 +237,7 @@ public class TraceSampleSchema
                 AddressSymBinding = addressSymBinding.AsSpan<byte>()[i],
                 AddressIs64Bit = addressIs64Bit.AsSpan<byte>()[i],
                 AddressIsKernelIp = addressIsKernelIp.AsSpan<byte>()[i],
-                AddressBuildId = addressBuildId.AsSpan<byte[]>()[i],
+                //AddressBuildId = addressBuildId.AsSpan<byte[]>()[i],
                 AddressFiltered = addressFiltered.AsSpan<byte>()[i],
                 AddressComm = addressComm.AsSpan<string>()[i]
             };
