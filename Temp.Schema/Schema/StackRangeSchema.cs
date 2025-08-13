@@ -14,8 +14,8 @@ public class StackRangeSchema
         );
     }
 
-    public ParquetColumn<long> StartTrace { get; } = new("startTrace");
-    public ParquetColumn<long> EndTrace { get; } = new("endTrace");
+    public ParquetColumn<ulong> StartTrace { get; } = new("startTrace");
+    public ParquetColumn<ulong> EndTrace { get; } = new("endTrace");
 
     public ParquetSchema Schema { get; }
 
