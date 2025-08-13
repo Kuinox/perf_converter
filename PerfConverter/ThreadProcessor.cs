@@ -1,6 +1,5 @@
 ﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
-using System.Runtime.InteropServices;
 using PerfConverter.Persistence;
 using System.Text;
 
@@ -15,7 +14,7 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     string _currentStackRangeKey = null!;
     IPersister<TraceEntry>? _tracePersister;
     IPersister<StackRange>? _stackRangePersister;
-    readonly Stack<long> _stackStarts = new();
+    readonly Stack<ulong> _stackStarts = new();
     
     // Reuse StringBuilder to avoid string allocation on key generation
     readonly StringBuilder _keyBuilder = new();
@@ -60,15 +59,15 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     {
         if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
         {
-            _stackStarts.Push((long)trace.Id);
+            _stackStarts.Push(trace.Id);
         }
         if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
         {
-            var startTrace = _stackStarts.Count == 0 ? -1 : _stackStarts.Pop();
+            var startTrace = _stackStarts.Count == 0 ? 0 : _stackStarts.Pop();
             var stackRange = new StackRange()
             {
                 StartTrace = startTrace,
-                EndTrace = (long)trace.Id
+                EndTrace = trace.Id
             };
             _stackRangePersister!.Persist(stackRange);
         }

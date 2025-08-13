@@ -42,8 +42,8 @@ public class StackRangeSchema
         {
             yield return new StackRange()
             {
-                StartTrace = startTrace.AsSpan<long>()[i],
-                EndTrace = endTrace.AsSpan<long>()[i],
+                StartTrace = startTrace.AsSpan<ulong>()[i],
+                EndTrace = endTrace.AsSpan<ulong>()[i],
             };
         }
     }
