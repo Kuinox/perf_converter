@@ -39,14 +39,12 @@ public sealed class TraceProcessor : IDisposable
         if (!_traces.TryGetValue(range.StartTrace, out var start))
             return;
 
-        // InsnCnt represents instruction count for this specific event, not a cumulative counter
-        var insns = cur.InsnCnt;
         var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
 
         Writer.WriteFrameEnd(_out!, _caches, timestamp, pidTid,
-            insns, cycDelta, 0,
+            cur.InsnCnt, cycDelta, 0,
             start.Time, cur.Time);
     }
 
@@ -59,15 +57,13 @@ public sealed class TraceProcessor : IDisposable
         if (!_traces.TryGetValue(range.StartTrace, out var start))
             return;
 
-        // InsnCnt represents instruction count for this specific event, not a cumulative counter
-        var insns = cur.InsnCnt;
         var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.IpSym ?? cur.AddressSym ?? "UNKNOWN";
 
         Writer.WriteFrameFull(_out!, _caches, timestamp, pidTid,
-            insns, cycDelta, 0,
+            cur.InsnCnt, cycDelta, 0,
             symbol, timestamp,
             start.Time, cur.Time);
     }
@@ -95,7 +91,7 @@ public sealed class TraceProcessor : IDisposable
     ulong ChooseTimestamp(TraceEntry e) => _mode switch
     {
         TimestampMode.Cycles => e.CycCnt,
-        TimestampMode.Instructions => e.InsnCnt,
+        TimestampMode.Instructions => e.Time, // InsnCnt is not cumulative, use timestamp as default
         _ => e.Time
     };
 }
