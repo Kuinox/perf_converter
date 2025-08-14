@@ -7,65 +7,53 @@ PerfConverter is a .NET-based tool for converting Linux perf data into Parquet f
 ## Working Effectively
 
 ### Prerequisites and Setup
-Install .NET 9.0 SDK - this is **REQUIRED**:
+Install .NET 10 preview SDK - this is **REQUIRED**:
 ```bash
 curl -sSL https://dotnet.microsoft.com/download/dotnet/scripts/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
 chmod +x /tmp/dotnet-install.sh
-/tmp/dotnet-install.sh --channel 9.0 --install-dir /tmp/dotnet9
-export PATH="/tmp/dotnet9:$PATH"
+/tmp/dotnet-install.sh --channel 10.0 --install-dir /tmp/dotnet10
+export PATH="/tmp/dotnet10:$PATH"
 ```
 
 Verify installation:
 ```bash
-dotnet --version  # Should show 9.0.x
+dotnet --version  # Should show 10.0.x preview
 which perf        # Linux perf tool must be available
 ```
 
 ### Building the Solution
-**NEVER CANCEL** build commands - they may take several minutes. Always set timeouts of 60+ minutes.
-
-Build individual projects (recommended):
+Build the entire solution - this takes only seconds:
 ```bash
-# Build schema library - takes ~35 seconds. NEVER CANCEL.
-dotnet build Temp.Schema/Temp.Schema.csproj
-
-# Build core PerfConverter library - takes ~15 seconds. NEVER CANCEL.
-dotnet build PerfConverter/PerfConverter.csproj
-
-# Build CLI tool (includes AOT compilation) - takes ~35 seconds. NEVER CANCEL.
-dotnet build CLI/CLI.csproj
+dotnet build
 ```
 
-**WARNING**: Do NOT build the entire solution (`dotnet build PerfConverter.sln`) - the HelloWorld project targets .NET 10.0 which doesn't exist. Build individual projects instead.
+This single command handles all projects and their dependencies automatically.
 
 ### Publishing (Release Builds)
-**NEVER CANCEL** - AOT compilation takes time. Set timeout to 60+ minutes.
+For native library publishing:
 
 ```bash
-# Publish PerfConverter as native library - takes ~20 seconds. NEVER CANCEL.
+# Publish PerfConverter as native library
 dotnet publish PerfConverter/PerfConverter.csproj -c Release
 
-# Publish CLI tool (includes PerfConverter.so) - takes ~10 seconds. NEVER CANCEL.  
+# Publish CLI tool (includes PerfConverter.so)
 dotnet publish CLI/CLI.csproj -c Release
 ```
 
 ### Running the Tools
-The CLI tool is the recommended entry point:
+**Important**: The CLI tool requires specific machine configurations and cannot be run on most development machines. It is designed to work with Linux perf data collection infrastructure.
 
+For development and testing purposes:
 ```bash
-# Show help
+# Show help (may work on development machines)
 dotnet run --project CLI/CLI.csproj -- --help
 
-# Test with dry run (validates command without executing)
-dotnet run --project CLI/CLI.csproj -- /path/to/perf.data --dry-run
-
-# Process perf data
-dotnet run --project CLI/CLI.csproj -- /path/to/perf.data --output ./output
+# Other operations require specific perf configuration not available in typical development environments
 ```
 
-For published builds, use the .NET runtime:
+For published builds:
 ```bash
-/tmp/dotnet9/dotnet CLI/bin/Release/net9.0/publish/CLI.dll --help
+/tmp/dotnet10/dotnet CLI/bin/Release/net9.0/publish/CLI.dll --help
 ```
 
 ## Validation
@@ -73,14 +61,12 @@ For published builds, use the .NET runtime:
 ### Always Test Build Functionality
 After making code changes, always validate:
 
-1. **Build all projects** - verify no compilation errors:
+1. **Build the solution** - verify no compilation errors:
 ```bash
-dotnet build Temp.Schema/Temp.Schema.csproj
-dotnet build PerfConverter/PerfConverter.csproj  
-dotnet build CLI/CLI.csproj
+dotnet build
 ```
 
-2. **Test CLI functionality** - verify it starts and shows help:
+2. **Test CLI help functionality** - verify it starts and shows help (if environment supports it):
 ```bash
 dotnet run --project CLI/CLI.csproj -- --help
 ```
@@ -93,12 +79,13 @@ file PerfConverter/bin/Release/net9.0/linux-x64/publish/PerfConverter.so
 ```
 
 ### Manual Scenario Testing
-**ALWAYS** run a complete scenario test after making changes:
+After making changes:
 
-1. Build all components
-2. Test CLI help functionality  
-3. Test CLI with `--dry-run` option to verify command generation
-4. For PerfConverter changes, verify the .so library is a valid ELF shared object
+1. Build the solution
+2. Test CLI help functionality (if environment supports it)  
+3. For PerfConverter changes, verify the .so library is a valid ELF shared object
+
+Note: Full functional testing requires specific Linux perf configuration not typically available in development environments.
 
 ### No Automated Tests
 This project has **no automated test suite**. All validation must be done manually by building and running the applications.
@@ -110,7 +97,7 @@ This project has **no automated test suite**. All validation must be done manual
 PerfConverter/           # Core AOT library (compiles to .so for perf DLFilter)
 CLI/                    # Command-line tool (orchestrates perf execution)  
 Temp.Schema/           # Data persistence layer (Parquet format)
-HelloWorld/           # Demo project (DO NOT BUILD - targets .NET 10.0)
+HelloWorld/           # Demo project (targets .NET 10.0 preview)
 native/              # C code for perf DLFilter interface
 viewer/              # Python-based data viewer (separate environment)
 ```
@@ -130,18 +117,13 @@ The following control PerfConverter runtime behavior:
 - `BATCH_SIZE`: Items per batch (default: 10,000,000)
 
 ### Build Timing Expectations
-- Temp.Schema build: ~35 seconds
-- PerfConverter build: ~15 seconds  
-- CLI build: ~35 seconds (includes AOT)
-- PerfConverter Release publish: ~20 seconds
-- CLI Release publish: ~10 seconds
-
-**CRITICAL**: Always use timeouts of 60+ minutes for build commands. Build processes include AOT compilation and native code compilation which can be time-intensive.
+- Solution build: seconds
+- Release publishing: typically under a minute
+- AOT compilation is included but optimized for speed in the build process
 
 ### Troubleshooting
-- **Build fails with .NET SDK error**: Ensure .NET 9.0 SDK is installed and in PATH
-- **HelloWorld build fails**: This is expected - skip this project (targets .NET 10.0)
-- **CLI execution fails**: Use the proper .NET 9.0 runtime, not the system's .NET 8.0
+- **Build fails with .NET SDK error**: Ensure .NET 10 preview SDK is installed and in PATH
+- **CLI execution fails**: The CLI tool requires specific Linux perf configuration not available in typical development environments
 - **PerfConverter.so not found**: Ensure PerfConverter project was published, not just built
 
 ### Code Style
