@@ -39,13 +39,14 @@ public sealed class TraceProcessor : IDisposable
         if (!_traces.TryGetValue(range.StartTrace, out var start))
             return;
 
-        var insnDelta = cur.InsnCnt - start.InsnCnt;
+        // InsnCnt represents instruction count for this specific event, not a cumulative counter
+        var insns = cur.InsnCnt;
         var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
 
         Writer.WriteFrameEnd(_out!, _caches, timestamp, pidTid,
-            insnDelta, cycDelta, 0,
+            insns, cycDelta, 0,
             start.Time, cur.Time);
     }
 
@@ -58,14 +59,15 @@ public sealed class TraceProcessor : IDisposable
         if (!_traces.TryGetValue(range.StartTrace, out var start))
             return;
 
-        var insnDelta = cur.InsnCnt - start.InsnCnt;
+        // InsnCnt represents instruction count for this specific event, not a cumulative counter
+        var insns = cur.InsnCnt;
         var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.IpSym ?? cur.AddressSym ?? "UNKNOWN";
 
         Writer.WriteFrameFull(_out!, _caches, timestamp, pidTid,
-            insnDelta, cycDelta, 0,
+            insns, cycDelta, 0,
             symbol, timestamp,
             start.Time, cur.Time);
     }
