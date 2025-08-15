@@ -38,4 +38,13 @@ public unsafe class TraceProcessor
         
         processor.QueueData(sample, ip, address);
     }
+
+    public void Finish()
+    {
+        // Finish all thread processors to flush any remaining buffered stack ranges
+        foreach (var processor in _processors.Values)
+        {
+            processor.Finish();
+        }
+    }
 }
