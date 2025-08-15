@@ -98,9 +98,6 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
             handle.Free();
 
-            // Finish processing and flush any buffered stack ranges
-            _traceProcessor?.Finish();
-
             _persistenceLifetime.DisposeAsync().AsTask().Wait();
             Console.Error.WriteLine("Done.");
             Console.Error.WriteLine("EXIT_MESSAGE");

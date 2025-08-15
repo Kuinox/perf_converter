@@ -15,7 +15,6 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     IPersister<TraceEntry>? _tracePersister;
     IPersister<StackRange>? _stackRangePersister;
     readonly Stack<ulong> _stackStarts = new();
-    readonly List<StackRange> _stackRangesBuffer = new();
     
     // Reuse StringBuilder to avoid string allocation on key generation
     readonly StringBuilder _keyBuilder = new();
@@ -29,9 +28,6 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
         var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
         if (isNewTrace)
         {
-            // Flush any buffered stack ranges before switching segments
-            FlushStackRanges();
-            
             _tracePersister?.DisposeAsync().AsTask();
             _stackRangePersister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
@@ -48,7 +44,6 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
             _tracePersister = tracePersistenceFactory(_currentTraceKey);
             _stackRangePersister = stackRangePersistenceFactory(_currentStackRangeKey);
             _stackStarts.Clear();
-            _stackRangesBuffer.Clear();
         }
 
         var entry = TraceEntry.CreateFromPerf(sample, ip, address, ++_currentEntryId);
@@ -74,34 +69,8 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
                 StartTrace = startTrace,
                 EndTrace = trace.Id
             };
-            // Buffer the range instead of persisting immediately
-            _stackRangesBuffer.Add(stackRange);
+            _stackRangePersister!.Persist(stackRange);
         }
-    }
-
-    private void FlushStackRanges()
-    {
-        if (_stackRangesBuffer.Count == 0) return;
-        
-        // Sort stack ranges by StartTrace to ensure proper chronological order
-        var sortedRanges = _stackRangesBuffer.OrderBy(r => r.StartTrace).ToList();
-        
-        // Persist the sorted ranges
-        foreach (var range in sortedRanges)
-        {
-            _stackRangePersister!.Persist(range);
-        }
-        
-        _stackRangesBuffer.Clear();
-    }
-
-    public void Finish()
-    {
-        // Flush any remaining buffered stack ranges
-        FlushStackRanges();
-        
-        _tracePersister?.DisposeAsync().AsTask();
-        _stackRangePersister?.DisposeAsync().AsTask();
     }
 
 }
