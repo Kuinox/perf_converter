@@ -21,6 +21,9 @@ public class Processor
         var filePairs = fileList
             .Where(x => !x.Contains("stackranges"))
             .Select(x => x.Replace("segment", "").Replace(".parquet", ""))
+            .OrderBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(x)))))
+            .ThenBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(x))))
+            .ThenBy(x => int.Parse(Path.GetFileName(x)))
             .Select(x =>
             {
                 var id = Path.GetFileName(x);

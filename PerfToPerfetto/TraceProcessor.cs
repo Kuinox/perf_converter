@@ -5,27 +5,17 @@ using Temp.Schema.FuchsiaTraceFormat;
 
 namespace PerfToPerfetto;
 
-public sealed class TraceProcessor : IDisposable
+public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mode = TimestampMode.Time) : IDisposable
 {
-    readonly string _fileName;
-    readonly TimestampMode _mode;
-    readonly Dictionary<ulong, TraceEntry> _traces = new();
+    readonly Dictionary<ulong, TraceEntry> _traces = [];
     readonly Caches _caches = new();
 
     FileStream? _file;
     BufferedStream? _out;
 
-    const ulong CacheLineSize = 64;
-
-    public TraceProcessor(string fileName = "out.ftf", TimestampMode mode = TimestampMode.Instructions)
-    {
-        _fileName = fileName;
-        _mode = mode;
-    }
-
     public void Start()
     {
-        _file = File.Create(_fileName);
+        _file = File.Create(fileName);
         _out = new BufferedStream(_file, 1 << 16);
         Writer.WriteHeader(_out);
     }
@@ -90,7 +80,7 @@ public sealed class TraceProcessor : IDisposable
         _file?.Dispose();
     }
 
-    ulong ChooseTimestamp(TraceEntry e) => _mode switch
+    ulong ChooseTimestamp(TraceEntry e) => mode switch
     {
         TimestampMode.Cycles => e.CycCnt,
         TimestampMode.Instructions => e.InsnCnt,
