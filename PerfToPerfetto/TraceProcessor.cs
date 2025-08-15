@@ -17,7 +17,7 @@ public sealed class TraceProcessor : IDisposable
 
     const ulong CacheLineSize = 64;
 
-    public TraceProcessor(string fileName = "out.ftf", TimestampMode mode = TimestampMode.Instructions)
+    public TraceProcessor(string fileName = "out.ftf", TimestampMode mode = TimestampMode.Time)
     {
         _fileName = fileName;
         _mode = mode;
@@ -91,7 +91,6 @@ public sealed class TraceProcessor : IDisposable
     ulong ChooseTimestamp(TraceEntry e) => _mode switch
     {
         TimestampMode.Cycles => e.CycCnt,
-        TimestampMode.Instructions => e.Time, // InsnCnt is not cumulative, use timestamp as default
         _ => e.Time
     };
 }

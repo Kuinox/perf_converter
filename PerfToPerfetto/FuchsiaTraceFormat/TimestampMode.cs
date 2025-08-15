@@ -3,6 +3,5 @@
 public enum TimestampMode
 {
     Time,
-    Cycles,
-    Instructions
+    Cycles
 }
