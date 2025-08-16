@@ -26,15 +26,16 @@ public sealed class ThreadCache()
         }
     }
 
-    public void UpdateComm((ulong pid, ulong tid) pidTid, string comm)
+    public bool UpdateComm((ulong pid, ulong tid) pidTid, string comm)
     {
         if (string.IsNullOrEmpty(comm))
-            return;
+            return false;
 
         ref var history = ref CollectionsMarshal.GetValueRefOrAddDefault(_commHistory, pidTid, out var exists);
         if (!exists)
         {
-            history = [];
+            history = [comm];
+            return true;
         }
 
         // Only add if it's different from the last comm
@@ -43,7 +44,9 @@ public sealed class ThreadCache()
         {
             history ??= [];
             history.Add(comm);
+            return true;
         }
+        return false;
     }
 
     public CacheRef GetRef(Stream w, (ulong pid, ulong tid) pidTid, string? comm)
@@ -52,10 +55,7 @@ public sealed class ThreadCache()
         bool commUpdated = false;
         if (!string.IsNullOrEmpty(comm))
         {
-            var historyBefore = _commHistory.TryGetValue(pidTid, out var existing) ? existing?.Count ?? 0 : 0;
-            UpdateComm(pidTid, comm);
-            var historyAfter = _commHistory.TryGetValue(pidTid, out var updated) ? updated?.Count ?? 0 : 0;
-            commUpdated = historyAfter > historyBefore;
+            commUpdated = UpdateComm(pidTid, comm);
         }
 
         if (_lru.TryGet(pidTid, out var idx))
@@ -82,11 +82,9 @@ public sealed class ThreadCache()
 
     private string GetThreadName((ulong pid, ulong tid) pidTid)
     {
-        var history = _commHistory.TryGetValue(pidTid, out var h) ? h : null;
+        var history = _commHistory.GetValueOrDefault(pidTid);
         if (history?.Count > 0)
-        {
             return string.Join(" => ", history);
-        }
         return $"{pidTid.tid}"; // Fallback to just tid if no comm history
     }
 
