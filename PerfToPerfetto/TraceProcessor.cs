@@ -13,8 +13,6 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
     FileStream? _file;
     BufferedStream? _out;
 
-    const ulong CacheLineSize = 64;
-
     public void Start()
     {
         _file = File.Create(fileName);
