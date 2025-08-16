@@ -14,6 +14,20 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
     BufferedStream? _out;
 
     const ulong CacheLineSize = 64;
+    
+    // Track frame scopes and their accumulated instruction/cycle counts
+    readonly Stack<FrameScope> _frameScopes = new();
+    
+    // Track global accumulated counts from the start of the file for unknown frames
+    ulong _globalAccumulatedInsnCnt = 0;
+    ulong _globalAccumulatedCycCnt = 0;
+    
+    class FrameScope
+    {
+        public TraceEntry StartTrace;
+        public ulong AccumulatedInsnCnt;
+        public ulong AccumulatedCycCnt;
+    }
 
     public void Start()
     {
@@ -22,13 +36,30 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         Writer.WriteHeader(_out);
     }
 
+    internal void ProcessTrace(TraceEntry trace)
+    {
+        // Accumulate global instruction and cycle counts
+        _globalAccumulatedInsnCnt += trace.InsnCnt;
+        _globalAccumulatedCycCnt += trace.CycCnt;
+        
+        // Accumulate instruction and cycle counts for all active frame scopes
+        foreach (var scope in _frameScopes)
+        {
+            scope.AccumulatedInsnCnt += trace.InsnCnt;
+            scope.AccumulatedCycCnt += trace.CycCnt;
+        }
+    }
+
     internal void PopFrame(TraceEntry start, TraceEntry cur)
     {
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
 
+        // Get accumulated counts from the frame scope
+        var scope = _frameScopes.Pop();
+        
         Writer.WriteFrameEnd(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt, cur.CycCnt, 0, // insns, cycles, footprint
+            scope.AccumulatedInsnCnt, scope.AccumulatedCycCnt, 0, // accumulated insns, cycles, footprint
             start.Time, cur.Time);
     }
 
@@ -38,8 +69,9 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.IpSym ?? cur.AddressSym ?? "UNKNOWN";
 
+        // For unknown frames, use the global accumulated counts from the beginning of the file
         Writer.WriteFrameFull(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt, cur.CycCnt, 0, // insns, cycles, footprint
+            _globalAccumulatedInsnCnt, _globalAccumulatedCycCnt, 0, // Global accumulated counts
             symbol, timestamp,
             firstTraceOfFile.Time, cur.Time); // TODO: use first instruction of trace file.
     }
@@ -48,6 +80,15 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
     {
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.AddressSym ?? cur.IpSym ?? "TRACE";
+
+        // Create a new frame scope to track accumulated counts
+        var scope = new FrameScope
+        {
+            StartTrace = cur,
+            AccumulatedInsnCnt = 0,
+            AccumulatedCycCnt = 0
+        };
+        _frameScopes.Push(scope);
 
         Writer.WriteFrameStart(_out!, _caches,
             ChooseTimestamp(cur),

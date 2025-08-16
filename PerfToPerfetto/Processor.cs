@@ -94,7 +94,8 @@ public class Processor
                 break;
             var currentTrace = traceEnumerator.Current;
 
-
+            // Notify the processor about each trace so it can accumulate instruction/cycle counts
+            processor.ProcessTrace(currentTrace);
 
             if (currentStartStackRange.HasValue)
             {
