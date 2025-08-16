@@ -42,9 +42,8 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         var comm = trace.IpComm ?? trace.AddressComm;
         if (!string.IsNullOrEmpty(comm))
         {
-            // Pre-populate the thread cache with comm information by calling GetRef
-            // This ensures the thread name history is updated
-            _caches.ThreadCache.GetRef(_out!, pidTid, comm);
+            // Update the thread cache with comm information using dedicated method
+            _caches.ThreadCache.UpdateComm(pidTid, comm);
         }
         
         // Accumulate global instruction and cycle counts

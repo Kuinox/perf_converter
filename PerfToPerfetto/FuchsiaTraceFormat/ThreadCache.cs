@@ -1,14 +1,49 @@
-﻿namespace Temp.Schema.FuchsiaTraceFormat;
+﻿using System.Runtime.InteropServices;
+
+namespace Temp.Schema.FuchsiaTraceFormat;
 
 public sealed class ThreadCache()
 {
     readonly LruCache<(ulong pid, ulong tid), byte> _lru = new(256 - (int)RESERVED);
-    readonly Dictionary<(ulong pid, ulong tid), List<string>> _commHistory = new();
+    readonly Dictionary<(ulong pid, ulong tid), List<string>?> _commHistory = new();
     const ulong RESERVED = 1;
 
     public CacheRef GetRef(Stream w, (ulong pid, ulong tid) pidTid)
     {
-        return GetRef(w, pidTid, null);
+        if (_lru.TryGet(pidTid, out var idx))
+        {
+            return CacheRef.From(idx + RESERVED);
+        }
+        else
+        {
+            byte newIdx = _lru.Count < _lru.Capacity ? (byte)_lru.Count : _lru.PopLru().Value;
+            _lru.Put(pidTid, newIdx);
+
+            var outIdx = newIdx + RESERVED;
+            var threadName = GetThreadName(pidTid);
+            WriteThreadRecord(w, outIdx, pidTid, threadName);
+            return CacheRef.From(outIdx);
+        }
+    }
+
+    public void UpdateComm((ulong pid, ulong tid) pidTid, string comm)
+    {
+        if (string.IsNullOrEmpty(comm))
+            return;
+
+        ref var history = ref CollectionsMarshal.GetValueRefOrAddDefault(_commHistory, pidTid, out var exists);
+        if (!exists)
+        {
+            history = [];
+        }
+
+        // Only add if it's different from the last comm
+        var lastComm = history?.Count > 0 ? history[^1] : null;
+        if (lastComm != comm)
+        {
+            history ??= [];
+            history.Add(comm);
+        }
     }
 
     public CacheRef GetRef(Stream w, (ulong pid, ulong tid) pidTid, string? comm)
@@ -17,7 +52,10 @@ public sealed class ThreadCache()
         bool commUpdated = false;
         if (!string.IsNullOrEmpty(comm))
         {
-            commUpdated = UpdateCommHistory(pidTid, comm);
+            var historyBefore = _commHistory.TryGetValue(pidTid, out var existing) ? existing?.Count ?? 0 : 0;
+            UpdateComm(pidTid, comm);
+            var historyAfter = _commHistory.TryGetValue(pidTid, out var updated) ? updated?.Count ?? 0 : 0;
+            commUpdated = historyAfter > historyBefore;
         }
 
         if (_lru.TryGet(pidTid, out var idx))
@@ -42,26 +80,10 @@ public sealed class ThreadCache()
         }
     }
 
-    private bool UpdateCommHistory((ulong pid, ulong tid) pidTid, string comm)
-    {
-        if (!_commHistory.TryGetValue(pidTid, out var history))
-        {
-            history = new List<string>();
-            _commHistory[pidTid] = history;
-        }
-
-        // Only add if it's different from the last comm
-        if (history.Count == 0 || history[^1] != comm)
-        {
-            history.Add(comm);
-            return true; // History was updated
-        }
-        return false; // No change
-    }
-
     private string GetThreadName((ulong pid, ulong tid) pidTid)
     {
-        if (_commHistory.TryGetValue(pidTid, out var history) && history.Count > 0)
+        var history = _commHistory.TryGetValue(pidTid, out var h) ? h : null;
+        if (history?.Count > 0)
         {
             return string.Join(" => ", history);
         }
