@@ -1,4 +1,5 @@
 using PerfConverter.Entry;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using Temp.Schema.FuchsiaTraceFormat;
@@ -7,7 +8,6 @@ namespace PerfToPerfetto;
 
 public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mode = TimestampMode.Time) : IDisposable
 {
-    readonly Dictionary<ulong, TraceEntry> _traces = [];
     readonly Caches _caches = new();
 
     FileStream? _file;
@@ -22,45 +22,29 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         Writer.WriteHeader(_out);
     }
 
-    internal void PopFrame(Stack<StackRange> stack, TraceEntry cur)
+    internal void PopFrame(TraceEntry start, TraceEntry cur)
     {
-        if (stack.Count == 0)
-            return;
-
-        var range = stack.Pop();
-        if (!_traces.TryGetValue(range.StartTrace, out var start))
-            return;
-
-        var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
 
         Writer.WriteFrameEnd(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt, cycDelta, 0,
+            0, 0, 0, //TODO: insns, cycles
             start.Time, cur.Time);
     }
 
-    internal void PopUnknownFrame(Stack<StackRange> stack, TraceEntry cur)
+    internal void PopUnknownFrame(TraceEntry firstTraceOfFile, TraceEntry cur)
     {
-        if (stack.Count == 0)
-            return;
-
-        var range = stack.Pop();
-        if (!_traces.TryGetValue(range.StartTrace, out var start))
-            return;
-
-        var cycDelta = cur.CycCnt - start.CycCnt;
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.IpSym ?? cur.AddressSym ?? "UNKNOWN";
 
         Writer.WriteFrameFull(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt, cycDelta, 0,
+            cur.InsnCnt, 0, 0,
             symbol, timestamp,
-            start.Time, cur.Time);
+            firstTraceOfFile.Time, cur.Time); // TODO: use first instruction of trace file.
     }
 
-    internal void PushFrame(Stack<StackRange> stack, TraceEntry cur)
+    internal void PushFrame(TraceEntry cur)
     {
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.AddressSym ?? cur.IpSym ?? "TRACE";
@@ -68,9 +52,6 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         Writer.WriteFrameStart(_out!, _caches,
             ChooseTimestamp(cur),
             pidTid, symbol);
-
-        stack.Push(new StackRange { StartTrace = cur.Id });
-        _traces[cur.Id] = cur;
     }
 
     public void Dispose()

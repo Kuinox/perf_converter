@@ -21,8 +21,8 @@ public class Processor
         var filePairs = fileList
             .Where(x => !x.Contains("stackranges"))
             .Select(x => x.Replace("segment", "").Replace(".parquet", ""))
-            .OrderBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(x)))))
-            .ThenBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(x))))
+            .OrderBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(x)))!))
+            .ThenBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(x))!))
             .ThenBy(x => int.Parse(Path.GetFileName(x)))
             .Select(x =>
             {
@@ -45,54 +45,84 @@ public class Processor
         }
     }
 
+    static IEnumerable<StackRange> EnumerateStartRange(IAsyncEnumerable<StackRange> ranges) => ranges.ToBlockingEnumerable().OrderBy(x => x.StartTrace);
+
     async Task ProcessPair(TraceProcessor processor, string traceFile, string stackRangeFile)
     {
         using var traceReader = await ParquetReader.CreateAsync(traceFile);
         using var stackRangeReader = await ParquetReader.CreateAsync(stackRangeFile);
 
         var traceEnumerator = _traceSchema.ReadAll(traceReader).GetAsyncEnumerator();
-        var stackEnumerator = _stackRangeSchema.ReadAll(stackRangeReader).GetAsyncEnumerator();
+        var endStackEnumerator = _stackRangeSchema.ReadAll(stackRangeReader).GetAsyncEnumerator();
+        var startStackEnumerator = EnumerateStartRange(_stackRangeSchema.ReadAll(stackRangeReader))
+            .Where(x => x.StartTrace != 0) // 0 means we dont have the event that created this stack, since this enumerator is interested in things that open the stacks, we can ignore stacks which dont have an event that create it.
+            .GetEnumerator();
+        var unorderedStackRanges = _stackRangeSchema.ReadAll(stackRangeReader).ToBlockingEnumerable().ToArray();
+        var firstFileTrace = traceEnumerator.Current;
+        var stacks = new Stack<(TraceEntry, StackRange)>();
+        if (!await endStackEnumerator.MoveNextAsync()) throw new InvalidOperationException("No stack ranges found in the file.");
+        if (!startStackEnumerator.MoveNext()) throw new InvalidOperationException("No stack ranges found in the file.");
+        var currentEndStackRange = endStackEnumerator.Current as StackRange?;
 
-
-        var stacks = new Stack<StackRange>();
-        if (!await stackEnumerator.MoveNextAsync()) throw new InvalidOperationException("No stack ranges found in the file.");
-        var currentStackRange = null as StackRange?;
-
-        async ValueTask NextStackRange()
+        async ValueTask NextEndStackRange()
         {
-            if (!await stackEnumerator.MoveNextAsync())
+            if (!await endStackEnumerator.MoveNextAsync())
             {
-                currentStackRange = null;
+                currentEndStackRange = null;
                 return;
             }
-            currentStackRange = stackEnumerator.Current;
+            currentEndStackRange = endStackEnumerator.Current;
         }
 
-        await NextStackRange();
+        var currentStartStackRange = startStackEnumerator.Current as StackRange?;
 
+        void NextStartStackRange()
+        {
+            if (!startStackEnumerator.MoveNext())
+            {
+                currentStartStackRange = null;
+                return;
+            }
+            currentStartStackRange = startStackEnumerator.Current;
+        }
 
         while (true)
         {
+            var previousTrace = traceEnumerator.Current;
+
             if (!await traceEnumerator.MoveNextAsync())
                 break;
             var currentTrace = traceEnumerator.Current;
 
-            if (currentStackRange.HasValue)
-            {
-                if (currentTrace.Id >= currentStackRange.Value.StartTrace)
-                {
-                    stacks.Push(stackEnumerator.Current);
-                    processor.PushFrame(stacks, currentTrace);
-                    await NextStackRange();
-                }
-                else if (currentTrace.Id >= currentStackRange.Value.EndTrace)
-                {
-                    if (currentStackRange.Value.EndTrace == 0)
-                        processor.PopUnknownFrame(stacks, currentTrace);
-                    else
-                        processor.PopFrame(stacks, currentTrace);
 
-                    stacks.Pop();
+
+            if (currentStartStackRange.HasValue)
+            {
+                var currentRange = currentStartStackRange.Value;
+
+                if (currentTrace.Id == currentRange.StartTrace)
+                {
+                    stacks.Push((currentTrace, currentRange));
+                    processor.PushFrame(currentTrace);
+                    NextStartStackRange();
+                }
+            }
+            if (currentEndStackRange.HasValue)
+            {
+                var currentRange = currentEndStackRange.Value;
+                if (currentTrace.Id == currentRange.EndTrace)
+                {
+                    if (currentRange.StartTrace == 0)
+                    {
+                        processor.PopUnknownFrame(firstFileTrace, currentTrace);
+                    }
+                    else
+                    {
+                        var pushTrace = stacks.Pop();
+                        if (pushTrace.Item2.EndTrace != currentTrace.Id) throw new InvalidOperationException("bug");
+                        processor.PopFrame(pushTrace.Item1, currentTrace);
+                    }
+                    await NextEndStackRange();
                 }
             }
 
