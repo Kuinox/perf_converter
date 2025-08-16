@@ -37,6 +37,16 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
 
     internal void ProcessTrace(TraceEntry trace)
     {
+        // Update thread cache with comm information if available
+        var pidTid = ((ulong)trace.Pid, (ulong)trace.Tid);
+        var comm = trace.IpComm ?? trace.AddressComm;
+        if (!string.IsNullOrEmpty(comm))
+        {
+            // Pre-populate the thread cache with comm information by calling GetRef
+            // This ensures the thread name history is updated
+            _caches.ThreadCache.GetRef(_out!, pidTid, comm);
+        }
+        
         // Accumulate global instruction and cycle counts
         _globalAccumulatedInsnCnt += trace.InsnCnt;
         _globalAccumulatedCycCnt += trace.CycCnt;
