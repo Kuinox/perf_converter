@@ -28,7 +28,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
 
         Writer.WriteFrameEnd(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt - start.InsnCnt, cur.CycCnt - start.CycCnt, 0, // insns, cycles, footprint
+            cur.InsnCnt, cur.CycCnt, 0, // insns, cycles, footprint
             start.Time, cur.Time);
     }
 
@@ -39,7 +39,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         var symbol = cur.IpSym ?? cur.AddressSym ?? "UNKNOWN";
 
         Writer.WriteFrameFull(_out!, _caches, timestamp, pidTid,
-            cur.InsnCnt - firstTraceOfFile.InsnCnt, cur.CycCnt - firstTraceOfFile.CycCnt, 0, // insns, cycles, footprint
+            cur.InsnCnt, cur.CycCnt, 0, // insns, cycles, footprint
             symbol, timestamp,
             firstTraceOfFile.Time, cur.Time); // TODO: use first instruction of trace file.
     }
