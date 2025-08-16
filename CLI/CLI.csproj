@@ -20,7 +20,7 @@
 	<!-- Copy PerfConverter.so to output directory after build (Linux only) -->
 	<Target Name="CopyPerfConverterBinaryAfterBuild" AfterTargets="Build" DependsOnTargets="PublishPerfConverterBeforeBuild" Condition="'$(OS)' == 'Unix'">
 		<PropertyGroup>
-			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net8.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
+			<PerfConverterSourcePath>..\PerfConverter\bin\$(Configuration)\net9.0\linux-x64\publish\PerfConverter.so</PerfConverterSourcePath>
 		</PropertyGroup>
 		<Copy SourceFiles="$(PerfConverterSourcePath)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
 		<Message Text="Copied PerfConverter.so to $(OutputPath)" Importance="high" />
