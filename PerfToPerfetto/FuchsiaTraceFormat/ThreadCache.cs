@@ -14,16 +14,14 @@ public sealed class ThreadCache()
         {
             return CacheRef.From(idx + RESERVED);
         }
-        else
-        {
-            byte newIdx = _lru.Count < _lru.Capacity ? (byte)_lru.Count : _lru.PopLru().Value;
-            _lru.Put(pidTid, newIdx);
 
-            var outIdx = newIdx + RESERVED;
-            var threadName = GetThreadName(pidTid);
-            WriteThreadRecord(w, outIdx, pidTid, threadName);
-            return CacheRef.From(outIdx);
-        }
+        var newIdx = _lru.Count < _lru.Capacity ? (byte)_lru.Count : _lru.PopLru().Value;
+        _lru.Put(pidTid, newIdx);
+
+        var outIdx = newIdx + RESERVED;
+        var threadName = GetThreadName(pidTid);
+        WriteThreadRecord(w, outIdx, pidTid, threadName);
+        return CacheRef.From(outIdx);
     }
 
     public bool UpdateComm((ulong pid, ulong tid) pidTid, string comm)
@@ -39,10 +37,10 @@ public sealed class ThreadCache()
         }
 
         // Only add if it's different from the last comm
-        var lastComm = history?.Count > 0 ? history[^1] : null;
+        // history is guaranteed to have at least one item when exists=true
+        var lastComm = history![^1];
         if (lastComm != comm)
         {
-            history ??= [];
             history.Add(comm);
             return true;
         }
@@ -52,11 +50,9 @@ public sealed class ThreadCache()
     public CacheRef GetRef(Stream w, (ulong pid, ulong tid) pidTid, string? comm)
     {
         // Update comm history if comm is provided and not empty
-        bool commUpdated = false;
+        var commUpdated = false;
         if (!string.IsNullOrEmpty(comm))
-        {
             commUpdated = UpdateComm(pidTid, comm);
-        }
 
         if (_lru.TryGet(pidTid, out var idx))
         {
@@ -68,16 +64,16 @@ public sealed class ThreadCache()
             }
             return CacheRef.From(idx + RESERVED);
         }
-        else
-        {
-            byte newIdx = _lru.Count < _lru.Capacity ? (byte)_lru.Count : _lru.PopLru().Value;
-            _lru.Put(pidTid, newIdx);
 
-            var outIdx = newIdx + RESERVED;
-            var threadName = GetThreadName(pidTid);
-            WriteThreadRecord(w, outIdx, pidTid, threadName);
-            return CacheRef.From(outIdx);
-        }
+        // Cache miss: need to allocate a new index and write a new thread record
+        // Try to use next available slot, or evict LRU entry if cache is full
+        var newIdx = _lru.Count < _lru.Capacity ? (byte)_lru.Count : _lru.PopLru().Value;
+        _lru.Put(pidTid, newIdx);
+
+        var outIdx = newIdx + RESERVED;
+        var threadName = GetThreadName(pidTid);
+        WriteThreadRecord(w, outIdx, pidTid, threadName);
+        return CacheRef.From(outIdx);
     }
 
     private string GetThreadName((ulong pid, ulong tid) pidTid)
