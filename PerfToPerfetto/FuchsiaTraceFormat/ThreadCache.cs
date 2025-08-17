@@ -36,8 +36,6 @@ public sealed class ThreadCache()
             return true;
         }
 
-        // Only add if it's different from the last comm
-        // history is guaranteed to have at least one item when exists=true
         var shouldAdd = history![^1] != comm;
         if (shouldAdd)
             history.Add(comm);
