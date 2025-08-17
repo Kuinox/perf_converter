@@ -17,13 +17,22 @@ public unsafe class TraceProcessor
     {
         _tracePersistenceFactory = tracePersistenceFactory;
         _stackRangePersistenceFactory = stackRangePersistenceFactory;
-        var auxDataLossJson = Environment.GetEnvironmentVariable("AUX_DATA_LOSS")!;
-        var auxDataLoss = JsonSerializer.Deserialize(auxDataLossJson, SourceGenerationContext.Default.AuxDataLostArray)!;
-        _auxDataLoss = auxDataLoss
-            .GroupBy(x => (x.Pid, x.Tid))
-            .ToDictionary(
-                x => x.Key,
-                x => x.Select(x => x.Time).Append(0uL).ToArray()); ;
+        var auxDataLossJson = Environment.GetEnvironmentVariable("AUX_DATA_LOSS");
+        
+        // Optimize by avoiding deserialization if no aux data loss info
+        if (string.IsNullOrEmpty(auxDataLossJson))
+        {
+            _auxDataLoss = new Dictionary<(uint, uint), ulong[]>();
+        }
+        else
+        {
+            var auxDataLoss = JsonSerializer.Deserialize(auxDataLossJson, SourceGenerationContext.Default.AuxDataLostArray)!;
+            _auxDataLoss = auxDataLoss
+                .GroupBy(x => (x.Pid, x.Tid))
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(x => x.Time).Append(0uL).ToArray());
+        }
     }
 
     public void QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)

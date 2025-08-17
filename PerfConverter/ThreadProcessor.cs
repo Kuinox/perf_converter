@@ -7,7 +7,7 @@ namespace PerfConverter;
 
 unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
 {
-    readonly Queue<ulong> auxDrop = new(auxDrop.Order());
+    readonly Queue<ulong> auxDrop = auxDrop.Any() ? new(auxDrop.Order()) : new();
     int _currentSegmentId = 0;
     ulong _currentEntryId = 0;
     string _currentTraceKey = null!;
