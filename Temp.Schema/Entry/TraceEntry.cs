@@ -108,9 +108,9 @@ public struct TraceEntry
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe string GetOrInternStringFromPtr(nint ptr)
+    public static unsafe string? GetOrInternStringFromPtr(nint ptr)
     {
-        if (ptr == 0) return string.Empty;
+        if (ptr == 0) return null;
         
         // Read UTF-8 bytes directly from pointer until null terminator
         var bytePtr = (byte*)ptr;

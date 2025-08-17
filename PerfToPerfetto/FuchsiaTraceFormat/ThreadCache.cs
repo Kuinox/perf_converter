@@ -49,14 +49,12 @@ public sealed class ThreadCache()
         if (!string.IsNullOrEmpty(comm))
             commUpdated = UpdateComm(pidTid, comm);
 
+        var threadName = GetThreadName(pidTid);
         if (_lru.TryGet(pidTid, out var idx))
         {
             // If comm was updated, rewrite the thread record with new name
             if (commUpdated)
-            {
-                var threadName = GetThreadName(pidTid);
                 WriteThreadRecord(w, idx + RESERVED, pidTid, threadName);
-            }
             return CacheRef.From(idx + RESERVED);
         }
 
@@ -66,7 +64,6 @@ public sealed class ThreadCache()
         _lru.Put(pidTid, newIdx);
 
         var outIdx = newIdx + RESERVED;
-        var threadName = GetThreadName(pidTid);
         WriteThreadRecord(w, outIdx, pidTid, threadName);
         return CacheRef.From(outIdx);
     }
