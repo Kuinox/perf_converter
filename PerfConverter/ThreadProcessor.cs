@@ -7,7 +7,7 @@ namespace PerfConverter;
 
 unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
 {
-    readonly Queue<ulong> auxDrop = auxDrop.Any() ? new(auxDrop.Order()) : new();
+    readonly Queue<ulong> auxDrop = new(auxDrop.Order());
     int _currentSegmentId = 0;
     ulong _currentEntryId = 0;
     string _currentTraceKey = null!;
@@ -15,9 +15,6 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
     IPersister<TraceEntry>? _tracePersister;
     IPersister<StackRange>? _stackRangePersister;
     readonly Stack<ulong> _stackStarts = new();
-    
-    // Reuse StringBuilder to avoid string allocation on key generation
-    readonly StringBuilder _keyBuilder = new();
 
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
@@ -32,18 +29,8 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
             _stackRangePersister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
-            
-            // Use StringBuilder to avoid string concatenation allocations
-            // Pre-sized to avoid reallocations during key building
-            _keyBuilder.Clear();
-            _keyBuilder.EnsureCapacity(64); // Ensure capacity for typical key length
-            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append(".parquet");
-            _currentTraceKey = _keyBuilder.ToString();
-            
-            _keyBuilder.Clear();
-            _keyBuilder.EnsureCapacity(80); // Slightly larger for stackranges suffix
-            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append("_stackranges.parquet");
-            _currentStackRangeKey = _keyBuilder.ToString();
+            _currentTraceKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}.parquet";
+            _currentStackRangeKey = $"{sample->pid}/{sample->tid}/segment{_currentSegmentId}_stackranges.parquet";
             _currentEntryId=0;
             _tracePersister = tracePersistenceFactory(_currentTraceKey);
             _stackRangePersister = stackRangePersistenceFactory(_currentStackRangeKey);

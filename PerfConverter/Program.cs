@@ -18,7 +18,6 @@ public unsafe class PerfDlFilter
     {
         public int EventCount { get; set; }
         public DateTime LastReportTime { get; set; }
-        public long LastReportTickCount { get; set; }
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -40,8 +39,7 @@ public unsafe class PerfDlFilter
             var state = new State
             {
                 EventCount = 0,
-                LastReportTime = currentTime,
-                LastReportTickCount = Environment.TickCount64
+                LastReportTime = currentTime
             };
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
@@ -76,15 +74,11 @@ public unsafe class PerfDlFilter
             }
             _traceProcessor.QueueData(sample, ip, address);
 
-            // Optimize DateTime allocation by using TickCount64 for timing checks
-            // Environment.TickCount64 is much faster than DateTime.UtcNow
-            var currentTicks = Environment.TickCount64;
-            if (currentTicks - state.LastReportTickCount > 50) // 50ms
+            var now = DateTime.UtcNow;
+            if ((now - state.LastReportTime).TotalMilliseconds > 50)
             {
                 Console.WriteLine($"PROGRESS:{state.EventCount}");
-                state.LastReportTickCount = currentTicks;
-                // Only update DateTime when actually needed for reporting
-                state.LastReportTime = DateTime.UtcNow;
+                state.LastReportTime = now;
             }
             
         }
