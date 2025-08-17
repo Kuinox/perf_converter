@@ -38,13 +38,10 @@ public sealed class ThreadCache()
 
         // Only add if it's different from the last comm
         // history is guaranteed to have at least one item when exists=true
-        var lastComm = history![^1];
-        if (lastComm != comm)
-        {
+        var shouldAdd = history![^1] != comm;
+        if (shouldAdd)
             history.Add(comm);
-            return true;
-        }
-        return false;
+        return shouldAdd;
     }
 
     public CacheRef GetRef(Stream w, (ulong pid, ulong tid) pidTid, string? comm)
