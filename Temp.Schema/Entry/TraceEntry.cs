@@ -62,10 +62,16 @@ public struct TraceEntry
     // UTF-8 byte content cache for avoiding Marshal.PtrToStringUTF8 allocations
     private static readonly ConcurrentDictionary<int, (WeakReference<string> StringRef, byte[] ByteContent)> Utf8ByteCache = new();
     
+    // Cache commonly used empty array to avoid repeated allocations
+    private static readonly byte[] EmptyByteArray = Array.Empty<byte>();
+    
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string GetOrInternString(string? value)
     {
         if (string.IsNullOrEmpty(value)) return string.Empty;
+        
+        // Only cache strings up to a reasonable length to avoid memory bloat
+        if (value.Length > 256) return string.Intern(value);
         
         if (StringPool.TryGetValue(value, out var weakRef) && 
             weakRef.TryGetTarget(out var cachedString))
@@ -81,7 +87,10 @@ public struct TraceEntry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] GetOrCreateByteArray(ReadOnlySpan<byte> source)
     {
-        if (source.IsEmpty) return Array.Empty<byte>();
+        if (source.IsEmpty) return EmptyByteArray;
+        
+        // Only cache byte arrays up to a reasonable length to avoid memory bloat
+        if (source.Length > 256) return source.ToArray();
         
         var hash = GetByteArrayHash(source);
         if (ByteArrayPool.TryGetValue(hash, out var weakRef) && 
@@ -99,12 +108,13 @@ public struct TraceEntry
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetByteArrayHash(ReadOnlySpan<byte> bytes)
     {
-        var hash = new HashCode();
+        // Use the same fast FNV-1a hash algorithm for consistency
+        var hash = unchecked((int)2166136261);
         foreach (var b in bytes)
         {
-            hash.Add(b);
+            hash = unchecked((hash ^ b) * 16777619);
         }
-        return hash.ToHashCode();
+        return hash;
     }
     
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -112,35 +122,63 @@ public struct TraceEntry
     {
         if (ptr == 0) return string.Empty;
         
-        // Read UTF-8 bytes directly from pointer until null terminator
+        // First, try to find the null terminator length without allocating
         var bytePtr = (byte*)ptr;
         var length = 0;
         while (bytePtr[length] != 0) length++;
         
         if (length == 0) return string.Empty;
         
-        var bytes = new ReadOnlySpan<byte>(bytePtr, length);
+        // Calculate hash directly from memory without allocation
+        var hashValue = CalculateUTF8Hash(bytePtr, length);
         
-        // Hash the byte content using HashCode API
-        var hash = new HashCode();
-        hash.AddBytes(bytes);
-        var hashValue = hash.ToHashCode();
-        
-        // Check cache for existing string with same byte content
+        // Check cache for existing string with same hash
         if (Utf8ByteCache.TryGetValue(hashValue, out var cached) &&
-            cached.StringRef.TryGetTarget(out var cachedString) &&
-            cached.ByteContent.AsSpan().SequenceEqual(bytes))
+            cached.StringRef.TryGetTarget(out var cachedString))
         {
-            return cachedString;
+            // Quick length check before expensive byte comparison
+            if (cached.ByteContent.Length == length &&
+                MemoryEquals(bytePtr, cached.ByteContent, length))
+            {
+                return cachedString;
+            }
         }
         
         // Cache miss - use Marshal to create string and cache it
         var newString = Marshal.PtrToStringUTF8(ptr)!;
         var internedString = string.Intern(newString);
-        var bytesCopy = bytes.ToArray();
         
-        Utf8ByteCache.TryAdd(hashValue, (new WeakReference<string>(internedString), bytesCopy));
+        // Only cache strings up to a reasonable length to avoid memory bloat
+        if (length <= 256)
+        {
+            var bytesCopy = new byte[length];
+            Marshal.Copy(ptr, bytesCopy, 0, length);
+            Utf8ByteCache.TryAdd(hashValue, (new WeakReference<string>(internedString), bytesCopy));
+        }
+        
         return internedString;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static unsafe int CalculateUTF8Hash(byte* bytes, int length)
+    {
+        // Use a simple but fast hash algorithm that works directly on memory
+        var hash = unchecked((int)2166136261);
+        for (var i = 0; i < length; i++)
+        {
+            hash = unchecked((hash ^ bytes[i]) * 16777619);
+        }
+        return hash;
+    }
+    
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static unsafe bool MemoryEquals(byte* ptr1, byte[] array2, int length)
+    {
+        for (var i = 0; i < length; i++)
+        {
+            if (ptr1[i] != array2[i]) return false;
+        }
+        return true;
     }
     
     public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)

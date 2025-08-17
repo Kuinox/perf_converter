@@ -32,12 +32,16 @@ unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Fun
             _stackRangePersister?.DisposeAsync().AsTask();
             auxDrop.Dequeue();
             _currentSegmentId++;
+            
             // Use StringBuilder to avoid string concatenation allocations
+            // Pre-sized to avoid reallocations during key building
             _keyBuilder.Clear();
+            _keyBuilder.EnsureCapacity(64); // Ensure capacity for typical key length
             _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append(".parquet");
             _currentTraceKey = _keyBuilder.ToString();
             
             _keyBuilder.Clear();
+            _keyBuilder.EnsureCapacity(80); // Slightly larger for stackranges suffix
             _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append("_stackranges.parquet");
             _currentStackRangeKey = _keyBuilder.ToString();
             _currentEntryId=0;
