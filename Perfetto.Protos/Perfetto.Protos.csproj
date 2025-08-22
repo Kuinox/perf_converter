@@ -1,0 +1,31 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>C# definitions for Perfetto trace protocol buffers</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.25.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.59.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include ALL proto files except for the service-oriented ones that don't compile -->
+    <Protobuf Include="protos/perfetto/**/*.proto" ProtoRoot="protos" 
+              Exclude="protos/perfetto/bigtrace/**;protos/perfetto/trace_processor/**;protos/perfetto/ipc/**;protos/perfetto/protovm/**;protos/perfetto/trace_summary/**;protos/perfetto/perfetto_sql/**" />
+  </ItemGroup>
+  
+  <!-- Since there are so many proto files, this might take longer to build, 
+       but it will give us the complete Perfetto proto definitions -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
