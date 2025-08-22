@@ -17,9 +17,32 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Include ALL proto files except for the service-oriented ones that don't compile -->
-    <Protobuf Include="protos/perfetto/**/*.proto" ProtoRoot="protos" 
-              Exclude="protos/perfetto/bigtrace/**;protos/perfetto/trace_processor/**;protos/perfetto/ipc/**;protos/perfetto/protovm/**;protos/perfetto/trace_summary/**;protos/perfetto/perfetto_sql/**" />
+    <!-- Core working set of Perfetto protos with absolutely no dependencies -->
+    
+    <!-- Standalone common protos -->
+    <Protobuf Include="protos/perfetto/common/system_info.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/common/trace_stats.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/common/android_log_constants.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/common/perf_events.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/common/protolog_common.proto" ProtoRoot="protos" />
+    
+    <!-- Standalone trace protos -->
+    <Protobuf Include="protos/perfetto/trace/trace_uuid.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/trace/trigger.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/trace/ui_state.proto" ProtoRoot="protos" />
+    
+    <!-- Simple track event protos -->
+    <Protobuf Include="protos/perfetto/trace/track_event/source_location.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/trace/track_event/task_execution.proto" ProtoRoot="protos" />
+    
+    <!-- Process stats -->
+    <Protobuf Include="protos/perfetto/trace/ps/process_tree.proto" ProtoRoot="protos" />
+    <Protobuf Include="protos/perfetto/trace/ps/process_stats.proto" ProtoRoot="protos" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <!-- Add a README to explain how to extend this -->
+    <None Include="README.md" />
   </ItemGroup>
   
   <!-- Since there are so many proto files, this might take longer to build, 
