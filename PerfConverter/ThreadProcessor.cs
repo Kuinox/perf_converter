@@ -5,72 +5,46 @@ using System.Text;
 
 namespace PerfConverter;
 
-unsafe class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
+class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory) : IAsyncDisposable
 {
-    readonly Queue<ulong> auxDrop = new(auxDrop.Order());
+    readonly Queue<ulong> _auxDrop = new(auxDrop.Order());
+    readonly List<string> _threadNames = [];
     int _currentSegmentId = 0;
-    ulong _currentEntryId = 0;
-    string _currentTraceKey = null!;
-    string _currentStackRangeKey = null!;
-    IPersister<TraceEntry>? _tracePersister;
-    IPersister<StackRange>? _stackRangePersister;
-    readonly Stack<ulong> _stackStarts = new();
-    
-    // Reuse StringBuilder to avoid string allocation on key generation
+    SegmentProcessor? _segment;
+    readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory = tracePersistenceFactory;
+    readonly Func<string, IPersister<StackRange>> _stackRangePersistenceFactory = stackRangePersistenceFactory;
+
     readonly StringBuilder _keyBuilder = new();
 
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
 
 
-    public void QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
+    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        var isNewTrace = auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
-        if (isNewTrace)
+        var isNewSegment = _auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
+        if (isNewSegment)
         {
-            _tracePersister?.DisposeAsync().AsTask();
-            _stackRangePersister?.DisposeAsync().AsTask();
-            auxDrop.Dequeue();
+            _segment?.DisposeAsync().AsTask();
+            _auxDrop.Dequeue();
             _currentSegmentId++;
-            // Use StringBuilder to avoid string concatenation allocations
             _keyBuilder.Clear();
             _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append(".parquet");
-            _currentTraceKey = _keyBuilder.ToString();
-            
+            var traceKey = _keyBuilder.ToString();
+
             _keyBuilder.Clear();
             _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append("_stackranges.parquet");
-            _currentStackRangeKey = _keyBuilder.ToString();
-            _currentEntryId=0;
-            _tracePersister = tracePersistenceFactory(_currentTraceKey);
-            _stackRangePersister = stackRangePersistenceFactory(_currentStackRangeKey);
-            _stackStarts.Clear();
+            var stackRangeKey = _keyBuilder.ToString();
+
+            _segment = new SegmentProcessor(Pid, Tid, _currentSegmentId, traceKey, stackRangeKey, _tracePersistenceFactory, _stackRangePersistenceFactory);
         }
 
-        var entry = TraceEntry.CreateFromPerf(sample, ip, address, ++_currentEntryId);
-        _tracePersister!.Persist(entry);
-        
-        // Process stack tracking for call/return pairs
-        ProcessStackTracking(entry);
+        _segment!.ProcessData(sample, ip, address);
     }
 
-    // BuildEntry method removed - now handled by TraceEntry.CreateFromPerf
-
-    private void ProcessStackTracking(TraceEntry trace)
+    public async ValueTask DisposeAsync()
     {
-        if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
-        {
-            _stackStarts.Push(trace.Id);
-        }
-        if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
-        {
-            var startTrace = _stackStarts.Count == 0 ? 0 : _stackStarts.Pop();
-            var stackRange = new StackRange()
-            {
-                StartTrace = startTrace,
-                EndTrace = trace.Id
-            };
-            _stackRangePersister!.Persist(stackRange);
-        }
+        if (_segment is not null)
+            await _segment.DisposeAsync();
     }
-
 }

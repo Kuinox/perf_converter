@@ -26,7 +26,7 @@ public unsafe class TraceProcessor
                 x => x.Select(x => x.Time).Append(0uL).ToArray()); ;
     }
 
-    public void QueueData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
+    public void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
 
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
@@ -36,6 +36,6 @@ public unsafe class TraceProcessor
             processor = new ThreadProcessor(sample->tid, sample->pid, auxDataLoss, _tracePersistenceFactory, _stackRangePersistenceFactory);
         }
         
-        processor.QueueData(sample, ip, address);
+        processor.ProcessData(sample, ip, address);
     }
 }

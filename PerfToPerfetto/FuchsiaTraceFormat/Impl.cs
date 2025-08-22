@@ -152,4 +152,12 @@ static class Impl
         WriteInfoArgs(w, insns, cycles, footprint, ts);
         WriteU64(w, endTimestamp);
     }
+
+    public static void WriteThreadName(Stream w, Caches c, ulong timestamp, (ulong pid, ulong tid) pidTid, string name)
+    {
+        // Emit an event carrying the thread name in the Name field; Category indicates metadata.
+        // No extra args; event type 1 reserved for simple instant events.
+        WriteEventHeader(c, w, new EventHeader(
+            name, "Thread", pidTid, timestamp, 0, 1, 0));
+    }
 }

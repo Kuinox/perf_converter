@@ -22,7 +22,7 @@ class Program
         try
         {
             var converter = new Processor();
-            await converter.ProcessAsync(inputFolder, outputFile);
+            await Processor.ProcessAsync(inputFolder, outputFile);
             Console.WriteLine($"Successfully converted {inputFolder} to {outputFile}");
             return 0;
         }

@@ -7,6 +7,9 @@ namespace Temp.Schema.FuchsiaTraceFormat;
 
 public static class Writer
 {
+    public static void WriteThreadName(Stream w, Caches c, ulong timestamp, (ulong pid, ulong tid) pidTid, string name) =>
+        Impl.WriteThreadName(w, c, timestamp, pidTid, name);
+
     public static void WriteInfoArgs(Stream w, ulong insns, ulong cycles, ulong footprint, string timespan) =>
         Impl.WriteInfoArgs(w, insns, cycles, footprint, timespan);
 

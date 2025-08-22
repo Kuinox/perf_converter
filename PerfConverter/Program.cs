@@ -71,7 +71,7 @@ public unsafe class PerfDlFilter
             {
                 address = fns->resolve_addr(ctx);
             }
-            _traceProcessor.QueueData(sample, ip, address);
+            _traceProcessor.ProcessData(sample, ip, address);
 
             var now = DateTime.UtcNow;
             if ((now - state.LastReportTime).TotalMilliseconds > 50)
