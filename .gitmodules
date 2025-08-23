@@ -1,0 +1,3 @@
+[submodule "Perfetto.Protos/perfetto-submodule"]
+	path = Perfetto.Protos/perfetto-submodule
+	url = https://github.com/google/perfetto.git

@@ -18,26 +18,27 @@
 
   <ItemGroup>
     <!-- Core working set of Perfetto protos with absolutely no dependencies -->
+    <!-- Using git submodule for official Perfetto proto definitions -->
     
     <!-- Standalone common protos -->
-    <Protobuf Include="protos/perfetto/common/system_info.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/common/trace_stats.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/common/android_log_constants.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/common/perf_events.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/common/protolog_common.proto" ProtoRoot="protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/common/system_info.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/common/trace_stats.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/common/android_log_constants.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/common/perf_events.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/common/protolog_common.proto" ProtoRoot="perfetto-submodule/protos" />
     
     <!-- Standalone trace protos -->
-    <Protobuf Include="protos/perfetto/trace/trace_uuid.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/trace/trigger.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/trace/ui_state.proto" ProtoRoot="protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/trace_uuid.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/trigger.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ui_state.proto" ProtoRoot="perfetto-submodule/protos" />
     
     <!-- Simple track event protos -->
-    <Protobuf Include="protos/perfetto/trace/track_event/source_location.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/trace/track_event/task_execution.proto" ProtoRoot="protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/track_event/source_location.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/track_event/task_execution.proto" ProtoRoot="perfetto-submodule/protos" />
     
     <!-- Process stats -->
-    <Protobuf Include="protos/perfetto/trace/ps/process_tree.proto" ProtoRoot="protos" />
-    <Protobuf Include="protos/perfetto/trace/ps/process_stats.proto" ProtoRoot="protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ps/process_tree.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ps/process_stats.proto" ProtoRoot="perfetto-submodule/protos" />
   </ItemGroup>
   
   <ItemGroup>

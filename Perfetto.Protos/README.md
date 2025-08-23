@@ -50,15 +50,20 @@ var systemInfo = new SystemInfo
 };
 ```
 
+## Protocol Buffer Source
+
+This project uses the official Perfetto protocol buffer definitions via a git submodule. The proto files are sourced directly from the [Google Perfetto repository](https://github.com/google/perfetto) located in the `perfetto-submodule` directory.
+
 ## Extending This Project
 
 The complete Perfetto protocol buffer definition includes hundreds of message types. Due to complex interdependencies between proto files, this project currently includes a working subset.
 
 To add more proto definitions:
 
-1. Add the proto file path to the `<Protobuf Include="...">` items in the `.csproj` file
+1. Add the proto file path to the `<Protobuf Include="perfetto-submodule/protos/...">` items in the `.csproj` file
 2. Ensure all import dependencies are also included
 3. Build and resolve any missing dependencies
+4. Update the submodule if you need newer proto definitions: `git submodule update --remote`
 
 ### Known Limitations
 
