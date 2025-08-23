@@ -54,6 +54,51 @@ var systemInfo = new SystemInfo
 
 This project uses the official Perfetto protocol buffer definitions via a git submodule. The proto files are sourced directly from the [Google Perfetto repository](https://github.com/google/perfetto) located in the `perfetto-submodule` directory.
 
+## Git Submodule with Sparse Checkout
+
+To avoid cloning the entire 141MB Perfetto repository when we only need the proto files (3.7MB), this project uses **sparse checkout** to only include the `protos/` directory.
+
+### Advantages
+
+- **Official source**: Always uses the canonical Perfetto proto definitions
+- **Minimal size**: Only 3.7MB instead of 141MB (97% size reduction)
+- **Easy updates**: Use `git submodule update --remote` to get the latest proto definitions  
+- **No file copying**: Avoids copying 405+ proto files into our repository
+- **Better maintainability**: Always synchronized with the official Perfetto project
+
+### Setting up the submodule
+
+When cloning this repository, use the provided setup script to automatically configure sparse checkout:
+
+```bash
+# Run the setup script to configure sparse checkout
+./Perfetto.Protos/setup-submodule.sh
+```
+
+Alternatively, manually initialize with sparse checkout:
+
+```bash
+# Initialize submodule
+git submodule init Perfetto.Protos/perfetto-submodule
+git submodule update Perfetto.Protos/perfetto-submodule
+
+# Configure sparse checkout to only include protos/
+cd Perfetto.Protos/perfetto-submodule
+git config core.sparseCheckout true
+echo "protos/*" > ../../.git/modules/Perfetto.Protos/perfetto-submodule/info/sparse-checkout
+git read-tree -m -u HEAD
+```
+
+### Updating proto definitions
+
+To update to the latest Perfetto proto definitions:
+
+```bash
+cd Perfetto.Protos/perfetto-submodule
+git submodule update --remote
+# Sparse checkout configuration will be preserved
+```
+
 ## Extending This Project
 
 The complete Perfetto protocol buffer definition includes hundreds of message types. Due to complex interdependencies between proto files, this project currently includes a working subset.

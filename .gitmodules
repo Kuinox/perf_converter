@@ -1,3 +1,5 @@
 [submodule "Perfetto.Protos/perfetto-submodule"]
 	path = Perfetto.Protos/perfetto-submodule
 	url = https://github.com/google/perfetto.git
+	# This submodule uses sparse-checkout to only include the protos/ directory
+	# Run: git config core.sparseCheckout true && echo "protos/*" > .git/info/sparse-checkout && git read-tree -m -u HEAD
