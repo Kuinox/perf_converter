@@ -38,7 +38,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         Writer.WriteHeader(_out);
     }
 
-    public void ProcessTrace(TraceEntry trace)
+    internal void ProcessTrace(TraceEntry trace)
     {
         string? comm = null;
         if (!string.IsNullOrEmpty(trace.AddressComm))
@@ -75,7 +75,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
         }
     }
 
-    public void PopFrame(TraceEntry start, TraceEntry cur)
+    internal void PopFrame(TraceEntry start, TraceEntry cur)
     {
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
@@ -88,7 +88,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
             start.Time, cur.Time);
     }
 
-    public void PopUnknownFrame(TraceEntry firstTraceOfFile, TraceEntry cur)
+    internal void PopUnknownFrame(TraceEntry firstTraceOfFile, TraceEntry cur)
     {
         var timestamp = ChooseTimestamp(cur);
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
@@ -101,7 +101,7 @@ public sealed class TraceProcessor(string fileName = "out.ftf", TimestampMode mo
             firstTraceOfFile.Time, cur.Time); // TODO: use first instruction of trace file.
     }
 
-    public void PushFrame(TraceEntry cur)
+    internal void PushFrame(TraceEntry cur)
     {
         var pidTid = ((ulong)cur.Pid, (ulong)cur.Tid);
         var symbol = cur.AddressSym ?? cur.IpSym ?? "TRACE";
