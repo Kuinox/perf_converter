@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="dd395ba6-0822-4530-8c02-78cd4331d840" name="@pkrvmqc4gcfdwos 2025-08-27 16:37:48" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2025-08-27T16:37:48.1057303+00:00" queuing="2025-08-27T16:37:48.1057304+00:00" start="2025-08-27T16:37:46.1021669+00:00" finish="2025-08-27T16:37:48.1312578+00:00" />
+  <TestSettings name="default" id="c20e4bba-b541-481f-8482-d97332c05199">
+    <Deployment runDeploymentRoot="_pkrvmqc4gcfdwos_2025-08-27_16_37_48" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="7eeecd10-97b8-4129-95bc-fc814fa42c52" testId="083edf1f-d6b8-3ad2-7891-aa58a4ad18d2" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidateTraceFileAsync_ReturnsInvalidForNonexistentFile" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0033862" startTime="2025-08-27T16:37:47.9218997+00:00" endTime="2025-08-27T16:37:47.9218998+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7eeecd10-97b8-4129-95bc-fc814fa42c52" />
+    <UnitTestResult executionId="0b9d7371-800a-4023-bc52-79a260fe031a" testId="d5c21c44-deff-3c2e-0194-0d301065f844" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidationSamples_ValidatePerfToPerfettoOutput_HandlesNonexistentDirectory" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0027929" startTime="2025-08-27T16:37:47.9138946+00:00" endTime="2025-08-27T16:37:47.9138947+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0b9d7371-800a-4023-bc52-79a260fe031a" />
+    <UnitTestResult executionId="461529a5-b700-433c-a205-14f86c7d5455" testId="a1ddbe56-22af-d885-e392-6e743c5bb5aa" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceStatistics_CanBeCreated" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0099104" startTime="2025-08-27T16:37:47.9107554+00:00" endTime="2025-08-27T16:37:47.9107555+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="461529a5-b700-433c-a205-14f86c7d5455" />
+    <UnitTestResult executionId="541e9a77-f107-48e9-96b9-07c8fdfa9511" testId="5a48b929-bb68-ac87-4a46-699ea2f30733" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.ExecuteQueryAsync_ReturnsErrorForNonexistentFile" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0034003" startTime="2025-08-27T16:37:47.9181643+00:00" endTime="2025-08-27T16:37:47.9181644+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="541e9a77-f107-48e9-96b9-07c8fdfa9511" />
+    <UnitTestResult executionId="fc28d479-22a0-45fc-ad65-906272fa777b" testId="01dc8ec8-cd32-9d8e-10e8-2ad68a6006f7" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceValidationHelper_CanBeCreatedWithCustomPath" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0001154" startTime="2025-08-27T16:37:47.9143725+00:00" endTime="2025-08-27T16:37:47.9143726+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fc28d479-22a0-45fc-ad65-906272fa777b" />
+    <UnitTestResult executionId="64c14046-0214-4dfd-a78a-c087159eaca0" testId="b1e37564-efc4-94eb-f6f9-c5320e864978" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceValidationHelper_CanBeCreated" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0111901" startTime="2025-08-27T16:37:47.9032355+00:00" endTime="2025-08-27T16:37:47.9032356+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="64c14046-0214-4dfd-a78a-c087159eaca0" />
+    <UnitTestResult executionId="f7e607a5-e0a6-449d-a8e2-805c35d5e8ad" testId="7729d819-067f-5b05-eeba-b398a56bb02f" testName="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidationReport_CanBeCreated" computerName="pkrvmqc4gcfdwos" duration="00:00:00.0062686" startTime="2025-08-27T16:37:47.8860488+00:00" endTime="2025-08-27T16:37:47.8861061+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f7e607a5-e0a6-449d-a8e2-805c35d5e8ad" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceStatistics_CanBeCreated" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="a1ddbe56-22af-d885-e392-6e743c5bb5aa">
+      <Execution id="461529a5-b700-433c-a205-14f86c7d5455" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="TraceStatistics_CanBeCreated" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidationReport_CanBeCreated" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="7729d819-067f-5b05-eeba-b398a56bb02f">
+      <Execution id="f7e607a5-e0a6-449d-a8e2-805c35d5e8ad" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="ValidationReport_CanBeCreated" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.ExecuteQueryAsync_ReturnsErrorForNonexistentFile" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="5a48b929-bb68-ac87-4a46-699ea2f30733">
+      <Execution id="541e9a77-f107-48e9-96b9-07c8fdfa9511" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="ExecuteQueryAsync_ReturnsErrorForNonexistentFile" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidateTraceFileAsync_ReturnsInvalidForNonexistentFile" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="083edf1f-d6b8-3ad2-7891-aa58a4ad18d2">
+      <Execution id="7eeecd10-97b8-4129-95bc-fc814fa42c52" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="ValidateTraceFileAsync_ReturnsInvalidForNonexistentFile" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceValidationHelper_CanBeCreatedWithCustomPath" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="01dc8ec8-cd32-9d8e-10e8-2ad68a6006f7">
+      <Execution id="fc28d479-22a0-45fc-ad65-906272fa777b" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="TraceValidationHelper_CanBeCreatedWithCustomPath" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.TraceValidationHelper_CanBeCreated" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="b1e37564-efc4-94eb-f6f9-c5320e864978">
+      <Execution id="64c14046-0214-4dfd-a78a-c087159eaca0" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="TraceValidationHelper_CanBeCreated" />
+    </UnitTest>
+    <UnitTest name="PerfToPerfetto.Tests.TraceValidationHelperTests.ValidationSamples_ValidatePerfToPerfettoOutput_HandlesNonexistentDirectory" storage="/home/runner/work/perf_converter/perf_converter/perftoperfetto.tests/bin/debug/net8.0/perftoperfetto.tests.dll" id="d5c21c44-deff-3c2e-0194-0d301065f844">
+      <Execution id="0b9d7371-800a-4023-bc52-79a260fe031a" />
+      <TestMethod codeBase="/home/runner/work/perf_converter/perf_converter/PerfToPerfetto.Tests/bin/Debug/net8.0/PerfToPerfetto.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner2/netcoreapp" className="PerfToPerfetto.Tests.TraceValidationHelperTests" name="ValidationSamples_ValidatePerfToPerfettoOutput_HandlesNonexistentDirectory" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="083edf1f-d6b8-3ad2-7891-aa58a4ad18d2" executionId="7eeecd10-97b8-4129-95bc-fc814fa42c52" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d5c21c44-deff-3c2e-0194-0d301065f844" executionId="0b9d7371-800a-4023-bc52-79a260fe031a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a1ddbe56-22af-d885-e392-6e743c5bb5aa" executionId="461529a5-b700-433c-a205-14f86c7d5455" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="5a48b929-bb68-ac87-4a46-699ea2f30733" executionId="541e9a77-f107-48e9-96b9-07c8fdfa9511" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="01dc8ec8-cd32-9d8e-10e8-2ad68a6006f7" executionId="fc28d479-22a0-45fc-ad65-906272fa777b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b1e37564-efc4-94eb-f6f9-c5320e864978" executionId="64c14046-0214-4dfd-a78a-c087159eaca0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7729d819-067f-5b05-eeba-b398a56bb02f" executionId="f7e607a5-e0a6-449d-a8e2-805c35d5e8ad" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="7" executed="7" passed="7" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.01] xUnit.net VSTest Adapter v2.5.3.1+6b60a9e56a (64-bit .NET 8.0.19)
+[xUnit.net 00:00:00.21]   Discovering: PerfToPerfetto.Tests
+[xUnit.net 00:00:00.29]   Discovered:  PerfToPerfetto.Tests
+[xUnit.net 00:00:00.30]   Starting:    PerfToPerfetto.Tests
+[xUnit.net 00:00:00.50]   Finished:    PerfToPerfetto.Tests
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

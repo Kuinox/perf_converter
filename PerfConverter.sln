@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CLI", "CLI\CLI.csproj", "{2
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetto", "PerfToPerfetto\PerfToPerfetto.csproj", "{A1B2C3D4-E5F6-7890-ABCD-1234567890EF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetto.Tests", "PerfToPerfetto.Tests\PerfToPerfetto.Tests.csproj", "{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -93,6 +95,18 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-1234567890EF}.Release|x64.Build.0 = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-1234567890EF}.Release|x86.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-1234567890EF}.Release|x86.Build.0 = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|x64.Build.0 = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Debug|x86.Build.0 = Debug|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|Any CPU.Build.0 = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|x64.ActiveCfg = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|x64.Build.0 = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|x86.ActiveCfg = Release|Any CPU
+		{898ADDD0-B70A-4AA9-9995-70A5CFC7F317}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
