@@ -4,52 +4,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <Description>C# definitions for Perfetto trace protocol buffers</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.25.1" />
-    <PackageReference Include="Grpc.Tools" Version="2.59.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="Grpc.Tools" Version="2.59.0" PrivateAssets="all" IncludeAssets="runtime;build;native;contentfiles;analyzers;buildtransitive" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Core working set of Perfetto protos with absolutely no dependencies -->
-    <!-- Using git submodule for official Perfetto proto definitions -->
-    
-    <!-- Standalone common protos -->
-    <Protobuf Include="perfetto-submodule/protos/perfetto/common/system_info.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/common/trace_stats.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/common/android_log_constants.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/common/perf_events.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/common/protolog_common.proto" ProtoRoot="perfetto-submodule/protos" />
-    
-    <!-- Standalone trace protos -->
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/trace_uuid.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/trigger.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ui_state.proto" ProtoRoot="perfetto-submodule/protos" />
-    
-    <!-- Simple track event protos -->
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/track_event/source_location.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/track_event/task_execution.proto" ProtoRoot="perfetto-submodule/protos" />
-    
-    <!-- Process stats -->
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ps/process_tree.proto" ProtoRoot="perfetto-submodule/protos" />
-    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/ps/process_stats.proto" ProtoRoot="perfetto-submodule/protos" />
+    <Protobuf Include="perfetto-submodule/protos/perfetto/trace/perfetto_trace.proto" />
   </ItemGroup>
-  
-  <ItemGroup>
-    <!-- Add a README to explain how to extend this -->
-    <None Include="README.md" />
-  </ItemGroup>
-  
-  <!-- Since there are so many proto files, this might take longer to build, 
-       but it will give us the complete Perfetto proto definitions -->
-  <PropertyGroup>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-  </PropertyGroup>
-
 </Project>

@@ -1,3 +1,6 @@
+using Google.Protobuf;
+using Perfetto.Protos;
+
 namespace PerfToPerfetto;
 
 class Program
@@ -22,7 +25,10 @@ class Program
         try
         {
             var converter = new Processor();
-            await Processor.ProcessAsync(inputFolder, outputFile);
+            var trace = await Processor.ProcessAsync(inputFolder, outputFile);
+            if(File.Exists(outputFile))
+                File.Delete(outputFile);
+            trace.WriteTo(new CodedOutputStream(File.Create(outputFile)));
             Console.WriteLine($"Successfully converted {inputFolder} to {outputFile}");
             return 0;
         }

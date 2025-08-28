@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Microsoft.Performance.Toolkit.Plugins.PerfettoProcessor" Version="1.6.2" />
+    <PackageReference Include="NUnit" Version="4.2.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.4.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+	<Target Name="DownloadTraceProcessorShell">
+		<!-- Keep in sync with other DownloadTraceProcessorShell Targets -->
+		<!-- Download the trace_processor.exe from Perfetto's GitHub release and copy it to the output directory-->
+		<DownloadFile SourceUrl="https://github.com/google/perfetto/releases/download/v45.0/windows-amd64.zip" DestinationFolder="$(TargetDir)" />
+		<Unzip SourceFiles="$(TargetDir)\windows-amd64.zip" DestinationFolder="$(TargetDir)" />
+		<Copy SourceFiles="$(TargetDir)\windows-amd64\trace_processor_shell.exe" DestinationFolder="$(TargetDir)" />
+		<RemoveDir Directories="$(TargetDir)\windows-amd64" />
+		<Delete Files="$(TargetDir)\windows-amd64.zip" />
+	</Target>
+
+	<Target Name="CopyRulesToTarget" AfterTargets="Build">
+		<CallTarget Condition="!Exists('$(TargetDir)\trace_processor_shell.exe')" Targets="DownloadTraceProcessorShell" />
+	</Target>
+
+</Project>

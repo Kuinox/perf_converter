@@ -1,42 +1,85 @@
-﻿using System.Diagnostics;
+﻿using Parquet;
+using PerfConverter.PerfStructs;
+using PerfConverter.Schema;
+using Perfetto.Protos;
 using System.Reflection.Emit;
 
 namespace PerfToPerfetto;
 
 public class Processor
 {
-    public static async Task ProcessAsync(string inputDirectory, string outputFile)
+    public static async Task<Trace> ProcessAsync(string inputDirectory, string outputFile)
     {
-        var processor = new TraceProcessor();
-        processor.Start();
-
         var fileList = Directory.GetFiles(inputDirectory, "*.parquet", SearchOption.AllDirectories);
 
-        var filePairs = fileList
-            .Where(x => !x.Contains("stackranges"))
-            .Select(x => x.Replace("segment", "").Replace(".parquet", ""))
-            .OrderBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(x)))!))
-            .ThenBy(x => int.Parse(Path.GetFileName(Path.GetDirectoryName(x))!))
-            .ThenBy(x => int.Parse(Path.GetFileName(x)))
-            .Select(x =>
-            {
-                var id = Path.GetFileName(x);
-                var dir = Path.GetDirectoryName(x)!;
-                var traceFile = Path.Combine(dir, $"segment{id}.parquet");
-                var stackRangeFile = Path.Combine(dir, $"segment{id}_stackranges.parquet");
-                return (traceFile, stackRangeFile);
-            })
-            .ToList();
+        var filePairs = fileList.Where(x => !x.Contains("stackranges")).ToList();
 
-
-
-        Console.WriteLine($"Found {filePairs.Count} pair of files to process");
-
-        foreach ((string traceFile, string stackRangeFile) in filePairs)
+        Console.WriteLine($"Found {filePairs.Count} files to process.");
+        var trace = new Trace();
+        foreach (var traceFile in filePairs)
         {
-            Console.WriteLine($"Processing {traceFile} & {stackRangeFile}...");
-            var segmentProcessor = new SegmentProcessor(processor, traceFile, stackRangeFile);
-            await segmentProcessor.ProcessAsync();
+            Console.WriteLine($"Processing {traceFile}...");
+            var dirName = Path.GetDirectoryName(traceFile)!;
+            var threadId = uint.Parse(Path.GetFileName(dirName));
+            await foreach (var packet in ProcessFile(traceFile, threadId))
+            {
+                trace.Packet.Add(packet);
+            }
         }
+        return trace;
+    }
+
+    static async IAsyncEnumerable<TracePacket> ProcessFile(string traceFile, uint threadId)
+    {
+        var traceSchema = new TraceSampleSchema();
+
+        var first = true;
+
+        using var traceReader = await ParquetReader.CreateAsync(traceFile);
+        await foreach (var currentTrace in traceSchema.ReadAll(traceReader))
+        {
+            if(first)
+            {
+                first = false;
+                yield return new()
+                {
+                    Timestamp = currentTrace.Time,
+                    TrackEvent = new()
+                    {
+                        TrackUuid = threadId,
+                        Name = $"Thread {threadId}"
+                    },
+                    TrustedPacketSequenceId = threadId
+                };
+            }
+
+            if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
+            {
+                yield return new()
+                {
+                    Timestamp = currentTrace.Time,
+                    TrackEvent = new()
+                    {
+                        Type = TrackEvent.Types.Type.SliceBegin,
+                        TrackUuid = threadId,
+                    },
+                    TrustedPacketSequenceId = threadId
+                };
+            }
+            if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
+            {
+                yield return new TracePacket()
+                {
+                    Timestamp = currentTrace.Time,
+                    TrackEvent = new()
+                    {
+                        Type = TrackEvent.Types.Type.SliceEnd,
+                        TrackUuid = threadId
+                    },
+                    TrustedPacketSequenceId = threadId
+                };
+            }
+        }
+
     }
 }
