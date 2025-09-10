@@ -25,10 +25,12 @@ class Program
         try
         {
             var converter = new Processor();
-            var trace = await Processor.ProcessAsync(inputFolder, outputFile);
+            await converter.VisitRoot(inputFolder);
+            using var fs = File.Create(outputFile);
             if(File.Exists(outputFile))
                 File.Delete(outputFile);
-            trace.WriteTo(new CodedOutputStream(File.Create(outputFile)));
+            converter.Trace.WriteTo(fs);
+
             Console.WriteLine($"Successfully converted {inputFolder} to {outputFile}");
             return 0;
         }

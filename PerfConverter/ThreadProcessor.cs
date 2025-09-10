@@ -1,7 +1,6 @@
 ﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
-using System.Text;
 
 namespace PerfConverter;
 
@@ -14,11 +13,10 @@ class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<strin
     readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory = tracePersistenceFactory;
     readonly Func<string, IPersister<StackRange>> _stackRangePersistenceFactory = stackRangePersistenceFactory;
 
-    readonly StringBuilder _keyBuilder = new();
-
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
 
+    ulong _currentEntryId = 1;
 
     public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
@@ -28,18 +26,12 @@ class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<strin
             _segment?.DisposeAsync().AsTask();
             _auxDrop.Dequeue();
             _currentSegmentId++;
-            _keyBuilder.Clear();
-            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append(".parquet");
-            var traceKey = _keyBuilder.ToString();
-
-            _keyBuilder.Clear();
-            _keyBuilder.Append(sample->pid).Append('/').Append(sample->tid).Append("/segment").Append(_currentSegmentId).Append("_stackranges.parquet");
-            var stackRangeKey = _keyBuilder.ToString();
-
+            var traceKey = $"pid={sample->pid}/tid={sample->tid}/segment{_currentSegmentId}.parquet";
+            var stackRangeKey = $"pid={sample->pid}/tid={sample->tid}/segment{_currentSegmentId}_stackranges.parquet";
             _segment = new SegmentProcessor(Pid, Tid, _currentSegmentId, traceKey, stackRangeKey, _tracePersistenceFactory, _stackRangePersistenceFactory);
         }
 
-        _segment!.ProcessData(sample, ip, address);
+        _segment!.ProcessData(_currentEntryId++, sample, ip, address);
     }
 
     public async ValueTask DisposeAsync()

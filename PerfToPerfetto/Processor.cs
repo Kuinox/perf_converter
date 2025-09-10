@@ -2,84 +2,101 @@
 using PerfConverter.PerfStructs;
 using PerfConverter.Schema;
 using Perfetto.Protos;
+using System.Diagnostics;
 using System.Reflection.Emit;
+using Temp.Schema;
 
 namespace PerfToPerfetto;
 
-public class Processor
+public class Processor : Visitor
 {
-    public static async Task<Trace> ProcessAsync(string inputDirectory, string outputFile)
+    public Perfetto.Protos.Trace Trace { get; } = new();
+    readonly TraceSampleSchema _traceSchema = new();
+
+    uint _trackId = 1;
+    uint _sequenceId = 0;
+    public override async Task VisitTracks(string[] paths)
     {
-        var fileList = Directory.GetFiles(inputDirectory, "*.parquet", SearchOption.AllDirectories);
-
-        var filePairs = fileList.Where(x => !x.Contains("stackranges")).ToList();
-
-        Console.WriteLine($"Found {filePairs.Count} files to process.");
-        var trace = new Trace();
-        foreach (var traceFile in filePairs)
-        {
-            Console.WriteLine($"Processing {traceFile}...");
-            var dirName = Path.GetDirectoryName(traceFile)!;
-            var threadId = uint.Parse(Path.GetFileName(dirName));
-            await foreach (var packet in ProcessFile(traceFile, threadId))
-            {
-                trace.Packet.Add(packet);
-            }
-        }
-        return trace;
+        Console.WriteLine($"Found {paths.Length} files to process.");
+        await base.VisitTracks(paths);
+        _trackId++;
+        _sequenceId = 0;
     }
 
-    static async IAsyncEnumerable<TracePacket> ProcessFile(string traceFile, uint threadId)
+
+    (TrackEvent trackEvent, List<string> threadComms)? _threadNameState;
+    public override async Task VisitTrack(string path)
     {
-        var traceSchema = new TraceSampleSchema();
+        var dirName = Path.GetFileName(Path.GetDirectoryName(path))!;
+        bool isThread = dirName.StartsWith("tid=");
 
-        var first = true;
-
-        using var traceReader = await ParquetReader.CreateAsync(traceFile);
-        await foreach (var currentTrace in traceSchema.ReadAll(traceReader))
+        var trackEvent = new TrackEvent { TrackUuid = _trackId };
+        if (!isThread)
         {
-            if(first)
+            trackEvent.Name = dirName;
+        }
+        else
+        {
+            _threadNameState = (trackEvent, []);
+        }
+
+        Trace.Packet.Add(new TracePacket { TrackEvent = trackEvent });
+
+        await base.VisitTrack(path);
+
+        _threadNameState = null;
+    }
+
+    public override async Task VisitSegment(string segmentFile)
+    {
+        Console.WriteLine($"Processing {segmentFile}...");
+        await ProcessFile(segmentFile);
+    }
+
+    async Task ProcessFile(string traceFile)
+    {
+        using var traceReader = await ParquetReader.CreateAsync(traceFile);
+        await foreach (var currentTrace in _traceSchema.ReadAll(traceReader))
+        {
+            _sequenceId++;
+            var currComm = currentTrace.IpComm ?? currentTrace.AddressComm;
+            if (_threadNameState.HasValue && currComm != null)
             {
-                first = false;
-                yield return new()
+                var (trackEvent, threadComms) = _threadNameState.Value;
+                var lastComm = threadComms.Last();
+                if (lastComm != currComm)
                 {
-                    Timestamp = currentTrace.Time,
-                    TrackEvent = new()
-                    {
-                        TrackUuid = threadId,
-                        Name = $"Thread {threadId}"
-                    },
-                    TrustedPacketSequenceId = threadId
-                };
+                    threadComms.Add(lastComm);
+                    trackEvent.Name = string.Join(" => ", threadComms);
+                }
             }
 
             if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
             {
-                yield return new()
+                Trace.Packet.Add(new TracePacket()
                 {
                     Timestamp = currentTrace.Time,
                     TrackEvent = new()
                     {
                         Type = TrackEvent.Types.Type.SliceBegin,
-                        TrackUuid = threadId,
+                        TrackUuid = _trackId,
                     },
-                    TrustedPacketSequenceId = threadId
-                };
+                    TrustedPacketSequenceId = _sequenceId
+                });
             }
             if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
             {
-                yield return new TracePacket()
+                Trace.Packet.Add(new TracePacket()
                 {
                     Timestamp = currentTrace.Time,
                     TrackEvent = new()
                     {
                         Type = TrackEvent.Types.Type.SliceEnd,
-                        TrackUuid = threadId
+                        TrackUuid = _trackId
                     },
-                    TrustedPacketSequenceId = threadId
-                };
+                    TrustedPacketSequenceId = _sequenceId
+                });
             }
         }
-
     }
 }

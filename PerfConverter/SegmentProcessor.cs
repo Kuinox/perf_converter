@@ -17,15 +17,13 @@ sealed class SegmentProcessor(
     readonly IPersister<StackRange> _stackRangePersister = stackRangePersistenceFactory(stackRangeKey);
     readonly Stack<ulong> _stackStarts = new();
 
-    ulong _currentEntryId = 0;
-
     public int SegmentId { get; } = segmentId;
     public uint Tid { get; } = tid;
     public uint Pid { get; } = pid;
 
-    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
+    public unsafe void ProcessData(ulong entryId, PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        var entry = TraceEntry.CreateFromPerf(sample, ip, address, ++_currentEntryId);
+        var entry = TraceEntry.CreateFromPerf(sample, ip, address, entryId);
         _tracePersister.Persist(entry);
         ProcessStackTracking(entry);
     }

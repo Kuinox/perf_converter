@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Perfetto.Protos", "Perfetto
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetoo.Tests", "PerfToPerfetoo.Tests\PerfToPerfetoo.Tests.csproj", "{3E342268-EE14-4665-BAFA-AB7CCE9BB324}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StackFixer", "StackFixer\StackFixer.csproj", "{AD7BC089-F966-4151-881B-51EA801CA8BA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -121,6 +123,18 @@ Global
 		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x64.Build.0 = Release|Any CPU
 		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x86.ActiveCfg = Release|Any CPU
 		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x86.Build.0 = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|x64.Build.0 = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Debug|x86.Build.0 = Debug|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x64.ActiveCfg = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x64.Build.0 = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x86.ActiveCfg = Release|Any CPU
+		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
