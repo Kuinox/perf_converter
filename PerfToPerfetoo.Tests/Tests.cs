@@ -14,7 +14,7 @@ namespace PerfToPerfetoo.Tests
         public void Test1()
         {
             var errors = new List<string>();
-            _processor.OpenTraceProcessor(_exePath, @"C:\dev\PerfConverter\PerfToPerfetto\bin\Debug\net9.0\out.ftf",
+            _processor.OpenTraceProcessor(_exePath, @"C:\dev\PerfConverter\PerfToPerfetto\bin\Debug\net9.0\out.perfetto-trace",
             (ctx, data) =>
             {
                 Console.WriteLine(data.Data);
@@ -28,7 +28,7 @@ namespace PerfToPerfetoo.Tests
                     return;
 
                 errors.Add(data.Data!);
-                Assert.Fail(data.Data!);
+                Console.WriteLine(data.Data!);
             });
 
             var query = new PerfettoTrackEvent();
@@ -39,7 +39,13 @@ namespace PerfToPerfetoo.Tests
             {
             });
 
+            foreach (var error in errors)
+            {
+                Console.WriteLine(error);
+            }
+
             Assert.That(errors.Count, Is.EqualTo(0), string.Join(Environment.NewLine, errors));
+
         }
     }
 }

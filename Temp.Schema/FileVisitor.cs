@@ -9,7 +9,7 @@ namespace Temp.Schema;
 ///   <root>/<pid>/<tid>/segment<id>.parquet
 ///   <root>/<pid>/<tid>/segment<id>_stackranges.parquet (optional)
 /// </summary>
-public abstract class Visitor
+public abstract class FileVisitor
 {
     public virtual async Task VisitRoot(string path)
     {

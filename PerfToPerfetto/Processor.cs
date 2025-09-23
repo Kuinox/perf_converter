@@ -8,42 +8,81 @@ using Temp.Schema;
 
 namespace PerfToPerfetto;
 
-public class Processor : Visitor
+public class Processor : FileVisitor
 {
     public Perfetto.Protos.Trace Trace { get; } = new();
     readonly TraceSampleSchema _traceSchema = new();
 
-    uint _trackId = 1;
-    uint _sequenceId = 0;
+    uint _trackId = 2;
+
+    int? _pid;
+    public override Task VisitRoot(string path)
+    {
+        var dirName = Path.GetFileName(path);
+        if (dirName.StartsWith("pid="))
+        {
+            _pid = int.Parse(dirName[4..]);
+            Trace.Packet.Add(new TracePacket
+            {
+                TrackDescriptor = new TrackDescriptor
+                {
+                    Uuid = (ulong)_pid.Value,
+                    Process = new ProcessDescriptor
+                    {
+                        Pid = _pid.Value,
+                        ProcessName = $"Process {_pid.Value}"
+                    }
+                }
+            });
+        }
+        return base.VisitRoot(path);
+    }
+
     public override async Task VisitTracks(string[] paths)
     {
-        Console.WriteLine($"Found {paths.Length} files to process.");
+        Console.WriteLine($"Found {paths.Length} tracks to process.");
         await base.VisitTracks(paths);
-        _trackId++;
-        _sequenceId = 0;
     }
 
 
-    (TrackEvent trackEvent, List<string> threadComms)? _threadNameState;
+    (TrackDescriptor trackDescriptor, List<string> threadComms)? _threadNameState;
     public override async Task VisitTrack(string path)
     {
-        var dirName = Path.GetFileName(Path.GetDirectoryName(path))!;
+        var dirName = Path.GetFileName(path)!;
         bool isThread = dirName.StartsWith("tid=");
 
-        var trackEvent = new TrackEvent { TrackUuid = _trackId };
+        var trackDescriptor = new TrackDescriptor
+        {
+            Uuid = _trackId,
+        };
+
+        if (_pid.HasValue)
+        {
+            trackDescriptor.Thread ??= new();
+            trackDescriptor.Thread.Pid = _pid.Value;
+        }
+
         if (!isThread)
         {
-            trackEvent.Name = dirName;
+            trackDescriptor.Name = dirName;
         }
         else
         {
-            _threadNameState = (trackEvent, []);
+            _threadNameState = (trackDescriptor, []);
+
+            var tid = int.Parse(dirName[4..]);
+            trackDescriptor.Thread ??= new();
+            trackDescriptor.Thread.Tid = tid;
         }
 
-        Trace.Packet.Add(new TracePacket { TrackEvent = trackEvent });
+        Trace.Packet.Add(new TracePacket
+        {
+            TrackDescriptor = trackDescriptor,
+        });
 
         await base.VisitTrack(path);
 
+        _trackId++;
         _threadNameState = null;
     }
 
@@ -51,28 +90,38 @@ public class Processor : Visitor
     {
         Console.WriteLine($"Processing {segmentFile}...");
         await ProcessFile(segmentFile);
+        Console.WriteLine($"Done. Calls: {calls}, Returns: {returns}");
+        calls = 0;
+        returns = 0;
     }
-
+    int calls = 0;
+    int returns = 0;
     async Task ProcessFile(string traceFile)
     {
-        using var traceReader = await ParquetReader.CreateAsync(traceFile);
-        await foreach (var currentTrace in _traceSchema.ReadAll(traceReader))
+        await foreach (var currentTrace in _traceSchema.ReadAll(traceFile))
         {
-            _sequenceId++;
+            if (!currentTrace.Event!.StartsWith("branches:"))
+                continue;
+
+
+
             var currComm = currentTrace.IpComm ?? currentTrace.AddressComm;
             if (_threadNameState.HasValue && currComm != null)
             {
                 var (trackEvent, threadComms) = _threadNameState.Value;
-                var lastComm = threadComms.Last();
+                var lastComm = threadComms.LastOrDefault();
                 if (lastComm != currComm)
                 {
-                    threadComms.Add(lastComm);
+                    threadComms.Add(currComm);
                     trackEvent.Name = string.Join(" => ", threadComms);
                 }
             }
 
+            var name = currentTrace.IpSym ?? currentTrace.AddressSym ?? currentTrace.Event ?? "Unknown";
+
             if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
             {
+                calls++;
                 Trace.Packet.Add(new TracePacket()
                 {
                     Timestamp = currentTrace.Time,
@@ -80,12 +129,14 @@ public class Processor : Visitor
                     {
                         Type = TrackEvent.Types.Type.SliceBegin,
                         TrackUuid = _trackId,
+                        Name = name
                     },
-                    TrustedPacketSequenceId = _sequenceId
+                    TrustedPacketSequenceId = _trackId
                 });
             }
             if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
             {
+                returns++;
                 Trace.Packet.Add(new TracePacket()
                 {
                     Timestamp = currentTrace.Time,
@@ -94,7 +145,7 @@ public class Processor : Visitor
                         Type = TrackEvent.Types.Type.SliceEnd,
                         TrackUuid = _trackId
                     },
-                    TrustedPacketSequenceId = _sequenceId
+                    TrustedPacketSequenceId = _trackId
                 });
             }
         }

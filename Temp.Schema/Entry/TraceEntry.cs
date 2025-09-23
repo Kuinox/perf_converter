@@ -22,7 +22,7 @@ public struct TraceEntry
     public ulong Weight;
     public byte Cpumode;
     public byte AddrCorrelatesSym;
-    public string? Event;
+    public string Event;
     public uint MachinePid;
     public uint Vcpu;
 

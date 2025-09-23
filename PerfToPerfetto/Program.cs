@@ -24,13 +24,13 @@ class Program
 
         try
         {
-            var converter = new Processor();
-            await converter.VisitRoot(inputFolder);
-            using var fs = File.Create(outputFile);
+           
             if(File.Exists(outputFile))
                 File.Delete(outputFile);
+            using var fs = File.Create(outputFile);
+            var converter = new Processor();
+            await converter.VisitRoot(inputFolder);
             converter.Trace.WriteTo(fs);
-
             Console.WriteLine($"Successfully converted {inputFolder} to {outputFile}");
             return 0;
         }
