@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Temp.Schema;
 
-class TraceVisitor(IAsyncEnumerable<TraceEntry> entries)
+public class TraceVisitor(IAsyncEnumerable<TraceEntry> entries)
 {
     public virtual async ValueTask Visit()
     {
@@ -16,7 +16,7 @@ class TraceVisitor(IAsyncEnumerable<TraceEntry> entries)
         {
             VisitEntry(entry);
         }
-    }
+     }
 
     protected virtual void VisitEntry(TraceEntry entry)
     {

@@ -54,37 +54,23 @@ public struct TraceEntry
     public byte[] AddressBuildId;
     public byte AddressFiltered;
     public string? AddressComm;
-    
+
     // Static pools for reusing string and byte array allocations
     private static readonly ConcurrentDictionary<string, WeakReference<string>> StringPool = new();
     private static readonly ConcurrentDictionary<int, WeakReference<byte[]>> ByteArrayPool = new();
-    
+
     // UTF-8 byte content cache for avoiding Marshal.PtrToStringUTF8 allocations
     private static readonly ConcurrentDictionary<int, (WeakReference<string> StringRef, byte[] ByteContent)> Utf8ByteCache = new();
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static string GetOrInternString(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return string.Empty;
-        
-        if (StringPool.TryGetValue(value, out var weakRef) && 
-            weakRef.TryGetTarget(out var cachedString))
-        {
-            return cachedString;
-        }
 
-        var interned = string.Intern(value);
-        StringPool.TryAdd(value, new WeakReference<string>(interned));
-        return interned;
-    }
-    
+    public override readonly string ToString() => IpDso ?? string.Format("0x{0:X}", IpAddress);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static byte[] GetOrCreateByteArray(ReadOnlySpan<byte> source)
     {
-        if (source.IsEmpty) return Array.Empty<byte>();
-        
+        if (source.IsEmpty) return [];
+
         var hash = GetByteArrayHash(source);
-        if (ByteArrayPool.TryGetValue(hash, out var weakRef) && 
+        if (ByteArrayPool.TryGetValue(hash, out var weakRef) &&
             weakRef.TryGetTarget(out var cachedArray) &&
             cachedArray.AsSpan().SequenceEqual(source))
         {
@@ -95,7 +81,7 @@ public struct TraceEntry
         ByteArrayPool.TryAdd(hash, new WeakReference<byte[]>(newArray));
         return newArray;
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetByteArrayHash(ReadOnlySpan<byte> bytes)
     {
@@ -106,26 +92,26 @@ public struct TraceEntry
         }
         return hash.ToHashCode();
     }
-    
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static unsafe string GetOrInternStringFromPtr(nint ptr)
     {
         if (ptr == 0) return string.Empty;
-        
+
         // Read UTF-8 bytes directly from pointer until null terminator
         var bytePtr = (byte*)ptr;
         var length = 0;
         while (bytePtr[length] != 0) length++;
-        
+
         if (length == 0) return string.Empty;
-        
+
         var bytes = new ReadOnlySpan<byte>(bytePtr, length);
-        
+
         // Hash the byte content using HashCode API
         var hash = new HashCode();
         hash.AddBytes(bytes);
         var hashValue = hash.ToHashCode();
-        
+
         // Check cache for existing string with same byte content
         if (Utf8ByteCache.TryGetValue(hashValue, out var cached) &&
             cached.StringRef.TryGetTarget(out var cachedString) &&
@@ -133,16 +119,16 @@ public struct TraceEntry
         {
             return cachedString;
         }
-        
+
         // Cache miss - use Marshal to create string and cache it
         var newString = Marshal.PtrToStringUTF8(ptr)!;
         var internedString = string.Intern(newString);
         var bytesCopy = bytes.ToArray();
-        
+
         Utf8ByteCache.TryAdd(hashValue, (new WeakReference<string>(internedString), bytesCopy));
         return internedString;
     }
-    
+
     public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
     {
         var entry = new TraceEntry
@@ -197,7 +183,7 @@ public struct TraceEntry
 
         return entry;
     }
-    
+
     public static void CleanupPools()
     {
         // Clean up dead weak references

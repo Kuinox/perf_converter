@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.12.35527.113
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11010.61 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfConverter", "PerfConverter\PerfConverter.csproj", "{4FCC1249-59B7-483F-AC37-D49E1504FB10}"
 EndProject
@@ -28,6 +28,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetoo.Tests", "PerfToPerfetoo.Tests\PerfToPerfetoo.Tests.csproj", "{3E342268-EE14-4665-BAFA-AB7CCE9BB324}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "StackFixer", "StackFixer\StackFixer.csproj", "{AD7BC089-F966-4151-881B-51EA801CA8BA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Temp.Schema.Tests", "Temp.Schema.Tests\Temp.Schema.Tests.csproj", "{13E4A42D-7232-45D0-B393-CB08926F92DF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -135,6 +137,18 @@ Global
 		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x64.Build.0 = Release|Any CPU
 		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x86.ActiveCfg = Release|Any CPU
 		{AD7BC089-F966-4151-881B-51EA801CA8BA}.Release|x86.Build.0 = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|x64.Build.0 = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|x86.Build.0 = Debug|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|x64.ActiveCfg = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|x64.Build.0 = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|x86.ActiveCfg = Release|Any CPU
+		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
