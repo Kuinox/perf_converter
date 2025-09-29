@@ -5,30 +5,20 @@ using PerfConverter.Persistence;
 namespace PerfConverter;
 
 sealed class SegmentProcessor(
-    uint pid,
-    uint tid,
-    int segmentId,
-    string traceKey,
-    string stackRangeKey,
-    Func<string, IPersister<TraceEntry>> tracePersistenceFactory,
-    Func<string, IPersister<StackRange>> stackRangePersistenceFactory) : IAsyncDisposable
+    IPersister<TraceEntry> tracePersister,
+    IPersister<StackRange>? stackRangePersister)
 {
-    readonly IPersister<TraceEntry> _tracePersister = tracePersistenceFactory(traceKey);
-    readonly IPersister<StackRange> _stackRangePersister = stackRangePersistenceFactory(stackRangeKey);
     readonly Stack<ulong> _stackStarts = new();
-
-    public int SegmentId { get; } = segmentId;
-    public uint Tid { get; } = tid;
-    public uint Pid { get; } = pid;
 
     public unsafe void ProcessData(ulong entryId, PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
         var entry = TraceEntry.CreateFromPerf(sample, ip, address, entryId);
-        _tracePersister.Persist(entry);
-        ProcessStackTracking(entry);
+        tracePersister.Persist(entry);
+        if (stackRangePersister != null)
+            ProcessStackTracking(entry, stackRangePersister);
     }
 
-    void ProcessStackTracking(TraceEntry trace)
+    void ProcessStackTracking(TraceEntry trace, IPersister<StackRange> stackRangePersister)
     {
         if (trace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
         {
@@ -42,13 +32,7 @@ sealed class SegmentProcessor(
                 StartTrace = startTrace,
                 EndTrace = trace.Id
             };
-            _stackRangePersister.Persist(stackRange);
+            stackRangePersister.Persist(stackRange);
         }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await _tracePersister.DisposeAsync();
-        await _stackRangePersister.DisposeAsync();
     }
 }

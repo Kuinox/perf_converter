@@ -2,19 +2,8 @@ using Parquet;
 using PerfConverter.Entry;
 using PerfConverter.Schema;
 namespace PerfConverter.Persistence.ParquetDotNet;
-public class ParquetStackRangePersistence : IBatchPersistence<StackRange>
+public sealed class ParquetStackRangePersistence(StackRangeSchema schema, ParquetWriter writer, FileStream fileStream) : IBatchPersistence<StackRange>
 {
-    private readonly ParquetWriter _writer;
-    private readonly FileStream _fileStream;
-    private readonly StackRangeSchema _schema;
-
-    private ParquetStackRangePersistence(StackRangeSchema schema, ParquetWriter writer, FileStream fileStream)
-    {
-        _schema = schema;
-        _writer = writer;
-        _fileStream = fileStream;
-    }
-
     private int _prevSize;
     public async Task PersistAsync(IReadOnlyCollection<StackRange> batch)
     {
@@ -23,26 +12,26 @@ public class ParquetStackRangePersistence : IBatchPersistence<StackRange>
         if (batch.Count != _prevSize)
         {
             _prevSize = batch.Count;
-            _schema.Resize(batch.Count);
+            schema.Resize(batch.Count);
         }
 
         int i = 0;
         foreach (var entry in batch)
         {
-            _schema.StartTrace.Buffer[i] = entry.StartTrace;
-            _schema.EndTrace.Buffer[i] = entry.EndTrace;
+            schema.StartTrace.Buffer[i] = entry.StartTrace;
+            schema.EndTrace.Buffer[i] = entry.EndTrace;
             i++;
         }
-        await _schema.Writer(_writer);
+        await schema.Writer(writer);
     }
 
-    Task _dispose;
+    Task? _dispose;
 
     public async ValueTask DisposeAsync()
     {
         _dispose ??= Task.WhenAll(
-            _writer.DisposeAsync().AsTask(),
-            _fileStream.DisposeAsync().AsTask()
+            writer.DisposeAsync().AsTask(),
+            fileStream.DisposeAsync().AsTask()
         );
         await _dispose;
     }

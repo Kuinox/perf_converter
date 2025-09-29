@@ -66,9 +66,6 @@ internal class Program
             return 1;
         }
 
-        AnsiConsole.MarkupLine($"[yellow]Extracting auxiliary data loss events...[/]");
-        var dataLost = GetAuxDataLost(inputFile.FullName);
-
         var dlFilterPath = Path.Combine(AppContext.BaseDirectory, "PerfConverter.so");
 
         if (!File.Exists(dlFilterPath))
@@ -83,13 +80,11 @@ internal class Program
         Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
 
         var perfCommand = $"perf script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}";
-        var auxDataLoss = JsonSerializer.Serialize(dataLost);
 
         if (dryRun)
         {
             AnsiConsole.MarkupLine("[green]Would execute:[/]");
             AnsiConsole.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
-            AnsiConsole.WriteLine($"export AUX_DATA_LOSS='{auxDataLoss}'");
             AnsiConsole.WriteLine(perfCommand);
             return 0;
         }
@@ -104,7 +99,6 @@ internal class Program
         };
 
         processInfo.Environment["OUTPUT_DIRECTORY"] = outputDir.FullName;
-        processInfo.Environment["AUX_DATA_LOSS"] = auxDataLoss;
 
         try
         {
@@ -116,40 +110,6 @@ internal class Program
             return 1;
         }
     }
-
-
-    private static IReadOnlyCollection<AuxDataLost> GetAuxDataLost(string perfFilePath)
-    {
-        List<AuxDataLost> _dataLostTimes = [];
-        var entryCount = 0L;
-        var lastUpdate = DateTime.UtcNow;
-
-        return AnsiConsole.Status()
-            .Start("Processing aux data...", ctx =>
-            {
-                AuxDataExtractor.Process(perfFilePath, entry =>
-                {
-                    entryCount++;
-                    if (entry.HasValue)
-                    {
-                        if (entry.Value.Flags != 0)
-                        {
-                            _dataLostTimes.Add(new AuxDataLost(entry.Value.Time, entry.Value.Tid, entry.Value.Pid));
-                        }
-                    }
-
-                    if (DateTime.UtcNow - lastUpdate > TimeSpan.FromMilliseconds(100))
-                    {
-                        ctx.Status($"Processed {entryCount:N0} entries, found {_dataLostTimes.Count} aux data loss events");
-                        lastUpdate = DateTime.UtcNow;
-                    }
-                });
-
-                ctx.Status($"Completed: {entryCount:N0} entries processed, {_dataLostTimes.Count} aux data loss events found");
-                return _dataLostTimes;
-            });
-    }
-
     private static async Task<int> RunPerfWithMonitor(ProcessStartInfo processInfo)
     {
         using var process = Process.Start(processInfo);

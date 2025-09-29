@@ -1,42 +1,51 @@
 ﻿using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
+using Temp.Schema.Entry;
 
 namespace PerfConverter;
 
-class ThreadProcessor(uint tid, uint pid, IEnumerable<ulong> auxDrop, Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory) : IAsyncDisposable
+class ThreadProcessor : IAsyncDisposable
 {
-    readonly Queue<ulong> _auxDrop = new(auxDrop.Order());
-    readonly List<string> _threadNames = [];
-    int _currentSegmentId = 0;
-    SegmentProcessor? _segment;
-    readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory = tracePersistenceFactory;
-    readonly Func<string, IPersister<StackRange>> _stackRangePersistenceFactory = stackRangePersistenceFactory;
-
-    public uint Tid { get; } = tid;
-    public uint Pid { get; } = pid;
+    readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory;
+    readonly Dictionary<string, SegmentProcessor> _eventMapping = [];
+    readonly List<IPersister<TraceEntry>> _tracePersisters = [];
+    readonly IPersister<StackRange> _stackPersister;
 
     ulong _currentEntryId = 1;
 
+    public ThreadProcessor(uint pid,
+                           uint tid,
+                           Func<string, IPersister<TraceEntry>> tracePersistenceFactory,
+                           Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
+    {
+        _tracePersistenceFactory = tracePersistenceFactory;
+        var key = $"pid={pid}/tid={tid}/branches_stackranges.parquet";
+        _stackPersister = stackRangePersistenceFactory(key);
+    }
+
     public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
     {
-        var isNewSegment = _auxDrop.TryPeek(out var newTraceTime) && newTraceTime < sample->time;
-        if (isNewSegment)
+        var @event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event);
+        if (!_eventMapping.TryGetValue(@event, out var processor))
         {
-            _segment?.DisposeAsync().AsTask();
-            _auxDrop.Dequeue();
-            _currentSegmentId++;
-            var traceKey = $"pid={sample->pid}/tid={sample->tid}/segment{_currentSegmentId}.parquet";
-            var stackRangeKey = $"pid={sample->pid}/tid={sample->tid}/segment{_currentSegmentId}_stackranges.parquet";
-            _segment = new SegmentProcessor(Pid, Tid, _currentSegmentId, traceKey, stackRangeKey, _tracePersistenceFactory, _stackRangePersistenceFactory);
+            var eventName = @event.Split(':')[0];
+            var traceKey = $"pid={sample->pid}/tid={sample->tid}/{eventName}.parquet";
+            var tracePersister = _tracePersistenceFactory(traceKey);
+
+            _tracePersisters.Add(tracePersister);
+
+            processor = new SegmentProcessor(tracePersister, _stackPersister);
         }
 
-        _segment!.ProcessData(_currentEntryId++, sample, ip, address);
+        processor.ProcessData(_currentEntryId++, sample, ip, address);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_segment is not null)
-            await _segment.DisposeAsync();
+        var task = _stackPersister.DisposeAsync().AsTask();
+        var tasks = _tracePersisters.Select(x => x.DisposeAsync().AsTask());
+        await Task.WhenAll(tasks);
+        await task;
     }
 }
