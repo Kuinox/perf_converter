@@ -24,7 +24,7 @@ class ThreadProcessor : IAsyncDisposable
         _stackPersister = stackRangePersistenceFactory(key);
     }
 
-    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address)
+    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string srcFilePath, uint lineNumber)
     {
         var @event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event);
         if (!_eventMapping.TryGetValue(@event, out var processor))
@@ -38,7 +38,7 @@ class ThreadProcessor : IAsyncDisposable
             processor = new SegmentProcessor(tracePersister, _stackPersister);
         }
 
-        processor.ProcessData(_currentEntryId++, sample, ip, address);
+        processor.ProcessData(_currentEntryId++, sample, ip, address, srcFilePath, lineNumber);
     }
 
     public async ValueTask DisposeAsync()

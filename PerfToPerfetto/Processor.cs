@@ -1,10 +1,10 @@
 ﻿using Parquet;
 using PerfConverter.PerfStructs;
-using PerfConverter.Schema;
 using Perfetto.Protos;
 using System.Diagnostics;
 using System.Reflection.Emit;
 using Temp.Schema;
+using Temp.Schema.Schema;
 
 namespace PerfToPerfetto;
 

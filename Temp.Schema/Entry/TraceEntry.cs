@@ -24,6 +24,8 @@ public struct TraceEntry
     public string Event;
     public uint MachinePid;
     public uint Vcpu;
+    public string SrcFileName;
+    public uint SrcLineNumber;
 
     // ip
     public ulong IpAddress;
@@ -54,9 +56,7 @@ public struct TraceEntry
     public byte AddressFiltered;
     public string? AddressComm;
 
-    public override readonly string ToString() => IpDso ?? string.Format("0x{0:X}", IpAddress);
-
-    public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id)
+    public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id, string srcFilePath, uint lineNumber)
     {
         var entry = new TraceEntry
         {
@@ -76,6 +76,8 @@ public struct TraceEntry
             Event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event),
             MachinePid = (uint)sample->machine_pid,
             Vcpu = (uint)sample->vcpu,
+            SrcFileName = srcFilePath,
+            SrcLineNumber = lineNumber,
 
             IpAddress = ip->addr,
             IpSymoff = ip->symoff,

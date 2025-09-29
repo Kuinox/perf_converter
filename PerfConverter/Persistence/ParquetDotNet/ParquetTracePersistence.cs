@@ -1,6 +1,6 @@
 ﻿using Parquet;
 using PerfConverter.Entry;
-using PerfConverter.Schema;
+using Temp.Schema.Schema;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 

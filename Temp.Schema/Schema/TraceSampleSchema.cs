@@ -3,9 +3,10 @@ using Parquet.Data;
 using Parquet.Schema;
 using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
+using PerfConverter.Schema;
 using System.Collections.Concurrent;
 
-namespace PerfConverter.Schema;
+namespace Temp.Schema.Schema;
 
 public class TraceSampleSchema
 {
@@ -73,6 +74,8 @@ public class TraceSampleSchema
     public ParquetColumn<string?> Event { get; } = new("event");
     public ParquetColumn<uint> MachinePid { get; } = new("machinePid");
     public ParquetColumn<uint> Vcpu { get; } = new("vcpu");
+    public ParquetColumn<string> SourceFileName { get; } = new("srcFileName");
+    public ParquetColumn<uint> SourceLineNumber { get; } = new("srcLineNumber");
     public ParquetColumn<uint> IpSymoff { get; } = new("ipSymoff");
     public ParquetColumn<string?> IpSym { get; } = new("ipSym");
     public ParquetColumn<ulong> IpSymStart { get; } = new("ipSymStart");
@@ -119,6 +122,8 @@ public class TraceSampleSchema
         await Event.Write(groupWriter);
         await MachinePid.Write(groupWriter);
         await Vcpu.Write(groupWriter);
+        await SourceFileName.Write(groupWriter);
+        await SourceLineNumber.Write(groupWriter);
         await IpSymoff.Write(groupWriter);
         await IpSym.Write(groupWriter);
         await IpSymStart.Write(groupWriter);
@@ -173,6 +178,8 @@ public class TraceSampleSchema
         Event.Field,
         MachinePid.Field,
         Vcpu.Field,
+        SourceFileName.Field,
+        SourceLineNumber.Field,
         IpSymoff.Field,
         IpSym.Field,
         IpSymStart.Field,
@@ -198,7 +205,7 @@ public class TraceSampleSchema
         AddressComm.Field];
 
 
-    async Task<DataColumn> ReadParallel(string path, DataField dataField, int rowGroupId)
+    static async Task<DataColumn> ReadParallel(string path, DataField dataField, int rowGroupId)
     {
         using var reader = await ParquetReader.CreateAsync(path);
         var groupReader = reader.RowGroups[rowGroupId];
@@ -315,7 +322,7 @@ public class TraceSampleSchema
         }
     }
 
-    
+
 
     public void Resize(int newSize)
     {

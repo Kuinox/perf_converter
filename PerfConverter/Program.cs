@@ -2,6 +2,7 @@
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.ParquetDotNet;
 using System.Runtime.InteropServices;
+using Temp.Schema.Entry;
 
 namespace PerfConverter;
 
@@ -66,12 +67,15 @@ public unsafe class PerfDlFilter
             state.EventCount++;
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
+            uint lineNumber = 0;
+            var srcFileNamePtr = fns->srcline(ctx, &lineNumber);
+            var srcFileName = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
             PerfDlfilterAl* address = null;
             if (sample->addr_correlates_sym != 0)
             {
                 address = fns->resolve_addr(ctx);
             }
-            _traceProcessor.ProcessData(sample, ip, address);
+            _traceProcessor.ProcessData(sample, ip, address, srcFileName, lineNumber);
 
             var now = DateTime.UtcNow;
             if ((now - state.LastReportTime).TotalMilliseconds > 50)
@@ -79,7 +83,7 @@ public unsafe class PerfDlFilter
                 Console.WriteLine($"PROGRESS:{state.EventCount}");
                 state.LastReportTime = now;
             }
-            
+
         }
         catch (Exception ex)
         {
