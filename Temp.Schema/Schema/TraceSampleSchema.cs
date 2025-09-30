@@ -31,6 +31,8 @@ public class TraceSampleSchema
             Event.Field,
             MachinePid.Field,
             Vcpu.Field,
+            SourceFileName.Field,
+            SourceLineNumber.Field,
             IpSymoff.Field,
             IpSym.Field,
             IpSymStart.Field,
