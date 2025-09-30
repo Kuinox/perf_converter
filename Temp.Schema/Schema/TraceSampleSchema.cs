@@ -246,29 +246,31 @@ public class TraceSampleSchema
             var @event = results[15].AsSpan<string>();
             var machinePid = results[16].AsSpan<uint>();
             var vcpu = results[17].AsSpan<uint>();
-            var ipSymoff = results[18].AsSpan<uint>();
-            var ipSym = results[19].AsSpan<string>();
-            var ipSymStart = results[20].AsSpan<ulong>();
-            var ipSymEnd = results[21].AsSpan<ulong>();
-            var ipDso = results[22].AsSpan<string>();
-            var ipSymBinding = results[23].AsSpan<byte>();
-            var ipIs64Bit = results[24].AsSpan<byte>();
-            var ipIsKernelIp = results[25].AsSpan<byte>();
-            var ipBuildId = results[26].AsSpan<byte[]>();
-            var ipFiltered = results[27].AsSpan<byte>();
-            var ipComm = results[28].AsSpan<string>();
-            var haveAddress = results[29].AsSpan<bool>();
-            var addressSymoff = results[30].AsSpan<uint>();
-            var addressSym = results[31].AsSpan<string>();
-            var addressSymStart = results[32].AsSpan<ulong>();
-            var addressSymEnd = results[33].AsSpan<ulong>();
-            var addressDso = results[34].AsSpan<string>();
-            var addressSymBinding = results[35].AsSpan<byte>();
-            var addressIs64Bit = results[36].AsSpan<byte>();
-            var addressIsKernelIp = results[37].AsSpan<byte>();
-            var addressBuildId = results[38].AsSpan<byte[]>();
-            var addressFiltered = results[39].AsSpan<byte>();
-            var addressComm = results[40].AsSpan<string>();
+            var sourceFileName = results[18].AsSpan<string>();
+            var sourceLineNumber = results[19].AsSpan<uint>();
+            var ipSymoff = results[20].AsSpan<uint>();
+            var ipSym = results[21].AsSpan<string>();
+            var ipSymStart = results[22].AsSpan<ulong>();
+            var ipSymEnd = results[23].AsSpan<ulong>();
+            var ipDso = results[24].AsSpan<string>();
+            var ipSymBinding = results[25].AsSpan<byte>();
+            var ipIs64Bit = results[26].AsSpan<byte>();
+            var ipIsKernelIp = results[27].AsSpan<byte>();
+            var ipBuildId = results[28].AsSpan<byte[]>();
+            var ipFiltered = results[29].AsSpan<byte>();
+            var ipComm = results[30].AsSpan<string>();
+            var haveAddress = results[31].AsSpan<bool>();
+            var addressSymoff = results[32].AsSpan<uint>();
+            var addressSym = results[33].AsSpan<string>();
+            var addressSymStart = results[34].AsSpan<ulong>();
+            var addressSymEnd = results[35].AsSpan<ulong>();
+            var addressDso = results[36].AsSpan<string>();
+            var addressSymBinding = results[37].AsSpan<byte>();
+            var addressIs64Bit = results[38].AsSpan<byte>();
+            var addressIsKernelIp = results[39].AsSpan<byte>();
+            var addressBuildId = results[40].AsSpan<byte[]>();
+            var addressFiltered = results[41].AsSpan<byte>();
+            var addressComm = results[42].AsSpan<string>();
 
             var buffer = new TraceEntry[results[0].Data.Length];
 
@@ -294,6 +296,8 @@ public class TraceSampleSchema
                     Event = @event[i],
                     MachinePid = machinePid[i],
                     Vcpu = vcpu[i],
+                    SourceFileName = sourceFileName[i],
+                    SourceLineNumber = sourceLineNumber[i],
                     IpSymoff = ipSymoff[i],
                     IpSym = ipSym[i],
                     IpSymStart = ipSymStart[i],
@@ -346,6 +350,8 @@ public class TraceSampleSchema
         Event.Resize(newSize);
         MachinePid.Resize(newSize);
         Vcpu.Resize(newSize);
+        SourceFileName.Resize(newSize);
+        SourceLineNumber.Resize(newSize);
         IpSymoff.Resize(newSize);
         IpSym.Resize(newSize);
         IpSymStart.Resize(newSize);

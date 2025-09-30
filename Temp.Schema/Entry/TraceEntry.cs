@@ -24,8 +24,8 @@ public struct TraceEntry
     public string Event;
     public uint MachinePid;
     public uint Vcpu;
-    public string SrcFileName;
-    public uint SrcLineNumber;
+    public string SourceFileName;
+    public uint SourceLineNumber;
 
     // ip
     public ulong IpAddress;
@@ -76,8 +76,8 @@ public struct TraceEntry
             Event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event),
             MachinePid = (uint)sample->machine_pid,
             Vcpu = (uint)sample->vcpu,
-            SrcFileName = srcFilePath,
-            SrcLineNumber = lineNumber,
+            SourceFileName = srcFilePath,
+            SourceLineNumber = lineNumber,
 
             IpAddress = ip->addr,
             IpSymoff = ip->symoff,

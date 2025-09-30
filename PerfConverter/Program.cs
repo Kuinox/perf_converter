@@ -93,7 +93,8 @@ public unsafe class PerfDlFilter
             var now = DateTime.UtcNow;
             if ((now - state.LastReportTime).TotalMilliseconds > 50)
             {
-                Console.WriteLine($"PROGRESS:{state.EventCount}");
+                Console.Write($"PROGRESS:");
+                Console.WriteLine(state.EventCount);
                 state.LastReportTime = now;
             }
 
