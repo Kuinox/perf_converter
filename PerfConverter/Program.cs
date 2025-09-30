@@ -1,6 +1,7 @@
 ﻿using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.ParquetDotNet;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Temp.Schema.Entry;
 
@@ -57,6 +58,10 @@ public unsafe class PerfDlFilter
         }
     }
 
+    record struct SrcLineKey(ulong Addr, string Dso);
+
+    static readonly Dictionary<SrcLineKey, (string, uint)> _srcLineCache = [];
+
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
@@ -67,15 +72,23 @@ public unsafe class PerfDlFilter
             state.EventCount++;
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
-            uint lineNumber = 0;
-            var srcFileNamePtr = fns->srcline(ctx, &lineNumber);
-            var srcFileName = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
+
+            var dso = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->dso);
+            var key = new SrcLineKey(ip->addr, dso);
+
+            if (!_srcLineCache.TryGetValue(key, out var srcLine))
+            {
+                var srcFileNamePtr = fns->srcline(ctx, &srcLine.Item2);
+                srcLine.Item1 = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
+                _srcLineCache.Add(key, srcLine);
+            }
+
             PerfDlfilterAl* address = null;
             if (sample->addr_correlates_sym != 0)
             {
                 address = fns->resolve_addr(ctx);
             }
-            _traceProcessor.ProcessData(sample, ip, address, srcFileName, lineNumber);
+            _traceProcessor.ProcessData(sample, ip, address, srcLine.Item1, srcLine.Item2);
 
             var now = DateTime.UtcNow;
             if ((now - state.LastReportTime).TotalMilliseconds > 50)
