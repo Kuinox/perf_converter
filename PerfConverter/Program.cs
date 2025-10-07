@@ -19,6 +19,7 @@ public unsafe class PerfDlFilter
     class State
     {
         public int EventCount { get; set; }
+        public int LastReportedCount { get; set; }
         public DateTime LastReportTime { get; set; } = DateTime.UtcNow;
     }
 
@@ -40,6 +41,7 @@ public unsafe class PerfDlFilter
             var state = new State
             {
                 EventCount = 0,
+                LastReportedCount = 0,
                 LastReportTime = DateTime.UtcNow
             };
 
@@ -90,11 +92,28 @@ public unsafe class PerfDlFilter
             }
             _traceProcessor.ProcessData(sample, ip, address, srcLine.Item1, srcLine.Item2);
 
+            // Report every 1000 events or every 200ms
             var now = DateTime.UtcNow;
-            if ((now - state.LastReportTime).TotalMilliseconds > 50)
+            var deltaCount = state.EventCount - state.LastReportedCount;
+            var timeSinceLastReport = (now - state.LastReportTime).TotalMilliseconds;
+
+            if (deltaCount >= 1000)
             {
-                Console.Write($"PROGRESS:");
+                // Report +1000 for each 1000 events
+                var deltaToReport = (deltaCount / 1000) * 1000;
+                for (int i = 0; i < deltaToReport / 1000; i++)
+                {
+                    Console.WriteLine("PROGRESS:+1000");
+                }
+                state.LastReportedCount += deltaToReport;
+                state.LastReportTime = now;
+            }
+            else if (timeSinceLastReport > 200)
+            {
+                // Report full count if time elapsed
+                Console.Write("PROGRESS:");
                 Console.WriteLine(state.EventCount);
+                state.LastReportedCount = state.EventCount;
                 state.LastReportTime = now;
             }
 

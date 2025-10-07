@@ -4,18 +4,8 @@ using Temp.Schema.Schema;
 
 namespace PerfConverter.Persistence.ParquetDotNet;
 
-public class ParquetTracePersistence : IBatchPersistence<TraceEntry>
+public class ParquetTracePersistence(TraceSampleSchema schema, ParquetWriter writer, FileStream fileStream) : IBatchPersistence<TraceEntry>
 {
-    readonly ParquetWriter _writer;
-    readonly FileStream _fileStream;
-    readonly TraceSampleSchema _schema;
-    ParquetTracePersistence(TraceSampleSchema schema, ParquetWriter writer, FileStream fileStream)
-    {
-        _writer = writer;
-        _fileStream = fileStream;
-        _schema = schema;
-    }
-
     int _prevSize;
     public async Task PersistAsync(IReadOnlyCollection<TraceEntry> batch)
     {
@@ -24,63 +14,65 @@ public class ParquetTracePersistence : IBatchPersistence<TraceEntry>
         if (batch.Count != _prevSize)
         {
             _prevSize = batch.Count;
-            _schema.Resize(batch.Count);
+            schema.Resize(batch.Count);
         }
 
         int i = 0;
         foreach (var entry in batch)
         {
-            _schema.Id.Buffer[i] = entry.Id;
-            _schema.PerfId.Buffer[i] = entry.PerfId;
-            _schema.Pid.Buffer[i] = entry.Pid;
-            _schema.Tid.Buffer[i] = entry.Tid;
-            _schema.Time.Buffer[i] = entry.Time;
-            _schema.Cpu.Buffer[i] = entry.Cpu;
-            _schema.Flags.Buffer[i] = (uint)entry.Flags;
-            _schema.Ip.Buffer[i] = entry.IpAddress;
-            _schema.Addr.Buffer[i] = entry.AddressAddress;
-            _schema.Period.Buffer[i] = entry.Period;
-            _schema.InsnCnt.Buffer[i] = entry.InsnCnt;
-            _schema.CycCnt.Buffer[i] = entry.CycCnt;
-            _schema.Weight.Buffer[i] = entry.Weight;
-            _schema.Cpumode.Buffer[i] = entry.Cpumode;
-            _schema.AddrCorrelatesSym.Buffer[i] = entry.AddrCorrelatesSym;
-            _schema.Event.Buffer[i] = entry.Event;
-            _schema.MachinePid.Buffer[i] = entry.MachinePid;
-            _schema.Vcpu.Buffer[i] = entry.Vcpu;
-            _schema.IpSymoff.Buffer[i] = entry.IpSymoff;
-            _schema.IpSym.Buffer[i] = entry.IpSym;
-            _schema.IpSymStart.Buffer[i] = entry.IpSymStart;
-            _schema.IpSymEnd.Buffer[i] = entry.IpSymEnd;
-            _schema.IpDso.Buffer[i] = entry.IpDso;
-            _schema.IpSymBinding.Buffer[i] = entry.IpSymBinding;
-            _schema.IpIs64Bit.Buffer[i] = entry.IpIs64Bit;
-            _schema.IpIsKernelIp.Buffer[i] = entry.IpIsKernelIp;
-            _schema.IpBuildId.Buffer[i] = entry.IpBuildId;
-            _schema.IpFiltered.Buffer[i] = entry.IpFiltered;
-            _schema.IpComm.Buffer[i] = entry.IpComm;
-            _schema.HaveAddress.Buffer[i] = entry.HaveAddress;
-            _schema.AddressSymoff.Buffer[i] = entry.AddressSymoff;
-            _schema.AddressSym.Buffer[i] = entry.AddressSym;
-            _schema.AddressSymStart.Buffer[i] = entry.AddressSymStart;
-            _schema.AddressSymEnd.Buffer[i] = entry.AddressSymEnd;
-            _schema.AddressDso.Buffer[i] = entry.AddressDso;
-            _schema.AddressSymBinding.Buffer[i] = entry.AddressSymBinding;
-            _schema.AddressIs64Bit.Buffer[i] = entry.AddressIs64Bit;
-            _schema.AddressIsKernelIp.Buffer[i] = entry.AddressIsKernelIp;
-            _schema.AddressBuildId.Buffer[i] = entry.AddressBuildId;
-            _schema.AddressFiltered.Buffer[i] = entry.AddressFiltered;
-            _schema.AddressComm.Buffer[i] = entry.AddressComm;
+            schema.Id.Buffer[i] = entry.Id;
+            schema.PerfId.Buffer[i] = entry.PerfId;
+            schema.Pid.Buffer[i] = entry.Pid;
+            schema.Tid.Buffer[i] = entry.Tid;
+            schema.Time.Buffer[i] = entry.Time;
+            schema.Cpu.Buffer[i] = entry.Cpu;
+            schema.Flags.Buffer[i] = (uint)entry.Flags;
+            schema.Ip.Buffer[i] = entry.IpAddress;
+            schema.Addr.Buffer[i] = entry.AddressAddress;
+            schema.Period.Buffer[i] = entry.Period;
+            schema.InsnCnt.Buffer[i] = entry.InsnCnt;
+            schema.CycCnt.Buffer[i] = entry.CycCnt;
+            schema.Weight.Buffer[i] = entry.Weight;
+            schema.Cpumode.Buffer[i] = entry.Cpumode;
+            schema.AddrCorrelatesSym.Buffer[i] = entry.AddrCorrelatesSym;
+            schema.Event.Buffer[i] = entry.Event;
+            schema.MachinePid.Buffer[i] = entry.MachinePid;
+            schema.Vcpu.Buffer[i] = entry.Vcpu;
+            schema.SourceFileName.Buffer[i] = entry.SourceFileName;
+            schema.SourceLineNumber.Buffer[i] = entry.SourceLineNumber;
+            schema.IpSymoff.Buffer[i] = entry.IpSymoff;
+            schema.IpSym.Buffer[i] = entry.IpSym;
+            schema.IpSymStart.Buffer[i] = entry.IpSymStart;
+            schema.IpSymEnd.Buffer[i] = entry.IpSymEnd;
+            schema.IpDso.Buffer[i] = entry.IpDso;
+            schema.IpSymBinding.Buffer[i] = entry.IpSymBinding;
+            schema.IpIs64Bit.Buffer[i] = entry.IpIs64Bit;
+            schema.IpIsKernelIp.Buffer[i] = entry.IpIsKernelIp;
+            schema.IpBuildId.Buffer[i] = entry.IpBuildId;
+            schema.IpFiltered.Buffer[i] = entry.IpFiltered;
+            schema.IpComm.Buffer[i] = entry.IpComm;
+            schema.HaveAddress.Buffer[i] = entry.HaveAddress;
+            schema.AddressSymoff.Buffer[i] = entry.AddressSymoff;
+            schema.AddressSym.Buffer[i] = entry.AddressSym;
+            schema.AddressSymStart.Buffer[i] = entry.AddressSymStart;
+            schema.AddressSymEnd.Buffer[i] = entry.AddressSymEnd;
+            schema.AddressDso.Buffer[i] = entry.AddressDso;
+            schema.AddressSymBinding.Buffer[i] = entry.AddressSymBinding;
+            schema.AddressIs64Bit.Buffer[i] = entry.AddressIs64Bit;
+            schema.AddressIsKernelIp.Buffer[i] = entry.AddressIsKernelIp;
+            schema.AddressBuildId.Buffer[i] = entry.AddressBuildId;
+            schema.AddressFiltered.Buffer[i] = entry.AddressFiltered;
+            schema.AddressComm.Buffer[i] = entry.AddressComm;
 
             i++;
         }
-        await _schema.Writer(_writer);
+        await schema.Writer(writer);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await _writer.DisposeAsync();
-        await _fileStream.DisposeAsync();
+        await writer.DisposeAsync();
+        await fileStream.DisposeAsync();
     }
 
     public static async Task<IBatchPersistence<TraceEntry>> Create(string filePath, CompressionMethod compressionMethod)

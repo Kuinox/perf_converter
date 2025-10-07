@@ -2,6 +2,7 @@
 using PerfConverter.PerfStructs;
 using Perfetto.Protos;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection.Emit;
 using Temp.Schema;
 using Temp.Schema.Schema;
@@ -86,10 +87,13 @@ public class Processor : FileVisitor
         _threadNameState = null;
     }
 
-    public override async Task VisitSegment(string segmentFile)
+    public override async Task VisitFile(string path)
     {
-        Console.WriteLine($"Processing {segmentFile}...");
-        await ProcessFile(segmentFile);
+        var fileName = Path.GetFileNameWithoutExtension(path);
+        if (fileName != "branches")
+            return;
+        Console.WriteLine($"Processing {path}...");
+        await ProcessFile(path);
         Console.WriteLine($"Done. Calls: {calls}, Returns: {returns}");
         calls = 0;
         returns = 0;
@@ -100,11 +104,6 @@ public class Processor : FileVisitor
     {
         await foreach (var currentTrace in _traceSchema.ReadAll(traceFile))
         {
-            if (!currentTrace.Event!.StartsWith("branches:"))
-                continue;
-
-
-
             var currComm = currentTrace.IpComm ?? currentTrace.AddressComm;
             if (_threadNameState.HasValue && currComm != null)
             {
@@ -116,8 +115,11 @@ public class Processor : FileVisitor
                     trackEvent.Name = string.Join(" => ", threadComms);
                 }
             }
-
-            var name = currentTrace.IpSym ?? currentTrace.AddressSym ?? currentTrace.Event ?? "Unknown";
+            string name;
+            if (!string.IsNullOrWhiteSpace(currentTrace.SourceFileName))
+                name = currentTrace.SourceFileName + ":" + currentTrace.SourceLineNumber;
+            else
+                name = currentTrace.IpSym ?? currentTrace.AddressSym ?? currentTrace.Event ?? "Unknown";
 
             if (currentTrace.Flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
             {

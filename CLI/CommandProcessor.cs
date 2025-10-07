@@ -28,10 +28,31 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
 
     private void HandleProgressCommand(string command)
     {
-        var progressData = command.AsSpan()[9..].Trim().ToString();
-        if (long.TryParse(progressData, out var eventCount))
+        if (command == "PROGRESS:+1000")
         {
-            viewModel.EventCount = eventCount;
+            // Fast path for the most common case
+            viewModel.EventCount += 1000;
+        }
+        else
+        {
+            var progressData = command.AsSpan()[9..].Trim();
+
+            if (progressData.Length > 0 && progressData[0] == '+')
+            {
+                // Delta update
+                if (long.TryParse(progressData[1..], out var delta))
+                {
+                    viewModel.EventCount += delta;
+                }
+            }
+            else
+            {
+                // Absolute update
+                if (long.TryParse(progressData, out var eventCount))
+                {
+                    viewModel.EventCount = eventCount;
+                }
+            }
         }
     }
 

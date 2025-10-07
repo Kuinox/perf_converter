@@ -26,32 +26,13 @@ public abstract class FileVisitor
 
     public virtual async Task VisitTrack(string path)
     {
-        var segments = Directory.EnumerateFiles(path, "segment*.parquet")
-            .Where(x => !x.Contains("_stackranges.parquet"));
-        foreach (var segment in segments)
+        var files = Directory.EnumerateFiles(path, "*.parquet");
+        foreach (var file in files)
         {
-            var segmentIdStr = Path.GetFileName(segment).Replace("segment", "").Replace(".parquet", "");
-            if (!int.TryParse(segmentIdStr, out var segmentId))
-                throw new InvalidDataException($"Invalid segment file name: {segmentIdStr}");
-
-            var stackRangesFile = segment.Replace(".parquet", "_stackranges.parquet");
-
-            if (File.Exists(stackRangesFile))
-                await VisitSegmentWithStackRanges(segment, stackRangesFile);
-            else
-                await VisitSegment(segment);
+            await VisitFile(file);
         }
     }
 
-    public virtual async Task VisitSegmentWithStackRanges(string segmentFile, string stackRangesFile)
-    {
-        await VisitSegment(segmentFile);
-        await VisitStackRanges(stackRangesFile);
-    }
-
-    public virtual Task VisitStackRanges(string stackRangesFile)
-        => Task.CompletedTask;
-
-    public virtual Task VisitSegment(string segmentFile)
+    public virtual Task VisitFile(string segmentFile)
         => Task.CompletedTask;
 }
