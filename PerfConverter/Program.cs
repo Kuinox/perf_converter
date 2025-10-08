@@ -78,11 +78,12 @@ public unsafe class PerfDlFilter
             var dso = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->dso);
             var key = new SrcLineKey(ip->addr, dso);
 
-            if (!_srcLineCache.TryGetValue(key, out var srcLine))
+            (string, uint) srcLine;
+            //if (!_srcLineCache.TryGetValue(key, out var srcLine))
             {
                 var srcFileNamePtr = fns->srcline(ctx, &srcLine.Item2);
                 srcLine.Item1 = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
-                _srcLineCache.Add(key, srcLine);
+                //_srcLineCache.Add(key, srcLine);
             }
 
             PerfDlfilterAl* address = null;
