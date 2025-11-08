@@ -1,9 +1,6 @@
-﻿using Parquet;
-using PerfConverter.PerfStructs;
+﻿using PerfConverter.PerfStructs;
 using Perfetto.Protos;
 using System.Diagnostics;
-using System.IO;
-using System.Reflection.Emit;
 using Temp.Schema;
 using Temp.Schema.Schema;
 

@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Threading.Channels;
 using PerfConverter.Entry;
+using PerfToPerfetto;
 
 namespace PerfConverter.Persistence;
 
@@ -61,13 +62,14 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         }
     }
 
+    readonly DebounceSignal _debounceFileActivity = new(5000);
+
     async Task Work(List<T> batch, bool lastBatch)
     {
         AccumulateBatch(batch);
         
-        // Report current batch size
-        Console.Error.WriteLine($"FILE_ACTIVITY|{_fileName}|BUFFERED|{batch.Count}");
-        
+        _debounceFileActivity.Debounce($"FILE_ACTIVITY|{_fileName}|ACTIVE|{batch.Count}", batch.Count);
+
         if (!lastBatch && _batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
         await SendBatch(batch);
     }

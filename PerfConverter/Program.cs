@@ -103,7 +103,7 @@ public unsafe class PerfDlFilter
                 var deltaToReport = (deltaCount / 1000) * 1000;
                 for (int i = 0; i < deltaToReport / 1000; i++)
                 {
-                    Console.WriteLine("PROGRESS:+1000");
+                    Console.Error.WriteLine("PROGRESS:+1000");
                 }
                 state.LastReportedCount += deltaToReport;
                 state.LastReportTime = now;
@@ -111,8 +111,8 @@ public unsafe class PerfDlFilter
             else if (timeSinceLastReport > 200)
             {
                 // Report full count if time elapsed
-                Console.Write("PROGRESS:");
-                Console.WriteLine(state.EventCount);
+                Console.Error.Write("PROGRESS:");
+                Console.Error.WriteLine(state.EventCount);
                 state.LastReportedCount = state.EventCount;
                 state.LastReportTime = now;
             }

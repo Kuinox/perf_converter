@@ -24,7 +24,6 @@ class Program
 
         try
         {
-           
             if(File.Exists(outputFile))
                 File.Delete(outputFile);
             using var fs = File.Create(outputFile);
