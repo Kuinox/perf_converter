@@ -20,7 +20,11 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         _batchSize = batchSize;
         _batchingMode = batchingMode;
         _fileName = fileName;
-        _channel = Channel.CreateBounded<T>(batchSize);
+        _channel = Channel.CreateBounded<T>(new BoundedChannelOptions(batchSize)
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
     }
 
     void Start() => _workLoop = Task.Factory.StartNew(WorkLoop, TaskCreationOptions.LongRunning).Unwrap();
@@ -45,6 +49,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
     async Task WorkLoop()
     {
+        // Set thread name for profiling visibility
+        Thread.CurrentThread.Name = $"Batcher:{_fileName}";
+
         try
         {
             var batch = new List<T>();
@@ -80,9 +87,15 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         Stopwatch sw = Stopwatch.StartNew();
         try
         {
-            Console.Error.WriteLine($"FILE_STATUS|{_fileName}|FLUSHING|{batch.Count}");
+            if (Configuration.EnableProgressSignals)
+            {
+                Console.Error.WriteLine($"FILE_STATUS|{_fileName}|FLUSHING|{batch.Count}");
+            }
             await _batchPersistence.PersistAsync(batch);
-            Console.Error.WriteLine($"FILE_STATUS|{_fileName}|BUFFERING");
+            if (Configuration.EnableProgressSignals)
+            {
+                Console.Error.WriteLine($"FILE_STATUS|{_fileName}|BUFFERING");
+            }
         }
         catch (Exception e)
         {
@@ -119,7 +132,10 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
             await _workLoop;
         }
         await _batchPersistence.DisposeAsync();
-        Console.Error.WriteLine($"FILE_STATUS|{_fileName}|CLOSED");
+        if (Configuration.EnableProgressSignals)
+        {
+            Console.Error.WriteLine($"FILE_STATUS|{_fileName}|CLOSED");
+        }
     }
 
     public async ValueTask DisposeAsync()

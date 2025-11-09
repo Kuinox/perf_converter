@@ -97,24 +97,27 @@ public unsafe class PerfDlFilter
             var deltaCount = state.EventCount - state.LastReportedCount;
             var timeSinceLastReport = (now - state.LastReportTime).TotalMilliseconds;
 
-            if (deltaCount >= 1000)
+            if (Configuration.EnableProgressSignals)
             {
-                // Report +1000 for each 1000 events
-                var deltaToReport = (deltaCount / 1000) * 1000;
-                for (int i = 0; i < deltaToReport / 1000; i++)
+                if (deltaCount >= 1000)
                 {
-                    Console.Error.WriteLine("PROGRESS:+1000");
+                    // Report +1000 for each 1000 events
+                    var deltaToReport = (deltaCount / 1000) * 1000;
+                    for (int i = 0; i < deltaToReport / 1000; i++)
+                    {
+                        Console.Error.WriteLine("PROGRESS:+1000");
+                    }
+                    state.LastReportedCount += deltaToReport;
+                    state.LastReportTime = now;
                 }
-                state.LastReportedCount += deltaToReport;
-                state.LastReportTime = now;
-            }
-            else if (timeSinceLastReport > 200)
-            {
-                // Report full count if time elapsed
-                Console.Error.Write("PROGRESS:");
-                Console.Error.WriteLine(state.EventCount);
-                state.LastReportedCount = state.EventCount;
-                state.LastReportTime = now;
+                else if (timeSinceLastReport > 200)
+                {
+                    // Report full count if time elapsed
+                    Console.Error.Write("PROGRESS:");
+                    Console.Error.WriteLine(state.EventCount);
+                    state.LastReportedCount = state.EventCount;
+                    state.LastReportTime = now;
+                }
             }
 
         }

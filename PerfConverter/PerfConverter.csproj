@@ -10,11 +10,15 @@
 		<SelfContained>true</SelfContained>
 		<InterceptorsNamespaces>$(InterceptorsNamespaces);Dapper.AOT</InterceptorsNamespaces>
 		<EventSourceSupport>true</EventSourceSupport>
+		<!-- Enable debug symbols for profiling -->
+		<DebugType>embedded</DebugType>
+		<DebugSymbols>true</DebugSymbols>
+		<StripSymbols>false</StripSymbols>
 	</PropertyGroup>
 	<!--NAOT cannot exports fields, we need to link against a binary that do it. -->
 
 	<Target Name="CompileNative" BeforeTargets="Compile" Condition="'$(OS)' == 'Unix'">
-		<Exec Command="gcc -c -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
+		<Exec Command="gcc -c -g -fpic $(MSBuildThisFileDirectory)../native/exports.c -o $(BaseOutputPath)exports.o" />
 	</Target>
 
 	<!--The exports file that dictate what field/method is exported to the linker need to be updated-->

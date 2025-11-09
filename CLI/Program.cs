@@ -99,6 +99,7 @@ internal class Program
         };
 
         processInfo.Environment["OUTPUT_DIRECTORY"] = outputDir.FullName;
+        processInfo.Environment["ENABLE_PROGRESS_SIGNALS"] = "true";
 
         try
         {

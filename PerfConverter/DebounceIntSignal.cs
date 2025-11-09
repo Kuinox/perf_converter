@@ -11,6 +11,9 @@ class DebounceSignal(int threshold)
 
     public void Debounce(FormattableString message, int value)
     {
+        if (!PerfConverter.Configuration.EnableProgressSignals)
+            return;
+
         if ((Math.Abs(value - _lastSent) > threshold)
             || DateTime.UtcNow - _lastSentTime > _debounceTime)
         {

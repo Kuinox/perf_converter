@@ -45,7 +45,10 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
         return new ParquetPersistenceLifetime(
             traceBatcherFactory: (key) =>
             {
-                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                if (Configuration.EnableProgressSignals)
+                {
+                    Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                }
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
@@ -54,7 +57,10 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
             },
             stackRangeBatcherFactory: (key) =>
             {
-                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                if (Configuration.EnableProgressSignals)
+                {
+                    Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+                }
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);

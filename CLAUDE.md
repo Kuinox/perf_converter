@@ -91,6 +91,7 @@ The following environment variables control PerfConverter's behavior:
 - `OUTPUT_DIRECTORY`: Directory where output files will be written (default: "parquet_output")
 - `PARQUET_COMPRESSION`: Compression method for Parquet output (None, Gzip, Snappy) - default is Snappy
 - `BATCH_SIZE`: Number of items to batch before writing to disk (default: 10,000,000)
+- `ENABLE_PROGRESS_SIGNALS`: When set to `true`, enables verbose progress and file activity signals (PROGRESS, FILE_STATUS, FILE_ACTIVITY). Default is `false` to avoid console spam when running manually
 
 ## Architecture
 
