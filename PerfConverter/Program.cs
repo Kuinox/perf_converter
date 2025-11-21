@@ -78,19 +78,19 @@ public unsafe class PerfDlFilter
             var dso = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->dso);
             var key = new SrcLineKey(ip->addr, dso);
 
-            if (!_srcLineCache.TryGetValue(key, out var srcLine))
-            {
-                var srcFileNamePtr = fns->srcline(ctx, &srcLine.Item2);
-                srcLine.Item1 = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
-                _srcLineCache.Add(key, srcLine);
-            }
+            //if (!_srcLineCache.TryGetValue(key, out var srcLine))
+            //{
+            //    var srcFileNamePtr = fns->srcline(ctx, &srcLine.Item2);
+            //    srcLine.Item1 = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
+            //    _srcLineCache.Add(key, srcLine);
+            //}
 
             PerfDlfilterAl* address = null;
             if (sample->addr_correlates_sym != 0)
             {
                 address = fns->resolve_addr(ctx);
             }
-            _traceProcessor.ProcessData(sample, ip, address, srcLine.Item1, srcLine.Item2);
+            _traceProcessor.ProcessData(sample, ip, address, null, 0);
 
             // Report every 1000 events or every 200ms
             var now = DateTime.UtcNow;
