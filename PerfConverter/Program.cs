@@ -64,11 +64,16 @@ public unsafe class PerfDlFilter
 
     static readonly Dictionary<SrcLineKey, (string, uint)> _srcLineCache = [];
 
+    static ulong _count = 0;
+
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
         try
         {
+            if ((_count++) % 1000 == 0)
+                EntryContentPool.Shared.Tick();
+            
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             state.EventCount++;
