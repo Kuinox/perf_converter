@@ -22,7 +22,7 @@ internal class Program
 
             var perfArgsOption = new Option<string>(
                 ["--perf-args", "-p"],
-                getDefaultValue: () => "-f --itrace=bei0ns",
+                getDefaultValue: () => "-f --itrace=bei0ns --no-inline -F tid",
                 "Additional arguments to pass to perf script");
 
             var outputOption = new Option<DirectoryInfo>(
