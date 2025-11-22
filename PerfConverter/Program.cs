@@ -15,6 +15,7 @@ public unsafe class PerfDlFilter
 
     static TraceProcessor _traceProcessor = null!;
     static ParquetPersistenceLifetime _persistenceLifetime = null!;
+    static ElfSymbolResolver _symbolResolver = null!;
 
     class State
     {
@@ -51,6 +52,32 @@ public unsafe class PerfDlFilter
 
             _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher, _persistenceLifetime.CreateStackRangeBatcher);
 
+            // Initialize symbol resolver by loading all ELF files
+            _symbolResolver = new ElfSymbolResolver();
+            var elfFiles = new List<string>();
+
+            // Load JIT ELF files from ~/.debug/
+            var debugDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".debug");
+            if (Directory.Exists(debugDir))
+            {
+                foreach (var elfPath in Directory.GetFiles(debugDir, "elf", SearchOption.AllDirectories))
+                {
+                    elfFiles.Add(elfPath);
+                }
+            }
+
+            // Load JIT .so files from /tmp/
+            if (Directory.Exists("/tmp"))
+            {
+                foreach (var soPath in Directory.GetFiles("/tmp", "jitted-*.so"))
+                {
+                    elfFiles.Add(soPath);
+                }
+            }
+
+            Console.Error.WriteLine($"Found {elfFiles.Count} ELF files to load symbols from");
+            _symbolResolver.LoadSymbols(elfFiles.ToArray());
+
             return 0;
         }
         catch (Exception ex)
@@ -60,10 +87,6 @@ public unsafe class PerfDlFilter
         }
     }
 
-    record struct SrcLineKey(ulong Addr, string Dso);
-
-    static readonly Dictionary<SrcLineKey, (string, uint)> _srcLineCache = [];
-
     [UnmanagedCallersOnly(EntryPoint = "filter_event_early")]
     public static int FilterEventEarly(void* rawState, PerfDlFilterSample* sample, void* ctx)
     {
@@ -72,25 +95,49 @@ public unsafe class PerfDlFilter
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             state.EventCount++;
-            var fns = get_perf_dlfilter_fns();
-            var ip = fns->resolve_ip(ctx);
 
-            var dso = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->dso);
-            var key = new SrcLineKey(ip->addr, dso);
+            // Resolve IP symbol using our own ELF parser (avoids perf's addr2line deadlock)
+            var ipAddr = (ulong)sample->ip;
+            var ipSymbol = _symbolResolver.Resolve(ipAddr);
 
-            //if (!_srcLineCache.TryGetValue(key, out var srcLine))
-            //{
-            //    var srcFileNamePtr = fns->srcline(ctx, &srcLine.Item2);
-            //    srcLine.Item1 = EntryContentPool.Shared.GetStringFromUtf8Ptr(srcFileNamePtr);
-            //    _srcLineCache.Add(key, srcLine);
-            //}
+            var ipStruct = new PerfDlfilterAl
+            {
+                addr = ipAddr,
+                sym = ipSymbol.HasValue ? (nint)Marshal.StringToHGlobalAnsi(ipSymbol.Value.Name) : 0,
+                dso = ipSymbol.HasValue ? (nint)Marshal.StringToHGlobalAnsi(ipSymbol.Value.Dso) : 0,
+                sym_start = ipSymbol?.Start ?? 0,
+                sym_end = ipSymbol?.End ?? 0,
+            };
+            PerfDlfilterAl* ip = &ipStruct;
 
+            // Resolve address symbol if present
             PerfDlfilterAl* address = null;
             if (sample->addr_correlates_sym != 0)
             {
-                address = fns->resolve_addr(ctx);
+                var addrAddr = (ulong)sample->addr;
+                var addrSymbol = _symbolResolver.Resolve(addrAddr);
+
+                var addressStruct = new PerfDlfilterAl
+                {
+                    addr = addrAddr,
+                    sym = addrSymbol.HasValue ? (nint)Marshal.StringToHGlobalAnsi(addrSymbol.Value.Name) : 0,
+                    dso = addrSymbol.HasValue ? (nint)Marshal.StringToHGlobalAnsi(addrSymbol.Value.Dso) : 0,
+                    sym_start = addrSymbol?.Start ?? 0,
+                    sym_end = addrSymbol?.End ?? 0,
+                };
+                address = &addressStruct;
             }
+
             _traceProcessor.ProcessData(sample, ip, address, null, 0);
+
+            // Free allocated strings
+            if (ipStruct.sym != 0) Marshal.FreeHGlobal(ipStruct.sym);
+            if (ipStruct.dso != 0) Marshal.FreeHGlobal(ipStruct.dso);
+            if (address != null)
+            {
+                if (address->sym != 0) Marshal.FreeHGlobal(address->sym);
+                if (address->dso != 0) Marshal.FreeHGlobal(address->dso);
+            }
 
             // Report every 1000 events or every 200ms
             var now = DateTime.UtcNow;

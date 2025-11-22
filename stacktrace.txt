@@ -1,0 +1,93 @@
+[New LWP 3785282]
+[New LWP 3785283]
+[New LWP 3785284]
+[New LWP 3785290]
+[New LWP 3785295]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__GI___libc_read (nbytes=4096, buf=0x55bc9f515450, fd=42) at ../sysdeps/unix/sysv/linux/read.c:26
+26	../sysdeps/unix/sysv/linux/read.c: No such file or directory.
+
+Thread 6 (Thread 0x7f6dd722d6c0 (LWP 3785295) "perf"):
+#0  __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x55bc9ef3e7d0) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (futex_word=futex_word@entry=0x55bc9ef3e7d0, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0, cancel=cancel@entry=true) at ./nptl/futex-internal.c:87
+#2  0x00007f6dd80a3f7b in __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x55bc9ef3e7d0, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#3  0x00007f6dd80a65d8 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x55bc9ef3e780, cond=0x55bc9ef3e7a8) at ./nptl/pthread_cond_wait.c:503
+#4  ___pthread_cond_wait (cond=0x55bc9ef3e7a8, mutex=0x55bc9ef3e780) at ./nptl/pthread_cond_wait.c:618
+#5  0x00007f6dd6c73731 in S_P_CoreLib_System_Threading_WaitSubsystem_ThreadWaitInfo__Wait (this=..., timeoutMilliseconds=<optimized out>, interruptible=<optimized out>, isSleep=<optimized out>, lockHolder=...) at /_/src/libraries/System.Private.CoreLib/src/System/Threading/WaitSubsystem.ThreadWaitInfo.Unix.cs:322
+#6  0x00007f6dd6c73dba in S_P_CoreLib_System_Threading_WaitSubsystem_WaitableObject__Wait (this=..., waitInfo=..., timeoutMilliseconds=<optimized out>, interruptible=<optimized out>, prioritize=<optimized out>) at /_/src/libraries/System.Private.CoreLib/src/System/Threading/WaitSubsystem.WaitableObject.Unix.cs:320
+#7  0x00007f6dd6bf4d4b in S_P_CoreLib_System_Threading_WaitHandle__WaitOneNoCheck (this=..., millisecondsTimeout=<optimized out>, useTrivialWaits=<optimized out>, associatedObject=..., waitSource=<optimized out>) at /_/src/libraries/System.Private.CoreLib/src/System/Threading/WaitHandle.cs:183
+#8  0x00007f6dd6c70d2e in S_P_CoreLib_System_Threading_PortableThreadPool_GateThread__GateThreadStart () at /_/src/libraries/System.Private.CoreLib/src/System/Threading/PortableThreadPool.GateThread.cs:48
+#9  0x00007f6dd6becc29 in S_P_CoreLib_System_Threading_Thread__StartThread (parameter=94268608997328) at /_/src/coreclr/nativeaot/System.Private.CoreLib/src/System/Threading/Thread.NativeAot.cs:448
+#10 0x00007f6dd6bed009 in S_P_CoreLib_System_Threading_Thread__ThreadEntryPoint (parameter=<optimized out>) at /_/src/coreclr/nativeaot/System.Private.CoreLib/src/System/Threading/Thread.NativeAot.Unix.cs:114
+#11 0x00007f6dd80a71f5 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#12 0x00007f6dd81278dc in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+
+Thread 5 (Thread 0x7f2d395ff6c0 (LWP 3785290) "perf"):
+#0  __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x7f6dd0001208) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (futex_word=futex_word@entry=0x7f6dd0001208, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0, cancel=cancel@entry=true) at ./nptl/futex-internal.c:87
+#2  0x00007f6dd80a3f7b in __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x7f6dd0001208, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#3  0x00007f6dd80a65d8 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x7f6dd0001210, cond=0x7f6dd00011e0) at ./nptl/pthread_cond_wait.c:503
+#4  ___pthread_cond_wait (cond=0x7f6dd00011e0, mutex=0x7f6dd0001210) at ./nptl/pthread_cond_wait.c:618
+#5  0x00007f6dd6a5ea92 in UnixEvent::Wait (this=0x7f6dd00011e0, milliseconds=<optimized out>) at /__w/1/s/src/coreclr/nativeaot/Runtime/unix/PalRedhawkUnix.cpp:247
+#6  0x00007f6dd6a86a9e in ep_rt_wait_event_wait (wait_event=0x7f6dd00010e0, timeout=4294967295, alertable=false) at /__w/1/s/src/coreclr/nativeaot/Runtime/./eventpipe/ep-rt-aot.h:601
+#7  streaming_thread (data=<optimized out>) at /__w/1/s/src/native/eventpipe/ep-session.c:69
+#8  0x00007f6dd6a89088 in ep_rt_thread_aot_start_session_or_sampling_thread (data=0x7f6dd0000f60) at /__w/1/s/src/coreclr/nativeaot/Runtime/./eventpipe/ep-rt-aot.h:734
+#9  0x00007f6dd80a71f5 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#10 0x00007f6dd81278dc in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+
+Thread 4 (Thread 0x7f6dd53ff6c0 (LWP 3785284) ".NET SigHandler"):
+#0  __GI___libc_read (nbytes=1, buf=0x7f6dd53fed9f, fd=7) at ../sysdeps/unix/sysv/linux/read.c:26
+#1  __GI___libc_read (fd=fd@entry=7, buf=buf@entry=0x7f6dd53fed9f, nbytes=nbytes@entry=1) at ../sysdeps/unix/sysv/linux/read.c:24
+#2  0x00007f6dd6aaa3af in SignalHandlerLoop (arg=<optimized out>) at /__w/1/s/src/native/libs/System.Native/pal_signal.c:331
+#3  0x00007f6dd80a71f5 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#4  0x00007f6dd81278dc in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+
+Thread 3 (Thread 0x7f6dd61356c0 (LWP 3785283) "perf"):
+#0  __futex_abstimed_wait_common64 (private=0, cancel=true, abstime=0x0, op=393, expected=0, futex_word=0x55bc9e799ff8) at ./nptl/futex-internal.c:57
+#1  __futex_abstimed_wait_common (futex_word=futex_word@entry=0x55bc9e799ff8, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0, cancel=cancel@entry=true) at ./nptl/futex-internal.c:87
+#2  0x00007f6dd80a3f7b in __GI___futex_abstimed_wait_cancelable64 (futex_word=futex_word@entry=0x55bc9e799ff8, expected=expected@entry=0, clockid=clockid@entry=0, abstime=abstime@entry=0x0, private=private@entry=0) at ./nptl/futex-internal.c:139
+#3  0x00007f6dd80a65d8 in __pthread_cond_wait_common (abstime=0x0, clockid=0, mutex=0x55bc9e79a000, cond=0x55bc9e799fd0) at ./nptl/pthread_cond_wait.c:503
+#4  ___pthread_cond_wait (cond=0x55bc9e799fd0, mutex=0x55bc9e79a000) at ./nptl/pthread_cond_wait.c:618
+#5  0x00007f6dd6a5ea92 in UnixEvent::Wait (this=0x55bc9e799fd0, milliseconds=<optimized out>) at /__w/1/s/src/coreclr/nativeaot/Runtime/unix/PalRedhawkUnix.cpp:247
+#6  0x00007f6dd6a11586 in RhpWaitForFinalizerRequest () at /__w/1/s/src/coreclr/nativeaot/Runtime/FinalizerHelpers.cpp:175
+#7  0x00007f6dd6c1b621 in S_P_CoreLib_System_Runtime___Finalizer__ProcessFinalizers () at /_/src/coreclr/nativeaot/Runtime.Base/src/System/Runtime/__Finalizer.cs:30
+#8  0x00007f6dd6a11360 in FinalizerStart (pContext=0x55bc9e799fc0) at /__w/1/s/src/coreclr/nativeaot/Runtime/FinalizerHelpers.cpp:62
+#9  0x00007f6dd80a71f5 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#10 0x00007f6dd81278dc in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+
+Thread 2 (Thread 0x7f6dd69ff6c0 (LWP 3785282) "perf"):
+#0  0x00007f6dd811a25f in __GI___poll (fds=0x7f6dd0000f40, nfds=1, timeout=-1) at ../sysdeps/unix/sysv/linux/poll.c:29
+#1  0x00007f6dd6a788dd in ipc_poll_fds (timeout=4294967295, fds=<optimized out>, nfds=<optimized out>) at /__w/1/s/src/native/eventpipe/ds-ipc-pal-socket.c:470
+#2  ds_ipc_poll (poll_handles_data=0x7f6dd0053130, poll_handles_data_len=1, timeout_ms=timeout_ms@entry=4294967295, callback=callback@entry=0x7f6dd6a86140 <server_warning_callback(char const*, unsigned int)>) at /__w/1/s/src/native/eventpipe/ds-ipc-pal-socket.c:1105
+#3  0x00007f6dd6a78619 in ds_ipc_stream_factory_get_next_available_stream (callback=callback@entry=0x7f6dd6a86140 <server_warning_callback(char const*, unsigned int)>) at /__w/1/s/src/native/eventpipe/ds-ipc.c:393
+#4  0x00007f6dd6a7ba64 in server_thread (data=<optimized out>) at /__w/1/s/src/native/eventpipe/ds-server.c:129
+#5  0x00007f6dd80a71f5 in start_thread (arg=<optimized out>) at ./nptl/pthread_create.c:442
+#6  0x00007f6dd81278dc in clone3 () at ../sysdeps/unix/sysv/linux/x86_64/clone3.S:81
+
+Thread 1 (Thread 0x7f6dd7fa6840 (LWP 3785281) "perf"):
+#0  __GI___libc_read (nbytes=4096, buf=0x55bc9f515450, fd=42) at ../sysdeps/unix/sysv/linux/read.c:26
+#1  __GI___libc_read (fd=42, buf=0x55bc9f515450, nbytes=4096) at ../sysdeps/unix/sysv/linux/read.c:24
+#2  0x00007f6dd80a016e in _IO_new_file_underflow (fp=0x55bc9f514260) at ./libio/libioP.h:947
+#3  0x00007f6dd8094e78 in __GI___getdelim (lineptr=0x7ffc58af4ae0, n=0x7ffc58af4ae8, delimiter=10, fp=0x55bc9f514260) at ./libio/iogetdelim.c:73
+#4  0x000055bc91a0f2c2 in ?? ()
+#5  0x000055bc91a0fb6a in ?? ()
+#6  0x000055bc91a45b3e in ?? ()
+#7  0x00007f6dd6b6fd34 in PerfConverter_PerfConverter_PerfDlFilter__FilterEventEarly (rawState=<optimized out>, sample=0x7ffc58af4da0, ctx=0x55bc9e73dff0) at /home/debian/PerfConverter/PerfConverter/Program.cs:83
+#8  0x000055bc91a46883 in ?? ()
+#9  0x000055bc918f1adc in ?? ()
+#10 0x000055bc919d0d9d in ?? ()
+#11 0x000055bc91a33400 in ?? ()
+#12 0x000055bc91a344e8 in ?? ()
+#13 0x000055bc91a34e7c in ?? ()
+#14 0x000055bc919cf6cc in ?? ()
+#15 0x000055bc919cfe15 in ?? ()
+#16 0x000055bc919cfc70 in ?? ()
+#17 0x000055bc919d1484 in ?? ()
+#18 0x000055bc918f6f9c in ?? ()
+#19 0x000055bc919668c1 in ?? ()
+#20 0x000055bc918b9153 in ?? ()
+#21 0x00007f6dd804524a in __libc_start_call_main (main=main@entry=0x55bc918b8ab0, argc=argc@entry=8, argv=argv@entry=0x7ffc58af8618) at ../sysdeps/nptl/libc_start_call_main.h:58
+#22 0x00007f6dd8045305 in __libc_start_main_impl (main=0x55bc918b8ab0, argc=8, argv=0x7ffc58af8618, init=<optimized out>, fini=<optimized out>, rtld_fini=<optimized out>, stack_end=0x7ffc58af8608) at ../csu/libc-start.c:360
+#23 0x000055bc918b93c1 in ?? ()
+[Inferior 1 (process 3785281) detached]
