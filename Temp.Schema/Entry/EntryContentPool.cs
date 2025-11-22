@@ -58,6 +58,14 @@ public sealed class EntryContentPool
         var iteration = Interlocked.Increment(ref _currentIteration);
         Trim(_stringEntries, iteration);
         Trim(_byteEntries, iteration);
+
+        // Report pool sizes every 1000 ticks
+        if (iteration % 1000 == 0)
+        {
+            var stringCount = _stringEntries.Values.Sum(bucket => bucket.Count);
+            var byteCount = _byteEntries.Values.Sum(bucket => bucket.Count);
+            Console.Error.WriteLine($"POOL_SIZE|Iteration={iteration}|Strings={stringCount:N0}|ByteArrays={byteCount:N0}");
+        }
     }
 
     string GetOrAddString(ReadOnlySpan<byte> bytes, Func<string> factory)

@@ -74,7 +74,14 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
     async Task Work(List<T> batch, bool lastBatch)
     {
         AccumulateBatch(batch);
-        
+
+        // Report memory usage every 1M items
+        if (batch.Count % 1000000 == 0 && batch.Count > 0)
+        {
+            var sizeBytes = batch.Count * System.Runtime.InteropServices.Marshal.SizeOf<T>();
+            Console.Error.WriteLine($"BATCH_SIZE|{_fileName}|{batch.Count:N0}|{sizeBytes / 1024 / 1024}MB|Capacity={batch.Capacity:N0}");
+        }
+
         _debounceFileActivity.Debounce($"FILE_ACTIVITY|{_fileName}|ACTIVE|{batch.Count}", batch.Count);
 
         if (!lastBatch && _batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
