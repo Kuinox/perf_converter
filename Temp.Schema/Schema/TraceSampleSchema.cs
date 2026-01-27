@@ -105,50 +105,57 @@ public class TraceSampleSchema
 
     public async Task Writer(ParquetWriter writer)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         using var groupWriter = writer.CreateRowGroup();
-        await Id.Write(groupWriter);
-        await PerfId.Write(groupWriter);
-        await Pid.Write(groupWriter);
-        await Tid.Write(groupWriter);
-        await Time.Write(groupWriter);
-        await Cpu.Write(groupWriter);
-        await Flags.Write(groupWriter);
-        await Ip.Write(groupWriter);
-        await Addr.Write(groupWriter);
-        await Period.Write(groupWriter);
-        await InsnCnt.Write(groupWriter);
-        await CycCnt.Write(groupWriter);
-        await Weight.Write(groupWriter);
-        await Cpumode.Write(groupWriter);
-        await AddrCorrelatesSym.Write(groupWriter);
-        await Event.Write(groupWriter);
-        await MachinePid.Write(groupWriter);
-        await Vcpu.Write(groupWriter);
-        await SourceFileName.Write(groupWriter);
-        await SourceLineNumber.Write(groupWriter);
-        await IpSymoff.Write(groupWriter);
-        await IpSym.Write(groupWriter);
-        await IpSymStart.Write(groupWriter);
-        await IpSymEnd.Write(groupWriter);
-        await IpDso.Write(groupWriter);
-        await IpSymBinding.Write(groupWriter);
-        await IpIs64Bit.Write(groupWriter);
-        await IpIsKernelIp.Write(groupWriter);
-        await IpBuildId.Write(groupWriter);
-        await IpFiltered.Write(groupWriter);
-        await IpComm.Write(groupWriter);
-        await HaveAddress.Write(groupWriter);
-        await AddressSymoff.Write(groupWriter);
-        await AddressSym.Write(groupWriter);
-        await AddressSymStart.Write(groupWriter);
-        await AddressSymEnd.Write(groupWriter);
-        await AddressDso.Write(groupWriter);
-        await AddressSymBinding.Write(groupWriter);
-        await AddressIs64Bit.Write(groupWriter);
-        await AddressIsKernelIp.Write(groupWriter);
-        await AddressBuildId.Write(groupWriter);
-        await AddressFiltered.Write(groupWriter);
-        await AddressComm.Write(groupWriter);
+
+        // Parallelize column writes - Parquet.NET supports concurrent writes to the same row group
+        await Task.WhenAll(
+            Id.Write(groupWriter),
+            PerfId.Write(groupWriter),
+            Pid.Write(groupWriter),
+            Tid.Write(groupWriter),
+            Time.Write(groupWriter),
+            Cpu.Write(groupWriter),
+            Flags.Write(groupWriter),
+            Ip.Write(groupWriter),
+            Addr.Write(groupWriter),
+            Period.Write(groupWriter),
+            InsnCnt.Write(groupWriter),
+            CycCnt.Write(groupWriter),
+            Weight.Write(groupWriter),
+            Cpumode.Write(groupWriter),
+            AddrCorrelatesSym.Write(groupWriter),
+            Event.Write(groupWriter),
+            MachinePid.Write(groupWriter),
+            Vcpu.Write(groupWriter),
+            SourceFileName.Write(groupWriter),
+            SourceLineNumber.Write(groupWriter),
+            IpSymoff.Write(groupWriter),
+            IpSym.Write(groupWriter),
+            IpSymStart.Write(groupWriter),
+            IpSymEnd.Write(groupWriter),
+            IpDso.Write(groupWriter),
+            IpSymBinding.Write(groupWriter),
+            IpIs64Bit.Write(groupWriter),
+            IpIsKernelIp.Write(groupWriter),
+            IpBuildId.Write(groupWriter),
+            IpFiltered.Write(groupWriter),
+            IpComm.Write(groupWriter),
+            HaveAddress.Write(groupWriter),
+            AddressSymoff.Write(groupWriter),
+            AddressSym.Write(groupWriter),
+            AddressSymStart.Write(groupWriter),
+            AddressSymEnd.Write(groupWriter),
+            AddressDso.Write(groupWriter),
+            AddressSymBinding.Write(groupWriter),
+            AddressIs64Bit.Write(groupWriter),
+            AddressIsKernelIp.Write(groupWriter),
+            AddressBuildId.Write(groupWriter),
+            AddressFiltered.Write(groupWriter),
+            AddressComm.Write(groupWriter)
+        );
+
+        Console.Error.WriteLine($"FLUSH_TIMING|RowGroup written in {sw.ElapsedMilliseconds}ms|{Id.Buffer.Length} rows");
     }
 
 
