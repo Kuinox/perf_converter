@@ -18,6 +18,15 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
             case var cmd when cmd.StartsWith("EXIT_MESSAGE"):
                 HandleExitMessage();
                 break;
+            case "DOTNET_READY":
+                // Control signal only; nothing to display
+                break;
+            case var cmd when cmd.StartsWith("GC_EVENT:"):
+                // GC telemetry currently unused; suppress console noise
+                break;
+            case var cmd when cmd.StartsWith("MEMORY_STATS:"):
+                // Memory telemetry currently unused; suppress console noise
+                break;
             default:
                 // Unknown command, treat as regular output
                 viewModel.OutputLines.Enqueue(command);

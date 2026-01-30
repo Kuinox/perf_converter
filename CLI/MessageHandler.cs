@@ -2,9 +2,18 @@ namespace CLI;
 
 public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor commandProcessor)
 {
+    private static readonly string[] IgnoredPrefixes =
+    [
+        "BATCH_SIZE|",
+        "POOL_SIZE|",
+        "FLUSH_TIMING|"
+    ];
+
     public void ProcessOutputMessage(string message)
     {
         if (string.IsNullOrEmpty(message)) return;
+
+        if (ShouldIgnore(message)) return;
 
         if (IsCommand(message))
         {
@@ -20,6 +29,8 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
     public void ProcessErrorMessage(string message)
     {
         if (string.IsNullOrEmpty(message)) return;
+
+        if (ShouldIgnore(message)) return;
 
         if (IsCommand(message))
         {
@@ -41,5 +52,14 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
                message.StartsWith("FILE_ACTIVITY|") ||
                message.StartsWith("EXIT_MESSAGE") ||
                message.StartsWith("DOTNET_READY");
+    }
+
+    private static bool ShouldIgnore(string message)
+    {
+        foreach (var prefix in IgnoredPrefixes)
+        {
+            if (message.StartsWith(prefix)) return true;
+        }
+        return false;
     }
 }
