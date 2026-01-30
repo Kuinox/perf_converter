@@ -26,7 +26,7 @@ public sealed class EntryContentPool
         if (length == 0) return string.Empty;
 
         var bytes = new ReadOnlySpan<byte>(bytePtr, length);
-        return GetOrAddString(bytes, () => Marshal.PtrToStringUTF8(ptr)!);
+        return GetOrAddString(bytes, ptr);
     }
 
     public byte[] GetByteArray(ReadOnlySpan<byte> source)
@@ -68,7 +68,7 @@ public sealed class EntryContentPool
         }
     }
 
-    string GetOrAddString(ReadOnlySpan<byte> bytes, Func<string> factory)
+    string GetOrAddString(ReadOnlySpan<byte> bytes, nint ptr)
     {
         var hash = GetHash(bytes);
         var iteration = Volatile.Read(ref _currentIteration);
@@ -84,7 +84,7 @@ public sealed class EntryContentPool
                 }
             }
 
-            var created = factory();
+            var created = Marshal.PtrToStringUTF8(ptr)!;
             bucket.Add(new StringEntry(bytes.ToArray(), created, iteration));
             return created;
         }
