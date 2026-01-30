@@ -9,7 +9,7 @@ class DebounceSignal(int threshold)
     int _lastSent;
 
 
-    public void Debounce(FormattableString message, int value)
+    public void Debounce(string prefix, int value)
     {
         if (!PerfConverter.Configuration.EnableProgressSignals)
             return;
@@ -17,7 +17,12 @@ class DebounceSignal(int threshold)
         if ((Math.Abs(value - _lastSent) > threshold)
             || DateTime.UtcNow - _lastSentTime > _debounceTime)
         {
-            Console.Error.WriteLine(message);
+            Span<char> buffer = stackalloc char[16];
+            if (value.TryFormat(buffer, out int charsWritten))
+            {
+                Console.Error.Write(prefix);
+                Console.Error.WriteLine(buffer.Slice(0, charsWritten));
+            }
             _lastSent = value;
             _lastSentTime = DateTime.UtcNow;
         }

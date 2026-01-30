@@ -12,6 +12,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
     readonly BatchingMode _batchingMode;
     readonly Channel<T> _channel;
     readonly string _fileName;
+    readonly string _fileActivityPrefix;
     Task? _workLoop;
 
     Batcher(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode, string fileName)
@@ -20,6 +21,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         _batchSize = batchSize;
         _batchingMode = batchingMode;
         _fileName = fileName;
+        _fileActivityPrefix = $"FILE_ACTIVITY|{fileName}|ACTIVE|";
         _channel = Channel.CreateBounded<T>(new BoundedChannelOptions(batchSize)
         {
             SingleReader = true,
@@ -82,7 +84,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
             Console.Error.WriteLine($"BATCH_SIZE|{_fileName}|{batch.Count:N0}|{sizeBytes / 1024 / 1024}MB|Capacity={batch.Capacity:N0}");
         }
 
-        _debounceFileActivity.Debounce($"FILE_ACTIVITY|{_fileName}|ACTIVE|{batch.Count}", batch.Count);
+        _debounceFileActivity.Debounce(_fileActivityPrefix, batch.Count);
 
         if (!lastBatch && _batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
         await SendBatch(batch);

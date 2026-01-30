@@ -140,7 +140,6 @@ public sealed class EntryContentPool
         {
             _bytes = bytes;
             _strongRef = value;
-            _weakRef = new WeakReference<string>(value);
             _lastAccessIteration = iteration;
         }
 
@@ -188,7 +187,7 @@ public sealed class EntryContentPool
     sealed class ByteEntry(byte[] bytes, int iteration) : IPoolEntry
     {
         byte[]? _strongRef = bytes;
-        WeakReference<byte[]>? _weakRef = new(bytes);
+        WeakReference<byte[]>? _weakRef;
         int _lastAccessIteration = iteration;
 
         public bool TryGet(ReadOnlySpan<byte> bytes, int iteration, out byte[] value)
