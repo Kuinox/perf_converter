@@ -36,6 +36,7 @@ class ThreadProcessor : IAsyncDisposable
             _tracePersisters.Add(tracePersister);
 
             processor = new SegmentProcessor(tracePersister, _stackPersister);
+            _eventMapping[@event] = processor;
         }
 
         processor.ProcessData(_currentEntryId++, sample, ip, address, srcFilePath, lineNumber);
