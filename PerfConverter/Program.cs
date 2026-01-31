@@ -18,9 +18,7 @@ public unsafe class PerfDlFilter
 
     class State
     {
-        public int EventCount { get; set; }
-        public int LastReportedCount { get; set; }
-        public DateTime LastReportTime { get; set; } = DateTime.UtcNow;
+        public long EventCount { get; set; }
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -38,12 +36,7 @@ public unsafe class PerfDlFilter
             {
                 args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
             }
-            var state = new State
-            {
-                EventCount = 0,
-                LastReportedCount = 0,
-                LastReportTime = DateTime.UtcNow
-            };
+            var state = new State { EventCount = 0 };
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
@@ -97,32 +90,11 @@ public unsafe class PerfDlFilter
             }
             _traceProcessor.ProcessData(sample, ip, address, null, 0);
 
-            // Report every 1000 events or every 200ms
-            var now = DateTime.UtcNow;
-            var deltaCount = state.EventCount - state.LastReportedCount;
-            var timeSinceLastReport = (now - state.LastReportTime).TotalMilliseconds;
-
-            if (Configuration.EnableProgressSignals)
+            // Report progress every 10000 events (avoid DateTime.UtcNow on every event)
+            if (Configuration.EnableProgressSignals && (state.EventCount % 10000) == 0)
             {
-                if (deltaCount >= 1000)
-                {
-                    // Report +1000 for each 1000 events
-                    var deltaToReport = (deltaCount / 1000) * 1000;
-                    for (int i = 0; i < deltaToReport / 1000; i++)
-                    {
-                        Console.Error.WriteLine("PROGRESS:+1000");
-                    }
-                    state.LastReportedCount += deltaToReport;
-                    state.LastReportTime = now;
-                }
-                else if (timeSinceLastReport > 200)
-                {
-                    // Report full count if time elapsed
-                    Console.Error.Write("PROGRESS:");
-                    Console.Error.WriteLine(state.EventCount);
-                    state.LastReportedCount = state.EventCount;
-                    state.LastReportTime = now;
-                }
+                Console.Error.Write("PROGRESS:");
+                Console.Error.WriteLine(state.EventCount);
             }
 
         }

@@ -1,4 +1,3 @@
-﻿using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
 namespace Temp.Schema.Entry;
@@ -9,8 +8,8 @@ public sealed class EntryContentPool
 
     public static EntryContentPool Shared { get; } = new();
 
-    readonly ConcurrentDictionary<int, List<StringEntry>> _stringEntries = new();
-    readonly ConcurrentDictionary<int, List<ByteEntry>> _byteEntries = new();
+    readonly Dictionary<int, List<StringEntry>> _stringEntries = new();
+    readonly Dictionary<int, List<ByteEntry>> _byteEntries = new();
     int _currentIteration;
 
     EntryContentPool() { }
@@ -34,60 +33,63 @@ public sealed class EntryContentPool
         if (source.IsEmpty) return Array.Empty<byte>();
 
         var hash = GetHash(source);
-        var iteration = Volatile.Read(ref _currentIteration);
-        var bucket = _byteEntries.GetOrAdd(hash, static _ => new List<ByteEntry>());
+        var iteration = _currentIteration;
 
-        lock (bucket)
+        if (!_byteEntries.TryGetValue(hash, out var bucket))
         {
-            for (var i = 0; i < bucket.Count; i++)
-            {
-                if (bucket[i].TryGet(source, iteration, out var value))
-                {
-                    return value;
-                }
-            }
-
-            var newArray = source.ToArray();
-            bucket.Add(new ByteEntry(newArray, iteration));
-            return newArray;
+            bucket = new List<ByteEntry>();
+            _byteEntries[hash] = bucket;
         }
+
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            if (bucket[i].TryGet(source, iteration, out var value))
+                return value;
+        }
+
+        var newArray = source.ToArray();
+        bucket.Add(new ByteEntry(newArray, iteration));
+        return newArray;
     }
 
     public void Tick()
     {
-        var iteration = Interlocked.Increment(ref _currentIteration);
-        Trim(_stringEntries, iteration);
-        Trim(_byteEntries, iteration);
+        _currentIteration++;
+        Trim(_stringEntries, _currentIteration);
+        Trim(_byteEntries, _currentIteration);
 
-        // Report pool sizes every 1000 ticks
-        if (iteration % 1000 == 0)
+        if (_currentIteration % 1000 == 0)
         {
-            var stringCount = _stringEntries.Values.Sum(bucket => bucket.Count);
-            var byteCount = _byteEntries.Values.Sum(bucket => bucket.Count);
-            Console.Error.WriteLine($"POOL_SIZE|Iteration={iteration}|Strings={stringCount:N0}|ByteArrays={byteCount:N0}");
+            var stringCount = 0;
+            foreach (var bucket in _stringEntries.Values)
+                stringCount += bucket.Count;
+            var byteCount = 0;
+            foreach (var bucket in _byteEntries.Values)
+                byteCount += bucket.Count;
+            Console.Error.WriteLine($"POOL_SIZE|Iteration={_currentIteration}|Strings={stringCount:N0}|ByteArrays={byteCount:N0}");
         }
     }
 
     string GetOrAddString(ReadOnlySpan<byte> bytes, nint ptr)
     {
         var hash = GetHash(bytes);
-        var iteration = Volatile.Read(ref _currentIteration);
-        var bucket = _stringEntries.GetOrAdd(hash, static _ => new List<StringEntry>());
+        var iteration = _currentIteration;
 
-        lock (bucket)
+        if (!_stringEntries.TryGetValue(hash, out var bucket))
         {
-            for (var i = 0; i < bucket.Count; i++)
-            {
-                if (bucket[i].TryGet(bytes, iteration, out var value))
-                {
-                    return value;
-                }
-            }
-
-            var created = Marshal.PtrToStringUTF8(ptr)!;
-            bucket.Add(new StringEntry(bytes.ToArray(), created, iteration));
-            return created;
+            bucket = new List<StringEntry>();
+            _stringEntries[hash] = bucket;
         }
+
+        for (var i = 0; i < bucket.Count; i++)
+        {
+            if (bucket[i].TryGet(bytes, iteration, out var value))
+                return value;
+        }
+
+        var created = Marshal.PtrToStringUTF8(ptr)!;
+        bucket.Add(new StringEntry(bytes.ToArray(), created, iteration));
+        return created;
     }
 
     static int GetHash(ReadOnlySpan<byte> bytes)
@@ -97,29 +99,32 @@ public sealed class EntryContentPool
         return hash.ToHashCode();
     }
 
-    static void Trim<TEntry>(ConcurrentDictionary<int, List<TEntry>> dictionary, int iteration)
+    static void Trim<TEntry>(Dictionary<int, List<TEntry>> dictionary, int iteration)
         where TEntry : IPoolEntry
     {
+        List<int>? keysToRemove = null;
         foreach (var kvp in dictionary)
         {
             var bucket = kvp.Value;
-            lock (bucket)
+            for (var i = bucket.Count - 1; i >= 0; i--)
             {
-                for (var i = bucket.Count - 1; i >= 0; i--)
-                {
-                    var entry = bucket[i];
-                    entry.DemoteIfNeeded(iteration);
-                    if (entry.IsExpired())
-                    {
-                        bucket.RemoveAt(i);
-                    }
-                }
-
-                if (bucket.Count == 0)
-                {
-                    dictionary.TryRemove(kvp.Key, out _);
-                }
+                var entry = bucket[i];
+                entry.DemoteIfNeeded(iteration);
+                if (entry.IsExpired())
+                    bucket.RemoveAt(i);
             }
+
+            if (bucket.Count == 0)
+            {
+                keysToRemove ??= new List<int>();
+                keysToRemove.Add(kvp.Key);
+            }
+        }
+
+        if (keysToRemove != null)
+        {
+            foreach (var key in keysToRemove)
+                dictionary.Remove(key);
         }
     }
 
