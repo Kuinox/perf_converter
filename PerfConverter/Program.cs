@@ -90,8 +90,8 @@ public unsafe class PerfDlFilter
             }
             _traceProcessor.ProcessData(sample, ip, address, null, 0);
 
-            // Report progress every 10000 events (avoid DateTime.UtcNow on every event)
-            if (Configuration.EnableProgressSignals && (state.EventCount % 10000) == 0)
+            // Report progress every 50000 events
+            if (Configuration.EnableProgressSignals && (state.EventCount % 50000) == 0)
             {
                 Console.Error.Write("PROGRESS:");
                 Console.Error.WriteLine(state.EventCount);
