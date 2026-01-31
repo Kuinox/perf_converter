@@ -19,6 +19,8 @@ public unsafe class PerfDlFilter
     class State
     {
         public long EventCount { get; set; }
+        public long LastReportedCount { get; set; }
+        public long LastReportTicks { get; set; } = Environment.TickCount64;
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -90,11 +92,19 @@ public unsafe class PerfDlFilter
             }
             _traceProcessor.ProcessData(sample, ip, address, null, 0);
 
-            // Report progress every 50000 events
-            if (Configuration.EnableProgressSignals && (state.EventCount % 50000) == 0)
+            // Report progress every 1 second
+            if (Configuration.EnableProgressSignals)
             {
-                Console.Error.Write("PROGRESS:");
-                Console.Error.WriteLine(state.EventCount);
+                long now = Environment.TickCount64;
+                long elapsed = now - state.LastReportTicks;
+                if (elapsed >= 1000)
+                {
+                    long eventsInWindow = state.EventCount - state.LastReportedCount;
+                    long rate = eventsInWindow * 1000 / elapsed;
+                    Console.Error.WriteLine($"PROGRESS:{state.EventCount}|{rate}/s");
+                    state.LastReportedCount = state.EventCount;
+                    state.LastReportTicks = now;
+                }
             }
 
         }
