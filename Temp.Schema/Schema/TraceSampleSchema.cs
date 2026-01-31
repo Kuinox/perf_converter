@@ -10,6 +10,10 @@ namespace Temp.Schema.Schema;
 
 public class TraceSampleSchema
 {
+    // Encoding options for different column types
+    static readonly ColumnEncodingOptions DeltaOnly = new() { UseDeltaBinaryPackedEncoding = true, UseDictionaryEncoding = false };
+    static readonly ColumnEncodingOptions DictOnly = new() { UseDictionaryEncoding = true, UseDeltaBinaryPackedEncoding = false };
+    static readonly ColumnEncodingOptions PlainOnly = new() { UseDictionaryEncoding = false, UseDeltaBinaryPackedEncoding = false };
     public TraceSampleSchema()
     {
         Schema = new ParquetSchema(
@@ -58,49 +62,64 @@ public class TraceSampleSchema
             AddressComm.Field
         );
     }
-    public ParquetColumn<ulong> Id { get; } = new("id");
-    public ParquetColumn<ulong> PerfId { get; } = new("perfId");
-    public ParquetColumn<uint> Pid { get; } = new("pid");
-    public ParquetColumn<uint> Tid { get; } = new("tid");
-    public ParquetColumn<ulong> Time { get; } = new("time");
-    public ParquetColumn<uint> Cpu { get; } = new("cpu");
-    public ParquetColumn<uint> Flags { get; } = new("flags");
-    public ParquetColumn<ulong> Ip { get; } = new("ip");
-    public ParquetColumn<ulong> Addr { get; } = new("addr");
-    public ParquetColumn<ulong> Period { get; } = new("period");
-    public ParquetColumn<ulong> InsnCnt { get; } = new("insnCnt");
-    public ParquetColumn<ulong> CycCnt { get; } = new("cycCnt");
-    public ParquetColumn<ulong> Weight { get; } = new("weight");
-    public ParquetColumn<byte> Cpumode { get; } = new("cpumode");
-    public ParquetColumn<byte> AddrCorrelatesSym { get; } = new("addrCorrelatesSym");
-    public ParquetColumn<string?> Event { get; } = new("event");
-    public ParquetColumn<uint> MachinePid { get; } = new("machinePid");
-    public ParquetColumn<uint> Vcpu { get; } = new("vcpu");
-    public ParquetColumn<string> SourceFileName { get; } = new("srcFileName");
-    public ParquetColumn<uint> SourceLineNumber { get; } = new("srcLineNumber");
-    public ParquetColumn<uint> IpSymoff { get; } = new("ipSymoff");
-    public ParquetColumn<string?> IpSym { get; } = new("ipSym");
-    public ParquetColumn<ulong> IpSymStart { get; } = new("ipSymStart");
-    public ParquetColumn<ulong> IpSymEnd { get; } = new("ipSymEnd");
-    public ParquetColumn<string?> IpDso { get; } = new("ipDso");
-    public ParquetColumn<byte> IpSymBinding { get; } = new("ipSymBinding");
-    public ParquetColumn<byte> IpIs64Bit { get; } = new("ipIs64Bit");
-    public ParquetColumn<byte> IpIsKernelIp { get; } = new("ipIsKernelIp");
-    public ParquetColumn<byte[]> IpBuildId { get; } = new("ipBuildId");
-    public ParquetColumn<byte> IpFiltered { get; } = new("ipFiltered");
-    public ParquetColumn<string?> IpComm { get; } = new("ipComm");
-    public ParquetColumn<bool> HaveAddress { get; } = new("haveAddress");
-    public ParquetColumn<uint> AddressSymoff { get; } = new("addressSymoff");
-    public ParquetColumn<string?> AddressSym { get; } = new("addressSym");
-    public ParquetColumn<ulong> AddressSymStart { get; } = new("addressSymStart");
-    public ParquetColumn<ulong> AddressSymEnd { get; } = new("addressSymEnd");
-    public ParquetColumn<string?> AddressDso { get; } = new("addressDso");
-    public ParquetColumn<byte> AddressSymBinding { get; } = new("addressSymBinding");
-    public ParquetColumn<byte> AddressIs64Bit { get; } = new("addressIs64Bit");
-    public ParquetColumn<byte> AddressIsKernelIp { get; } = new("addressIsKernelIp");
-    public ParquetColumn<byte[]> AddressBuildId { get; } = new("addressBuildId");
-    public ParquetColumn<byte> AddressFiltered { get; } = new("addressFiltered");
-    public ParquetColumn<string?> AddressComm { get; } = new("addressComm");
+    // Sequential IDs - delta encoding is perfect
+    public ParquetColumn<ulong> Id { get; } = new("id", DeltaOnly);
+    public ParquetColumn<ulong> PerfId { get; } = new("perfId", DeltaOnly);
+
+    // Process/thread IDs - dictionary (few unique values)
+    public ParquetColumn<uint> Pid { get; } = new("pid", DictOnly);
+    public ParquetColumn<uint> Tid { get; } = new("tid", DictOnly);
+
+    // Timestamps - delta encoding (monotonically increasing)
+    public ParquetColumn<ulong> Time { get; } = new("time", DeltaOnly);
+
+    // CPU/flags - dictionary (small set of values)
+    public ParquetColumn<uint> Cpu { get; } = new("cpu", DictOnly);
+    public ParquetColumn<uint> Flags { get; } = new("flags", DictOnly);
+
+    // Addresses - plain (random values, no pattern)
+    public ParquetColumn<ulong> Ip { get; } = new("ip", PlainOnly);
+    public ParquetColumn<ulong> Addr { get; } = new("addr", PlainOnly);
+
+    // Counters - delta encoding
+    public ParquetColumn<ulong> Period { get; } = new("period", DeltaOnly);
+    public ParquetColumn<ulong> InsnCnt { get; } = new("insnCnt", DeltaOnly);
+    public ParquetColumn<ulong> CycCnt { get; } = new("cycCnt", DeltaOnly);
+    public ParquetColumn<ulong> Weight { get; } = new("weight", DeltaOnly);
+
+    // Small enum-like values - dictionary
+    public ParquetColumn<byte> Cpumode { get; } = new("cpumode", DictOnly);
+    public ParquetColumn<byte> AddrCorrelatesSym { get; } = new("addrCorrelatesSym", DictOnly);
+
+    // Strings - dictionary (repeated values)
+    public ParquetColumn<string?> Event { get; } = new("event", DictOnly);
+    public ParquetColumn<uint> MachinePid { get; } = new("machinePid", DictOnly);
+    public ParquetColumn<uint> Vcpu { get; } = new("vcpu", DictOnly);
+    public ParquetColumn<string> SourceFileName { get; } = new("srcFileName", DictOnly);
+    public ParquetColumn<uint> SourceLineNumber { get; } = new("srcLineNumber", DictOnly);
+    public ParquetColumn<uint> IpSymoff { get; } = new("ipSymoff", PlainOnly);
+    public ParquetColumn<string?> IpSym { get; } = new("ipSym", DictOnly);
+    public ParquetColumn<ulong> IpSymStart { get; } = new("ipSymStart", PlainOnly);
+    public ParquetColumn<ulong> IpSymEnd { get; } = new("ipSymEnd", PlainOnly);
+    public ParquetColumn<string?> IpDso { get; } = new("ipDso", DictOnly);
+    public ParquetColumn<byte> IpSymBinding { get; } = new("ipSymBinding", DictOnly);
+    public ParquetColumn<byte> IpIs64Bit { get; } = new("ipIs64Bit", DictOnly);
+    public ParquetColumn<byte> IpIsKernelIp { get; } = new("ipIsKernelIp", DictOnly);
+    public ParquetColumn<byte[]> IpBuildId { get; } = new("ipBuildId", PlainOnly);
+    public ParquetColumn<byte> IpFiltered { get; } = new("ipFiltered", DictOnly);
+    public ParquetColumn<string?> IpComm { get; } = new("ipComm", DictOnly);
+    public ParquetColumn<bool> HaveAddress { get; } = new("haveAddress", DictOnly);
+    public ParquetColumn<uint> AddressSymoff { get; } = new("addressSymoff", PlainOnly);
+    public ParquetColumn<string?> AddressSym { get; } = new("addressSym", DictOnly);
+    public ParquetColumn<ulong> AddressSymStart { get; } = new("addressSymStart", PlainOnly);
+    public ParquetColumn<ulong> AddressSymEnd { get; } = new("addressSymEnd", PlainOnly);
+    public ParquetColumn<string?> AddressDso { get; } = new("addressDso", DictOnly);
+    public ParquetColumn<byte> AddressSymBinding { get; } = new("addressSymBinding", DictOnly);
+    public ParquetColumn<byte> AddressIs64Bit { get; } = new("addressIs64Bit", DictOnly);
+    public ParquetColumn<byte> AddressIsKernelIp { get; } = new("addressIsKernelIp", DictOnly);
+    public ParquetColumn<byte[]> AddressBuildId { get; } = new("addressBuildId", PlainOnly);
+    public ParquetColumn<byte> AddressFiltered { get; } = new("addressFiltered", DictOnly);
+    public ParquetColumn<string?> AddressComm { get; } = new("addressComm", DictOnly);
 
 
     public async Task Writer(ParquetWriter writer)

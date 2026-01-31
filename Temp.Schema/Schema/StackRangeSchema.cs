@@ -6,6 +6,8 @@ namespace PerfConverter.Schema;
 
 public class StackRangeSchema
 {
+    static readonly ColumnEncodingOptions DeltaOnly = new() { UseDeltaBinaryPackedEncoding = true, UseDictionaryEncoding = false };
+
     public StackRangeSchema()
     {
         Schema = new ParquetSchema(
@@ -14,8 +16,9 @@ public class StackRangeSchema
         );
     }
 
-    public ParquetColumn<ulong> StartTrace { get; } = new("startTrace");
-    public ParquetColumn<ulong> EndTrace { get; } = new("endTrace");
+    // Trace IDs are sequential - delta encoding
+    public ParquetColumn<ulong> StartTrace { get; } = new("startTrace", DeltaOnly);
+    public ParquetColumn<ulong> EndTrace { get; } = new("endTrace", DeltaOnly);
 
     public ParquetSchema Schema { get; }
 

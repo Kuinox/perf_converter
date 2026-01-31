@@ -4,10 +4,10 @@ using Parquet.Schema;
 
 namespace PerfConverter.Schema;
 
-public class ParquetColumn<T>(string name)
+public class ParquetColumn<T>(string name, ColumnEncodingOptions? encodingOptions = null)
 {
     public T[] Buffer { get; private set; } = [];
-    public DataField<T> Field { get; } = new DataField<T>(name);
+    public DataField<T> Field { get; } = new DataField<T>(name) { EncodingOptions = encodingOptions };
     int _activeLength;
 
     public async Task Write(ParquetRowGroupWriter writer)
