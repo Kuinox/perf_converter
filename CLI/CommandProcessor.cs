@@ -46,23 +46,14 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
         {
             var progressData = command.AsSpan()[9..].Trim();
 
-            // Check for format: count|rate/s
+            // Check for format: count|rate/s (we only need the count, rate is calculated locally)
             var pipeIndex = progressData.IndexOf('|');
             if (pipeIndex > 0)
             {
                 var countPart = progressData[..pipeIndex];
-                var ratePart = progressData[(pipeIndex + 1)..];
-
                 if (long.TryParse(countPart, out var eventCount))
                 {
                     viewModel.EventCount = eventCount;
-                }
-
-                // Parse rate (format: "123/s")
-                var slashIndex = ratePart.IndexOf('/');
-                if (slashIndex > 0 && int.TryParse(ratePart[..slashIndex], out var rate))
-                {
-                    viewModel.CurrentRate = rate;
                 }
             }
             else if (progressData.Length > 0 && progressData[0] == '+')

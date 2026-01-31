@@ -34,6 +34,9 @@ public class PerfMonitorViewModel
     public ConcurrentQueue<string> OutputLines { get; } = new();
     public ConcurrentQueue<string> ErrorLines { get; } = new();
 
+    // Track event counts for 1-second sliding window rate calculation
+    public Queue<(long ticks, long eventCount)> RateHistory { get; } = new();
+
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
     
     [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]
