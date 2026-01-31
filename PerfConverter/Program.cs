@@ -72,6 +72,22 @@ public unsafe class PerfDlFilter
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             state.EventCount++;
+
+            // Report progress every 1 second - BEFORE ProcessData which may block
+            if (Configuration.EnableProgressSignals)
+            {
+                long now = Environment.TickCount64;
+                long elapsed = now - state.LastReportTicks;
+                if (elapsed >= 1000)
+                {
+                    long eventsInWindow = state.EventCount - state.LastReportedCount;
+                    long rate = eventsInWindow * 1000 / elapsed;
+                    Console.Error.WriteLine($"PROGRESS:{state.EventCount}|{rate}/s");
+                    state.LastReportedCount = state.EventCount;
+                    state.LastReportTicks = now;
+                }
+            }
+
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
 
@@ -91,21 +107,6 @@ public unsafe class PerfDlFilter
                 address = fns->resolve_addr(ctx);
             }
             _traceProcessor.ProcessData(sample, ip, address, null, 0);
-
-            // Report progress every 1 second
-            if (Configuration.EnableProgressSignals)
-            {
-                long now = Environment.TickCount64;
-                long elapsed = now - state.LastReportTicks;
-                if (elapsed >= 1000)
-                {
-                    long eventsInWindow = state.EventCount - state.LastReportedCount;
-                    long rate = eventsInWindow * 1000 / elapsed;
-                    Console.Error.WriteLine($"PROGRESS:{state.EventCount}|{rate}/s");
-                    state.LastReportedCount = state.EventCount;
-                    state.LastReportTicks = now;
-                }
-            }
 
         }
         catch (Exception ex)
