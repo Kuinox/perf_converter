@@ -17,11 +17,17 @@ class DebounceSignal(int threshold)
         if ((Math.Abs(value - _lastSent) > threshold)
             || DateTime.UtcNow - _lastSentTime > _debounceTime)
         {
-            Span<char> buffer = stackalloc char[16];
-            if (value.TryFormat(buffer, out int charsWritten))
+            const int stackBufferSize = 256;
+            var requiredSize = prefix.Length + 20;
+
+            Span<char> buffer = requiredSize <= stackBufferSize
+                ? stackalloc char[stackBufferSize]
+                : new char[requiredSize];
+
+            prefix.AsSpan().CopyTo(buffer);
+            if (value.TryFormat(buffer.Slice(prefix.Length), out int charsWritten))
             {
-                Console.Error.Write(prefix);
-                Console.Error.WriteLine(buffer.Slice(0, charsWritten));
+                Console.Error.WriteLine(buffer.Slice(0, prefix.Length + charsWritten));
             }
             _lastSent = value;
             _lastSentTime = DateTime.UtcNow;

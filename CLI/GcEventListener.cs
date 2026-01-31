@@ -94,6 +94,10 @@ namespace CLI
 
                 source.Process();
             }
+            catch (EndOfStreamException)
+            {
+                // Expected when target process exits - ignore
+            }
             catch (Exception ex) when (!_cancellationTokenSource.Token.IsCancellationRequested)
             {
                 Console.WriteLine($"Error processing GC events: {ex.Message}");
