@@ -33,7 +33,6 @@ public class PerfMonitorViewModel
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
     public ConcurrentQueue<string> OutputLines { get; } = new();
     public ConcurrentQueue<string> ErrorLines { get; } = new();
-    public Queue<(DateTime timestamp, long eventCount)> RateHistory { get; } = new();
 
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
     

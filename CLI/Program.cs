@@ -260,22 +260,9 @@ internal class Program
                 viewModel.Elapsed = chrono.Elapsed;
                 viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
 
-                var now = DateTime.UtcNow;
-                viewModel.RateHistory.Enqueue((now, viewModel.EventCount));
-
-                while (viewModel.RateHistory.Count > 0 && (now - viewModel.RateHistory.Peek().timestamp).TotalSeconds > 5)
-                {
-                    viewModel.RateHistory.Dequeue();
-                }
-
-                if (viewModel.RateHistory.Count >= 2)
-                {
-                    var oldest = viewModel.RateHistory.Peek();
-                    var newest = viewModel.RateHistory.Last();
-                    var seconds = Math.Max((newest.timestamp - oldest.timestamp).TotalSeconds, 0.001);
-                    viewModel.CurrentRate = (int)((newest.eventCount - oldest.eventCount) / seconds);
-                }
-                else
+                // CurrentRate is now set directly from PROGRESS messages in CommandProcessor
+                // Only fall back to OverallRate if we haven't received any rate updates
+                if (viewModel.CurrentRate == 0)
                 {
                     viewModel.CurrentRate = viewModel.OverallRate;
                 }
