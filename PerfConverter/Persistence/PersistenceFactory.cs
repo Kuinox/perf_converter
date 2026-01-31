@@ -11,7 +11,8 @@ public static class PersistenceFactory
     const string PARQUET_COMPRESS_ENV = "PARQUET_COMPRESSION";
     public static ParquetPersistenceLifetime CreatePersistence()
     {
-        var batchSize = 10_000_000;
+        // Target ~128-256MB row groups. TraceEntry is ~250 bytes/row.
+        var batchSize = 500_000;
         string? batchSizeEnv = Environment.GetEnvironmentVariable("BATCH_SIZE");
         if (!string.IsNullOrEmpty(batchSizeEnv) && int.TryParse(batchSizeEnv, out int parsedBatchSize))
         {

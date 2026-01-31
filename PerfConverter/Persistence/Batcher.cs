@@ -13,6 +13,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
     readonly Channel<T> _channel;
     readonly string _fileName;
     readonly string _fileActivityPrefix;
+    readonly List<T> _batchA;
+    readonly List<T> _batchB;
+    Task _flushTask = Task.CompletedTask;
     Task? _workLoop;
 
     Batcher(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode, string fileName)
@@ -22,7 +25,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         _batchingMode = batchingMode;
         _fileName = fileName;
         _fileActivityPrefix = $"FILE_ACTIVITY|{fileName}|ACTIVE|";
-        _channel = Channel.CreateBounded<T>(new BoundedChannelOptions(batchSize)
+        _batchA = new List<T>();
+        _batchB = new List<T>();
+        _channel = Channel.CreateBounded<T>(new BoundedChannelOptions(Math.Min(batchSize, 100_000))
         {
             SingleReader = true,
             SingleWriter = true
@@ -56,12 +61,36 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
         try
         {
-            var batch = new List<T>();
+            var activeBatch = _batchA;
+            var standbyBatch = _batchB;
+
             while (await _channel.Reader.WaitToReadAsync())
             {
-                await Work(batch, false);
+                AccumulateBatch(activeBatch);
+
+                _debounceFileActivity.Debounce(_fileActivityPrefix, activeBatch.Count);
+
+                if (_batchingMode == BatchingMode.OnFull && activeBatch.Count < _batchSize)
+                    continue;
+
+                // Wait for previous flush to complete before swapping
+                await _flushTask;
+
+                // Start flushing current batch in background
+                var batchToFlush = activeBatch;
+                _flushTask = FlushBatchAsync(batchToFlush);
+
+                // Swap to standby batch and continue accumulating
+                activeBatch = standbyBatch;
+                standbyBatch = batchToFlush;
             }
-            if(batch.Count > 0) await Work(batch, true);
+
+            // Shutdown: wait for pending flush, then flush remaining
+            await _flushTask;
+            if (activeBatch.Count > 0)
+            {
+                await FlushBatchAsync(activeBatch);
+            }
         }
         catch (Exception e)
         {
@@ -73,27 +102,8 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
 
     readonly DebounceSignal _debounceFileActivity = new(5000);
 
-    async Task Work(List<T> batch, bool lastBatch)
+    async Task FlushBatchAsync(List<T> batch)
     {
-        AccumulateBatch(batch);
-
-        // Report memory usage every 1M items
-        if (batch.Count % 1000000 == 0 && batch.Count > 0)
-        {
-            var sizeBytes = batch.Count * System.Runtime.InteropServices.Marshal.SizeOf<T>();
-            Console.Error.WriteLine($"BATCH_SIZE|{_fileName}|{batch.Count:N0}|{sizeBytes / 1024 / 1024}MB|Capacity={batch.Capacity:N0}");
-        }
-
-        _debounceFileActivity.Debounce(_fileActivityPrefix, batch.Count);
-
-        if (!lastBatch && _batchingMode == BatchingMode.OnFull && batch.Count < _batchSize) return;
-        await SendBatch(batch);
-    }
-
-    async Task SendBatch(List<T> batch)
-    {
-
-        Stopwatch sw = Stopwatch.StartNew();
         try
         {
             if (Configuration.EnableProgressSignals)
@@ -111,7 +121,6 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
             Console.Error.WriteLine(e);
         }
 
-        sw.Restart();
         batch.Clear();
     }
 
