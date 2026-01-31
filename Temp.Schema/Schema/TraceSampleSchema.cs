@@ -77,9 +77,9 @@ public class TraceSampleSchema
     public ParquetColumn<uint> Cpu { get; } = new("cpu", DictOnly);
     public ParquetColumn<uint> Flags { get; } = new("flags", DictOnly);
 
-    // Addresses - plain (random values, no pattern)
-    public ParquetColumn<ulong> Ip { get; } = new("ip", PlainOnly);
-    public ParquetColumn<ulong> Addr { get; } = new("addr", PlainOnly);
+    // Addresses - delta (often cluster in similar regions)
+    public ParquetColumn<ulong> Ip { get; } = new("ip", DeltaOnly);
+    public ParquetColumn<ulong> Addr { get; } = new("addr", DeltaOnly);
 
     // Counters - delta encoding
     public ParquetColumn<ulong> Period { get; } = new("period", DeltaOnly);
@@ -99,8 +99,8 @@ public class TraceSampleSchema
     public ParquetColumn<uint> SourceLineNumber { get; } = new("srcLineNumber", DictOnly);
     public ParquetColumn<uint> IpSymoff { get; } = new("ipSymoff", PlainOnly);
     public ParquetColumn<string?> IpSym { get; } = new("ipSym", DictOnly);
-    public ParquetColumn<ulong> IpSymStart { get; } = new("ipSymStart", PlainOnly);
-    public ParquetColumn<ulong> IpSymEnd { get; } = new("ipSymEnd", PlainOnly);
+    public ParquetColumn<ulong> IpSymStart { get; } = new("ipSymStart", DeltaOnly);
+    public ParquetColumn<ulong> IpSymEnd { get; } = new("ipSymEnd", DeltaOnly);
     public ParquetColumn<string?> IpDso { get; } = new("ipDso", DictOnly);
     public ParquetColumn<byte> IpSymBinding { get; } = new("ipSymBinding", DictOnly);
     public ParquetColumn<byte> IpIs64Bit { get; } = new("ipIs64Bit", DictOnly);
@@ -111,8 +111,8 @@ public class TraceSampleSchema
     public ParquetColumn<bool> HaveAddress { get; } = new("haveAddress", DictOnly);
     public ParquetColumn<uint> AddressSymoff { get; } = new("addressSymoff", PlainOnly);
     public ParquetColumn<string?> AddressSym { get; } = new("addressSym", DictOnly);
-    public ParquetColumn<ulong> AddressSymStart { get; } = new("addressSymStart", PlainOnly);
-    public ParquetColumn<ulong> AddressSymEnd { get; } = new("addressSymEnd", PlainOnly);
+    public ParquetColumn<ulong> AddressSymStart { get; } = new("addressSymStart", DeltaOnly);
+    public ParquetColumn<ulong> AddressSymEnd { get; } = new("addressSymEnd", DeltaOnly);
     public ParquetColumn<string?> AddressDso { get; } = new("addressDso", DictOnly);
     public ParquetColumn<byte> AddressSymBinding { get; } = new("addressSymBinding", DictOnly);
     public ParquetColumn<byte> AddressIs64Bit { get; } = new("addressIs64Bit", DictOnly);
