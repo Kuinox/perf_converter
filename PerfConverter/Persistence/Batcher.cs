@@ -76,7 +76,7 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         batch.Clear();
     }
 
-    public static Batcher<T> Create(IBatchPersistence<T> batchPersistence, int batchSize, BatchingMode batchingMode, string fileName)
+    public static Batcher<T> Create(IBatchPersistence<T> batchPersistence, int batchSize, string fileName)
     {
         return new Batcher<T>(batchPersistence, batchSize, fileName);
     }

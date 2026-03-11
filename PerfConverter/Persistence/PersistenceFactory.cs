@@ -35,7 +35,7 @@ public static class PersistenceFactory
                 Console.Error.WriteLine($"Invalid Parquet compression method: {compressionEnv}. Defaulting to Snappy.");
         }
         Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
-        return ParquetPersistenceLifetime.Create(outputDirectory, batchSize, BatchingMode.OnFull, compressionMethod);
+        return ParquetPersistenceLifetime.Create(outputDirectory, batchSize, compressionMethod);
     }
 
     public static (Func<string, IPersister<TraceEntry>>, Func<string, IPersister<StackRange>>) CreateDualPersistenceFactories()
