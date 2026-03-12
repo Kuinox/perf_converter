@@ -8,6 +8,7 @@
   </PropertyGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\parquet-dotnet\src\Parquet\Parquet.csproj" />
+		<ProjectReference Include="..\..\Plank\Plank\Plank.csproj" />
+		<PackageReference Include="Parquet.Net" Version="5.5.0" />
 	</ItemGroup>
 </Project>
