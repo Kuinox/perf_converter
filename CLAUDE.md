@@ -87,9 +87,7 @@ perf script -f --itrace=bei0ns -i /path/to/perf.data --dlfilter /path/to/PerfCon
 The following environment variables control PerfConverter's behavior:
 
 - `MAX_TRACES_TO_PROCESS`: Maximum number of traces to process before exiting
-- `PERSISTENCE_TYPE`: The type of persistence to use (currently only Parquet is supported)
 - `OUTPUT_DIRECTORY`: Directory where output files will be written (default: "parquet_output")
-- `PARQUET_COMPRESSION`: Compression method for Parquet output (None, Gzip, Snappy) - default is Snappy
 - `BATCH_SIZE`: Number of items to batch before writing to disk (default: 10,000,000)
 - `ENABLE_PROGRESS_SIGNALS`: When set to `true`, enables verbose progress and file activity signals (PROGRESS, FILE_STATUS, FILE_ACTIVITY). Default is `false` to avoid console spam when running manually
 

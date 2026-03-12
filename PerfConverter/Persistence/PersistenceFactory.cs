@@ -5,7 +5,6 @@ namespace PerfConverter.Persistence;
 
 public static class PersistenceFactory
 {
-    const string PERSISTENCE_TYPE_ENV = "PERSISTENCE_TYPE";
     const string OUTPUT_DIRECTORY_ENV = "OUTPUT_DIRECTORY";
     public static ParquetPersistenceLifetime CreatePersistence()
     {
@@ -18,7 +17,6 @@ public static class PersistenceFactory
             batchSize = parsedBatchSize;
             Console.Error.WriteLine($"Using batch size of {batchSize}");
         }
-        var persistenceType = Environment.GetEnvironmentVariable(PERSISTENCE_TYPE_ENV) ?? string.Empty;
         var outputDirectory = Environment.GetEnvironmentVariable(OUTPUT_DIRECTORY_ENV) ?? "parquet_output";
         Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
         return ParquetPersistenceLifetime.Create(outputDirectory, batchSize);
