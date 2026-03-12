@@ -36,14 +36,12 @@ public sealed class ParquetStackRangePersistence(StackRangeSchema schema, Parque
         await _dispose;
     }
 
-    public static async Task<IBatchPersistence<StackRange>> Create(string filepath, CompressionMethod compressionMethod)
+    public static async Task<IBatchPersistence<StackRange>> Create(string filepath)
     {
         var schema = new StackRangeSchema();
 
         var fileStream = new FileStream(filepath, FileMode.Create, FileAccess.ReadWrite);
         var writer = await ParquetWriter.CreateAsync(schema.Schema, fileStream);
-        writer.CompressionMethod = compressionMethod;
-        writer.CompressionLevel = System.IO.Compression.CompressionLevel.Optimal;
 
         return new ParquetStackRangePersistence(schema, writer, fileStream);
     }

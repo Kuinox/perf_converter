@@ -1,4 +1,3 @@
-using Parquet;
 using PerfConverter.Entry;
 using System.Runtime.InteropServices;
 
@@ -36,8 +35,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
 
     public static ParquetPersistenceLifetime Create(
        string outputDirectory,
-       int batchSize,
-       CompressionMethod compressionMethod)
+       int batchSize)
     {
         Directory.CreateDirectory(outputDirectory);
 
@@ -51,7 +49,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var persister = ParquetTracePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
+                var persister = ParquetTracePersistence.Create(path).GetAwaiter().GetResult();
                 return Batcher<TraceEntry>.Create(persister, batchSize, key);
             },
             stackRangeBatcherFactory: (key) =>
@@ -63,7 +61,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var persister = ParquetStackRangePersistence.Create(path, compressionMethod).GetAwaiter().GetResult();
+                var persister = ParquetStackRangePersistence.Create(path).GetAwaiter().GetResult();
                 return Batcher<StackRange>.Create(persister, batchSize, key);
             });
     }
