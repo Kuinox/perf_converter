@@ -1,54 +1,40 @@
-using Parquet;
-using Parquet.Schema;
 using PerfConverter.Entry;
+using Plank.Schema;
+using Plank.Writing;
 
 namespace PerfConverter.Schema;
 
 public class StackRangeSchema
 {
-    static readonly ColumnEncodingOptions DeltaOnly = new() { UseDeltaBinaryPackedEncoding = true, UseDictionaryEncoding = false };
+    static readonly ColumnOptions DeltaOnly = new(encodings: [EncodingKind.DeltaBinaryPacked]);
 
     public StackRangeSchema()
     {
-        Schema = new ParquetSchema(
-            StartTrace.Field,
-            EndTrace.Field
-        );
+        Schema = new([
+            StartTrace.Column,
+            EndTrace.Column
+        ]);
     }
 
-    // Trace IDs are sequential - delta encoding
-    public ParquetColumn<ulong> StartTrace { get; } = new("startTrace", DeltaOnly);
-    public ParquetColumn<ulong> EndTrace { get; } = new("endTrace", DeltaOnly);
+    public PlankColumn<ulong> StartTrace { get; } = new("startTrace", DeltaOnly);
+    public PlankColumn<ulong> EndTrace { get; } = new("endTrace", DeltaOnly);
 
     public ParquetSchema Schema { get; }
 
-    public async Task Writer(ParquetWriter writer)
+    void WriteTo(ParquetWriter writer)
     {
-        using var groupWriter = writer.CreateRowGroup();
-        await StartTrace.Write(groupWriter);
-        await EndTrace.Write(groupWriter);
+        var groupWriter = writer.StartRowGroup();
+        StartTrace.Write(groupWriter);
+        EndTrace.Write(groupWriter);
     }
 
-    public async IAsyncEnumerable<StackRange> ReadAll(ParquetReader reader)
-    {
-        foreach (var groupReader in reader.RowGroups)
-            await foreach (var entry in ReadRowGroup(groupReader))
-                yield return entry;
-    }
+    public PlankParquetFileWriter CreateWriter(Stream stream)
+        => PlankParquetFileWriter.Create(stream, Schema);
 
-    public async IAsyncEnumerable<StackRange> ReadRowGroup(IParquetRowGroupReader groupReader)
+    public Task Writer(PlankParquetFileWriter writer)
     {
-        var startTrace = await groupReader.ReadColumnAsync(StartTrace.Field);
-        var endTrace = await groupReader.ReadColumnAsync(EndTrace.Field);
-
-        for (var i = 0; i < startTrace.Data.Length; i++)
-        {
-            yield return new StackRange()
-            {
-                StartTrace = startTrace.AsSpan<ulong>()[i],
-                EndTrace = endTrace.AsSpan<ulong>()[i],
-            };
-        }
+        WriteTo(writer.Writer);
+        return Task.CompletedTask;
     }
 
     public void Resize(int newSize)

@@ -1,10 +1,13 @@
-using Parquet;
 using PerfConverter.Entry;
 using PerfConverter.Schema;
-namespace PerfConverter.Persistence.ParquetDotNet;
-public sealed class ParquetStackRangePersistence(StackRangeSchema schema, ParquetWriter writer, FileStream fileStream) : IBatchPersistence<StackRange>
+
+namespace PerfConverter.Persistence.Plank;
+
+public sealed class ParquetStackRangePersistence(StackRangeSchema schema, PlankParquetFileWriter writer) : IBatchPersistence<StackRange>
 {
-    private int _prevSize;
+    int _prevSize;
+    bool _disposed;
+
     public async Task PersistAsync(IReadOnlyCollection<StackRange> batch)
     {
         if (batch.Count == 0) return;
@@ -22,27 +25,27 @@ public sealed class ParquetStackRangePersistence(StackRangeSchema schema, Parque
             schema.EndTrace.Buffer[i] = entry.EndTrace;
             i++;
         }
+
         await schema.Writer(writer);
     }
 
-    Task? _dispose;
-
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        _dispose ??= Task.WhenAll(
-            writer.DisposeAsync().AsTask(),
-            fileStream.DisposeAsync().AsTask()
-        );
-        await _dispose;
+        if (!_disposed)
+        {
+            writer.CloseFile();
+            _disposed = true;
+        }
+
+        return ValueTask.CompletedTask;
     }
 
-    public static async Task<IBatchPersistence<StackRange>> Create(string filepath)
+    public static Task<IBatchPersistence<StackRange>> Create(string filepath)
     {
         var schema = new StackRangeSchema();
-
         var fileStream = new FileStream(filepath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = await ParquetWriter.CreateAsync(schema.Schema, fileStream);
+        var writer = schema.CreateWriter(fileStream);
 
-        return new ParquetStackRangePersistence(schema, writer, fileStream);
+        return Task.FromResult<IBatchPersistence<StackRange>>(new ParquetStackRangePersistence(schema, writer));
     }
 }

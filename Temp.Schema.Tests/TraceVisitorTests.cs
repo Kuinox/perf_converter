@@ -1,19 +1,11 @@
-using System;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using PerfConverter.Entry;
-using PerfConverter.Schema;
+using PerfConverter.PerfStructs;
 using Temp.Schema;
-using Temp.Schema.Schema;
 
 namespace Temp.Schema.Tests;
 
 public class TraceVisitorTests
 {
-    private const string BranchesPath = @"C:\Users\Kuinox\Documents\parquet_output\pid=18461\tid=18461\branches.parquet";
-
     [Test]
     public async Task EntryLogicFindEntries()
     {
@@ -32,5 +24,17 @@ public class TraceVisitorTests
         Assert.Pass("TraceVisitor completed without exceptions.");
     }
 
-    static IAsyncEnumerable<TraceEntry> GetEntries() => new TraceSampleSchema().ReadAll(BranchesPath);
+    static IAsyncEnumerable<TraceEntry> GetEntries() => new[]
+    {
+        new TraceEntry
+        {
+            Event = "branches:",
+            Flags = DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN | DLFilterFlag.PERF_DLFILTER_FLAG_CALL
+        },
+        new TraceEntry
+        {
+            Event = "branches:",
+            Flags = DLFilterFlag.PERF_DLFILTER_FLAG_RETURN | DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_END
+        }
+    }.ToAsyncEnumerable();
 }

@@ -12,3 +12,5 @@ src/artifacts
 dotnet-sdk-*.tar.gz
 /venv/
 /parquet_output/
+/.nuget
+/.dotnet

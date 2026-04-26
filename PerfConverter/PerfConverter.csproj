@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>Library</OutputType>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<PublishAot>true</PublishAot>
@@ -14,6 +14,7 @@
 		<DebugType>embedded</DebugType>
 		<DebugSymbols>true</DebugSymbols>
 		<StripSymbols>false</StripSymbols>
+		<DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
 	</PropertyGroup>
 	<!--NAOT cannot exports fields, we need to link against a binary that do it. -->
 
@@ -45,8 +46,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.547401" />
-		<ProjectReference Include="..\..\Plank\Plank\Plank.csproj" />
+		<PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.553101" />
 		<ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
 	</ItemGroup>
 </Project>

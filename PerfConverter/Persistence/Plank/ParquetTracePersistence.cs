@@ -1,12 +1,14 @@
-﻿using Parquet;
 using PerfConverter.Entry;
+using PerfConverter.Schema;
 using Temp.Schema.Schema;
 
-namespace PerfConverter.Persistence.ParquetDotNet;
+namespace PerfConverter.Persistence.Plank;
 
-public class ParquetTracePersistence(TraceSampleSchema schema, ParquetWriter writer, FileStream fileStream) : IBatchPersistence<TraceEntry>
+public class ParquetTracePersistence(TraceSampleSchema schema, PlankParquetFileWriter writer) : IBatchPersistence<TraceEntry>
 {
     int _prevSize;
+    bool _disposed;
+
     public async Task PersistAsync(IReadOnlyCollection<TraceEntry> batch)
     {
         if (batch.Count == 0) return;
@@ -66,22 +68,27 @@ public class ParquetTracePersistence(TraceSampleSchema schema, ParquetWriter wri
 
             i++;
         }
+
         await schema.Writer(writer);
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        await writer.DisposeAsync();
-        await fileStream.DisposeAsync();
+        if (!_disposed)
+        {
+            writer.CloseFile();
+            _disposed = true;
+        }
+
+        return ValueTask.CompletedTask;
     }
 
-    public static async Task<IBatchPersistence<TraceEntry>> Create(string filePath)
+    public static Task<IBatchPersistence<TraceEntry>> Create(string filePath)
     {
         var schema = new TraceSampleSchema();
-
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = await ParquetWriter.CreateAsync(schema.Schema, fileStream);
+        var writer = schema.CreateWriter(fileStream);
 
-        return new ParquetTracePersistence(schema, writer, fileStream);
+        return Task.FromResult<IBatchPersistence<TraceEntry>>(new ParquetTracePersistence(schema, writer));
     }
 }

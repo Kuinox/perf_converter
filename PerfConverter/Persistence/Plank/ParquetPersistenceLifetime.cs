@@ -1,7 +1,7 @@
 using PerfConverter.Entry;
 using System.Runtime.InteropServices;
 
-namespace PerfConverter.Persistence.ParquetDotNet;
+namespace PerfConverter.Persistence.Plank;
 
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
