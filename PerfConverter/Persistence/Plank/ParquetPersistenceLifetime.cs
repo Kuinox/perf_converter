@@ -8,6 +8,7 @@ namespace PerfConverter.Persistence.Plank;
 /// </summary>
 public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IAsyncDisposable
 {
+    const int MaxTraceRowGroupSize = 250_000;
     readonly Dictionary<string, Batcher<TraceEntry>> _tracePersister = [];
     readonly Dictionary<string, Batcher<StackRange>> _stackRangePersister = [];
 
@@ -49,7 +50,8 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var persister = ParquetTracePersistence.Create(path).GetAwaiter().GetResult();
+                var rowBatchSize = Math.Min(batchSize, MaxTraceRowGroupSize);
+                var persister = ParquetTracePersistence.Create(path, rowBatchSize).GetAwaiter().GetResult();
                 return Batcher<TraceEntry>.Create(persister, batchSize, key);
             },
             stackRangeBatcherFactory: (key) =>

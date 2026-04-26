@@ -48,5 +48,6 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.553101" />
 		<ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
+		<ProjectReference Include="..\Plank\Plank\Plank.csproj" />
 	</ItemGroup>
 </Project>

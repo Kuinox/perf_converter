@@ -1,94 +1,85 @@
 using PerfConverter.Entry;
-using PerfConverter.Schema;
 using Temp.Schema.Schema;
 
 namespace PerfConverter.Persistence.Plank;
 
-public class ParquetTracePersistence(TraceSampleSchema schema, PlankParquetFileWriter writer) : IBatchPersistence<TraceEntry>
+public sealed class ParquetTracePersistence(TraceSamplePipelineWriter writer) : IBatchPersistence<TraceEntry>
 {
-    int _prevSize;
     bool _disposed;
 
-    public async Task PersistAsync(IReadOnlyCollection<TraceEntry> batch)
+    public Task PersistAsync(IReadOnlyCollection<TraceEntry> batch)
     {
-        if (batch.Count == 0) return;
+        if (batch.Count == 0)
+            return Task.CompletedTask;
 
-        if (batch.Count != _prevSize)
-        {
-            _prevSize = batch.Count;
-            schema.Resize(batch.Count);
-        }
-
-        int i = 0;
         foreach (var entry in batch)
         {
-            schema.Id.Buffer[i] = entry.Id;
-            schema.PerfId.Buffer[i] = entry.PerfId;
-            schema.Pid.Buffer[i] = entry.Pid;
-            schema.Tid.Buffer[i] = entry.Tid;
-            schema.Time.Buffer[i] = entry.Time;
-            schema.Cpu.Buffer[i] = entry.Cpu;
-            schema.Flags.Buffer[i] = (uint)entry.Flags;
-            schema.Ip.Buffer[i] = entry.IpAddress;
-            schema.Addr.Buffer[i] = entry.AddressAddress;
-            schema.Period.Buffer[i] = entry.Period;
-            schema.InsnCnt.Buffer[i] = entry.InsnCnt;
-            schema.CycCnt.Buffer[i] = entry.CycCnt;
-            schema.Weight.Buffer[i] = entry.Weight;
-            schema.Cpumode.Buffer[i] = entry.Cpumode;
-            schema.AddrCorrelatesSym.Buffer[i] = entry.AddrCorrelatesSym;
-            schema.Event.Buffer[i] = entry.Event;
-            schema.MachinePid.Buffer[i] = entry.MachinePid;
-            schema.Vcpu.Buffer[i] = entry.Vcpu;
-            schema.SourceFileName.Buffer[i] = entry.SourceFileName;
-            schema.SourceLineNumber.Buffer[i] = entry.SourceLineNumber;
-            schema.IpSymoff.Buffer[i] = entry.IpSymoff;
-            schema.IpSym.Buffer[i] = entry.IpSym;
-            schema.IpSymStart.Buffer[i] = entry.IpSymStart;
-            schema.IpSymEnd.Buffer[i] = entry.IpSymEnd;
-            schema.IpDso.Buffer[i] = entry.IpDso;
-            schema.IpSymBinding.Buffer[i] = entry.IpSymBinding;
-            schema.IpIs64Bit.Buffer[i] = entry.IpIs64Bit;
-            schema.IpIsKernelIp.Buffer[i] = entry.IpIsKernelIp;
-            schema.IpBuildId.Buffer[i] = entry.IpBuildId;
-            schema.IpFiltered.Buffer[i] = entry.IpFiltered;
-            schema.IpComm.Buffer[i] = entry.IpComm;
-            schema.HaveAddress.Buffer[i] = entry.HaveAddress;
-            schema.AddressSymoff.Buffer[i] = entry.AddressSymoff;
-            schema.AddressSym.Buffer[i] = entry.AddressSym;
-            schema.AddressSymStart.Buffer[i] = entry.AddressSymStart;
-            schema.AddressSymEnd.Buffer[i] = entry.AddressSymEnd;
-            schema.AddressDso.Buffer[i] = entry.AddressDso;
-            schema.AddressSymBinding.Buffer[i] = entry.AddressSymBinding;
-            schema.AddressIs64Bit.Buffer[i] = entry.AddressIs64Bit;
-            schema.AddressIsKernelIp.Buffer[i] = entry.AddressIsKernelIp;
-            schema.AddressBuildId.Buffer[i] = entry.AddressBuildId;
-            schema.AddressFiltered.Buffer[i] = entry.AddressFiltered;
-            schema.AddressComm.Buffer[i] = entry.AddressComm;
-
-            i++;
+            var row = writer.GetRow();
+            row.Id = entry.Id;
+            row.PerfId = entry.PerfId;
+            row.Pid = entry.Pid;
+            row.Tid = entry.Tid;
+            row.Time = entry.Time;
+            row.Cpu = entry.Cpu;
+            row.Flags = (uint)entry.Flags;
+            row.Ip = entry.IpAddress;
+            row.Addr = entry.AddressAddress;
+            row.Period = entry.Period;
+            row.InsnCnt = entry.InsnCnt;
+            row.CycCnt = entry.CycCnt;
+            row.Weight = entry.Weight;
+            row.Cpumode = entry.Cpumode;
+            row.AddrCorrelatesSym = entry.AddrCorrelatesSym;
+            row.Event = entry.Event;
+            row.MachinePid = entry.MachinePid;
+            row.Vcpu = entry.Vcpu;
+            row.SourceFileName = entry.SourceFileName ?? string.Empty;
+            row.SourceLineNumber = entry.SourceLineNumber;
+            row.IpSymoff = entry.IpSymoff;
+            row.IpSym = entry.IpSym;
+            row.IpSymStart = entry.IpSymStart;
+            row.IpSymEnd = entry.IpSymEnd;
+            row.IpDso = entry.IpDso;
+            row.IpSymBinding = entry.IpSymBinding;
+            row.IpIs64Bit = entry.IpIs64Bit;
+            row.IpIsKernelIp = entry.IpIsKernelIp;
+            row.IpBuildId = entry.IpBuildId;
+            row.IpFiltered = entry.IpFiltered;
+            row.IpComm = entry.IpComm;
+            row.HaveAddress = entry.HaveAddress;
+            row.AddressSymoff = entry.AddressSymoff;
+            row.AddressSym = entry.AddressSym;
+            row.AddressSymStart = entry.AddressSymStart;
+            row.AddressSymEnd = entry.AddressSymEnd;
+            row.AddressDso = entry.AddressDso;
+            row.AddressSymBinding = entry.AddressSymBinding;
+            row.AddressIs64Bit = entry.AddressIs64Bit;
+            row.AddressIsKernelIp = entry.AddressIsKernelIp;
+            row.AddressBuildId = entry.AddressBuildId;
+            row.AddressFiltered = entry.AddressFiltered;
+            row.AddressComm = entry.AddressComm;
+            writer.Next();
         }
 
-        await schema.Writer(writer);
+        return Task.CompletedTask;
     }
 
     public ValueTask DisposeAsync()
     {
         if (!_disposed)
         {
-            writer.CloseFile();
+            writer.Complete();
             _disposed = true;
         }
 
         return ValueTask.CompletedTask;
     }
 
-    public static Task<IBatchPersistence<TraceEntry>> Create(string filePath)
+    public static Task<IBatchPersistence<TraceEntry>> Create(string filePath, int rowBatchSize)
     {
-        var schema = new TraceSampleSchema();
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = schema.CreateWriter(fileStream);
+        var writer = new TraceSamplePipelineWriter(fileStream, rowBatchSize, maxParallelism: (uint)Environment.ProcessorCount);
 
-        return Task.FromResult<IBatchPersistence<TraceEntry>>(new ParquetTracePersistence(schema, writer));
+        return Task.FromResult<IBatchPersistence<TraceEntry>>(new ParquetTracePersistence(writer));
     }
 }

@@ -10,5 +10,8 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Plank\Plank\Plank.csproj" />
+		<ProjectReference Include="..\Plank\Plank.SourceGen\Plank.SourceGen.csproj"
+		                  OutputItemType="Analyzer"
+		                  ReferenceOutputAssembly="false" />
 	</ItemGroup>
 </Project>
