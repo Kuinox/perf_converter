@@ -33,6 +33,7 @@ public class PerfMonitorViewModel
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
     public ConcurrentQueue<string> OutputLines { get; } = new();
     public ConcurrentQueue<string> ErrorLines { get; } = new();
+    public ConcurrentQueue<string> RawErrorLines { get; } = new();
 
     // Track event counts for 1-second sliding window rate calculation
     public Queue<(long ticks, long eventCount)> RateHistory { get; } = new();
@@ -95,7 +96,7 @@ public class PerfMonitorViewModel
         }
     }
 
-    public void TrimErrorLines(int maxLines = 20)
+    public void TrimErrorLines(int maxLines = 200)
     {
         while (ErrorLines.Count > maxLines)
         {

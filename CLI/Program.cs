@@ -108,7 +108,7 @@ internal class Program
         }
         catch (Exception ex)
         {
-            AnsiConsole.MarkupLine($"[red]Error executing perf command: {ex.Message}[/]");
+            AnsiConsole.WriteException(ex);
             return 1;
         }
     }
@@ -303,6 +303,19 @@ internal class Program
             await process.WaitForExitAsync();
         }
 
-        return process.ExitCode;
+        var exitCode = process.ExitCode;
+
+        if (exitCode != 0 && !viewModel.RawErrorLines.IsEmpty)
+        {
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("===== FULL PERF STDERR =====");
+            foreach (var line in viewModel.RawErrorLines)
+            {
+                Console.Error.WriteLine(line);
+            }
+            Console.Error.WriteLine("===== END PERF STDERR =====");
+        }
+
+        return exitCode;
     }
 }

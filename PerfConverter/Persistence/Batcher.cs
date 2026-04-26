@@ -70,7 +70,9 @@ public class Batcher<T> : IPersister<T>, IAsyncDisposable
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine(e);
+            Console.Error.WriteLine($"FATAL persistence failure while flushing '{_fileName}'.");
+            Console.Error.WriteLine(e.ToString());
+            Environment.FailFast($"Fatal persistence failure while flushing '{_fileName}'.", e);
         }
 
         batch.Clear();
