@@ -14,7 +14,7 @@ namespace PerfToPerfetoo.Tests
         public void Test1()
         {
             var errors = new List<string>();
-            _processor.OpenTraceProcessor(_exePath, @"C:\dev\PerfConverter\PerfToPerfetto\bin\Debug\net9.0\out.perfetto-trace",
+            _processor.OpenTraceProcessor(_exePath, @"C:\dev\PerfConverter\PerfToPerfetto\bin\Debug\net10.0\out.perfetto-trace",
             (ctx, data) =>
             {
                 Console.WriteLine(data.Data);
