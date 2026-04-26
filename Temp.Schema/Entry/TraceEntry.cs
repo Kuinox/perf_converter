@@ -52,7 +52,7 @@ public struct TraceEntry
     public byte AddressSymBinding;
     public byte AddressIs64Bit;
     public byte AddressIsKernelIp;
-    public byte[] AddressBuildId;
+    public byte[]? AddressBuildId;
     public byte AddressFiltered;
     public string? AddressComm;
 

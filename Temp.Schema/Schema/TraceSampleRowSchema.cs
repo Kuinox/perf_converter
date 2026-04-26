@@ -126,7 +126,7 @@ public sealed partial class TraceSampleRowSchema
     public byte AddressIsKernelIp { get; set; }
 
     [ParquetColumn("addressBuildId")]
-    public byte[] AddressBuildId { get; set; } = [];
+    public byte[]? AddressBuildId { get; set; }
 
     [ParquetColumn("addressFiltered")]
     public byte AddressFiltered { get; set; }
