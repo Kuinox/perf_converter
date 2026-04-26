@@ -24,7 +24,7 @@ public struct TraceEntry
     public string Event;
     public uint MachinePid;
     public uint Vcpu;
-    public string SourceFileName;
+    public string? SourceFileName;
     public uint SourceLineNumber;
 
     // ip
@@ -56,7 +56,7 @@ public struct TraceEntry
     public byte AddressFiltered;
     public string? AddressComm;
 
-    public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id, string srcFilePath, uint lineNumber)
+    public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id, string? srcFilePath, uint lineNumber)
     {
         var entry = new TraceEntry
         {

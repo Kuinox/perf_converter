@@ -10,7 +10,7 @@ sealed class SegmentProcessor(
 {
     readonly Stack<ulong> _stackStarts = new();
 
-    public unsafe void ProcessData(ulong entryId, PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string srcFilePath, uint lineNumber)
+    public unsafe void ProcessData(ulong entryId, PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string? srcFilePath, uint lineNumber)
     {
         var entry = TraceEntry.CreateFromPerf(sample, ip, address, entryId, srcFilePath, lineNumber);
         tracePersister.Persist(entry);

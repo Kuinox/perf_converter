@@ -79,7 +79,7 @@ public class TraceSampleSchema
     public PlankColumn<string?> Event { get; } = new("event", OptionalDictOnly);
     public PlankColumn<uint> MachinePid { get; } = new("machinePid", DictOnly);
     public PlankColumn<uint> Vcpu { get; } = new("vcpu", DictOnly);
-    public PlankColumn<string> SourceFileName { get; } = new("srcFileName", DictOnly);
+    public PlankColumn<string?> SourceFileName { get; } = new("srcFileName", OptionalDictOnly);
     public PlankColumn<uint> SourceLineNumber { get; } = new("srcLineNumber", DictOnly);
     public PlankColumn<uint> IpSymoff { get; } = new("ipSymoff", PlainOnly);
     public PlankColumn<string?> IpSym { get; } = new("ipSym", OptionalDictOnly);

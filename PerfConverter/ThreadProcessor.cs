@@ -24,7 +24,7 @@ class ThreadProcessor : IAsyncDisposable
         _stackPersister = stackRangePersistenceFactory(key);
     }
 
-    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string srcFilePath, uint lineNumber)
+    public unsafe void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string? srcFilePath, uint lineNumber)
     {
         var @event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event);
         if (!_eventMapping.TryGetValue(@event, out var processor))
