@@ -4,7 +4,6 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
 {
     private static readonly string[] IgnoredPrefixes =
     [
-        "BATCH_SIZE|",
         "POOL_SIZE|",
         "FLUSH_TIMING|"
     ];

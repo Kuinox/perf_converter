@@ -1,49 +1,34 @@
 using PerfConverter.Entry;
-using PerfConverter.Schema;
+using Temp.Schema.Schema;
 
 namespace PerfConverter.Persistence.Plank;
 
-public sealed class ParquetStackRangePersistence(StackRangeSchema schema, PlankParquetFileWriter writer) : IBatchPersistence<StackRange>
+public sealed class ParquetStackRangePersistence(StackRangeRowSchema.PipelineWriter writer) : IPersister<StackRange>
 {
-    int _prevSize;
     bool _disposed;
 
-    public void Persist(IReadOnlyCollection<StackRange> batch)
+    public void Persist(StackRange entry)
     {
-        if (batch.Count == 0) return;
-
-        if (batch.Count != _prevSize)
-        {
-            _prevSize = batch.Count;
-            schema.Resize(batch.Count);
-        }
-
-        int i = 0;
-        foreach (var entry in batch)
-        {
-            schema.StartTrace.Buffer[i] = entry.StartTrace;
-            schema.EndTrace.Buffer[i] = entry.EndTrace;
-            i++;
-        }
-
-        schema.Writer(writer);
+        var row = writer.GetRow();
+        row.StartTrace = entry.StartTrace;
+        row.EndTrace = entry.EndTrace;
+        writer.Next();
     }
 
     public void Dispose()
     {
         if (!_disposed)
         {
-            writer.CloseFile();
+            writer.Complete();
             _disposed = true;
         }
     }
 
-    public static IBatchPersistence<StackRange> Create(string filepath)
+    public static IPersister<StackRange> Create(string filepath)
     {
-        var schema = new StackRangeSchema();
         var fileStream = new FileStream(filepath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = schema.CreateWriter(fileStream);
+        var writer = StackRangeRowSchema.CreateRowWriter(fileStream);
 
-        return new ParquetStackRangePersistence(schema, writer);
+        return new ParquetStackRangePersistence(writer);
     }
 }

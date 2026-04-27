@@ -88,7 +88,6 @@ The following environment variables control PerfConverter's behavior:
 
 - `MAX_TRACES_TO_PROCESS`: Maximum number of traces to process before exiting
 - `OUTPUT_DIRECTORY`: Directory where output files will be written (default: "parquet_output")
-- `BATCH_SIZE`: Number of items to batch before writing to disk (default: 10,000,000)
 - `ENABLE_PROGRESS_SIGNALS`: When set to `true`, enables verbose progress and file activity signals (PROGRESS, FILE_STATUS, FILE_ACTIVITY). Default is `false` to avoid console spam when running manually
 
 ## Architecture
@@ -107,7 +106,7 @@ The following environment variables control PerfConverter's behavior:
 
 3. **Data Processing**: The `TraceProcessor` handles different types of perf events and distributes them to appropriate processors
 
-4. **Persistence**: The `Batcher` class from `Temp.Schema` buffers data in memory before writing to disk via Parquet persistence implementations
+4. **Persistence**: Perf data is streamed directly into Parquet persistence implementations
 
 ### Native Code Integration
 

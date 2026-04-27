@@ -6,10 +6,10 @@ namespace PerfConverter.Persistence.Plank;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IDisposable
+public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, IPersister<StackRange>> stackRangeBatcherFactory) : IDisposable
 {
     readonly Dictionary<string, IPersister<TraceEntry>> _tracePersister = [];
-    readonly Dictionary<string, Batcher<StackRange>> _stackRangePersister = [];
+    readonly Dictionary<string, IPersister<StackRange>> _stackRangePersister = [];
 
     public IPersister<TraceEntry> CreateTraceBatcher(string key)
     {
@@ -35,8 +35,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
     }
 
     public static ParquetPersistenceLifetime Create(
-       string outputDirectory,
-       int batchSize)
+       string outputDirectory)
     {
         Directory.CreateDirectory(outputDirectory);
 
@@ -61,8 +60,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var persister = ParquetStackRangePersistence.Create(path);
-                return Batcher<StackRange>.Create(persister, batchSize, key);
+                return ParquetStackRangePersistence.Create(path);
             });
     }
 }
