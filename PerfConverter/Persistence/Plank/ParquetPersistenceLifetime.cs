@@ -6,10 +6,9 @@ namespace PerfConverter.Persistence.Plank;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IAsyncDisposable
+public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IAsyncDisposable
 {
-    const int MaxTraceRowGroupSize = 250_000;
-    readonly Dictionary<string, Batcher<TraceEntry>> _tracePersister = [];
+    readonly Dictionary<string, IPersister<TraceEntry>> _tracePersister = [];
     readonly Dictionary<string, Batcher<StackRange>> _stackRangePersister = [];
 
     public IPersister<TraceEntry> CreateTraceBatcher(string key)
@@ -50,9 +49,7 @@ public class ParquetPersistenceLifetime(Func<string, Batcher<TraceEntry>> traceB
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var rowBatchSize = Math.Min(batchSize, MaxTraceRowGroupSize);
-                var persister = ParquetTracePersistence.Create(path, rowBatchSize).GetAwaiter().GetResult();
-                return Batcher<TraceEntry>.Create(persister, batchSize, key);
+                return ParquetTracePersistence.Create(path).GetAwaiter().GetResult();
             },
             stackRangeBatcherFactory: (key) =>
             {
