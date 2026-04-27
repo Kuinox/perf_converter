@@ -66,9 +66,12 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
     }
 
     public static IPersister<TraceEntry> Create(string filePath)
+        => Create(filePath, onFlush: null);
+
+    public static IPersister<TraceEntry> Create(string filePath, Action<int>? onFlush)
     {
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = TraceSampleRowSchema.CreateRowWriter(fileStream);
+        var writer = TraceSampleRowSchema.CreateRowWriter(fileStream, onFlush);
 
         return new ParquetTracePersistence(writer);
     }

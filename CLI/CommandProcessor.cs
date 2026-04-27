@@ -97,10 +97,7 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
                 
                 if (actionType == "CLOSED")
                     existing.ClosedAt = DateTime.UtcNow;
-                
-                if (actionType == "FLUSHING" && entryCount > 0)
-                    existing.FlushedCount += entryCount;
-                
+
                 return existing;
             });
     }
@@ -118,11 +115,27 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
             entryCount = count;
         
         viewModel.FileStatuses.AddOrUpdate(fileName,
-            new FileStatus { FileName = fileName, Status = "BUFFERING", BufferedCount = entryCount, LastActivity = DateTime.UtcNow },
+            new FileStatus
+            {
+                FileName = fileName,
+                Status = "BUFFERING",
+                BufferedCount = actionType == "FLUSHED" ? 0 : entryCount,
+                FlushedCount = actionType == "FLUSHED" ? entryCount : 0,
+                LastActivity = DateTime.UtcNow
+            },
             (key, existing) =>
             {
                 existing.LastActivity = DateTime.UtcNow;
-                existing.BufferedCount = entryCount;
+                if (actionType == "FLUSHED")
+                {
+                    if (entryCount > 0)
+                        existing.FlushedCount += entryCount;
+                }
+                else
+                {
+                    existing.BufferedCount = entryCount;
+                }
+
                 return existing;
             });
     }

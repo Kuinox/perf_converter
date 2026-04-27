@@ -39,6 +39,22 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
     {
         Directory.CreateDirectory(outputDirectory);
 
+        static Action<int>? CreateFlushNotifier(string key)
+        {
+            if (!Configuration.EnableProgressSignals)
+                return null;
+
+            return flushedCount =>
+            {
+                if (flushedCount <= 0)
+                    return;
+
+                Console.Error.WriteLine($"FILE_STATUS|{key}|FLUSHING");
+                Console.Error.WriteLine($"FILE_ACTIVITY|{key}|FLUSHED|{flushedCount}");
+                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
+            };
+        }
+
         return new ParquetPersistenceLifetime(
             traceBatcherFactory: (key) =>
             {
@@ -49,7 +65,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                return ParquetTracePersistence.Create(path);
+                return ParquetTracePersistence.Create(path, CreateFlushNotifier(key));
             },
             stackRangeBatcherFactory: (key) =>
             {
@@ -60,7 +76,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                return ParquetStackRangePersistence.Create(path);
+                return ParquetStackRangePersistence.Create(path, CreateFlushNotifier(key));
             });
     }
 }
