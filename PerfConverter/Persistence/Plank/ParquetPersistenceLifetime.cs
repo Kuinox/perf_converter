@@ -6,7 +6,7 @@ namespace PerfConverter.Persistence.Plank;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IAsyncDisposable
+public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, Batcher<StackRange>> stackRangeBatcherFactory) : IDisposable
 {
     readonly Dictionary<string, IPersister<TraceEntry>> _tracePersister = [];
     readonly Dictionary<string, Batcher<StackRange>> _stackRangePersister = [];
@@ -25,12 +25,13 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
         return persistence;
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        var traceTasks = _tracePersister.Values.Select(entry => entry.DisposeAsync().AsTask());
-        var stackRangeTasks = _stackRangePersister.Values.Select(entry => entry.DisposeAsync().AsTask());
-        
-        await Task.WhenAll(traceTasks.Concat(stackRangeTasks));
+        foreach (var entry in _tracePersister.Values)
+            entry.Dispose();
+
+        foreach (var entry in _stackRangePersister.Values)
+            entry.Dispose();
     }
 
     public static ParquetPersistenceLifetime Create(
@@ -49,7 +50,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                return ParquetTracePersistence.Create(path).GetAwaiter().GetResult();
+                return ParquetTracePersistence.Create(path);
             },
             stackRangeBatcherFactory: (key) =>
             {
@@ -60,7 +61,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                var persister = ParquetStackRangePersistence.Create(path).GetAwaiter().GetResult();
+                var persister = ParquetStackRangePersistence.Create(path);
                 return Batcher<StackRange>.Create(persister, batchSize, key);
             });
     }

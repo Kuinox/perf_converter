@@ -31,10 +31,9 @@ public class StackRangeSchema
     public PlankParquetFileWriter CreateWriter(Stream stream)
         => PlankParquetFileWriter.Create(stream, Schema);
 
-    public Task Writer(PlankParquetFileWriter writer)
+    public void Writer(PlankParquetFileWriter writer)
     {
         WriteTo(writer.Writer);
-        return Task.CompletedTask;
     }
 
     public void Resize(int newSize)

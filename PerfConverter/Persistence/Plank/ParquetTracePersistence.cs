@@ -56,22 +56,20 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         writer.Next();
     }
 
-    public ValueTask DisposeAsync()
+    public void Dispose()
     {
         if (!_disposed)
         {
             writer.Complete();
             _disposed = true;
         }
-
-        return ValueTask.CompletedTask;
     }
 
-    public static Task<IPersister<TraceEntry>> Create(string filePath)
+    public static IPersister<TraceEntry> Create(string filePath)
     {
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = TraceSampleRowSchema.CreateRowWriter(fileStream);
 
-        return Task.FromResult<IPersister<TraceEntry>>(new ParquetTracePersistence(writer));
+        return new ParquetTracePersistence(writer);
     }
 }

@@ -1,11 +1,11 @@
-﻿using PerfConverter.Entry;
+using PerfConverter.Entry;
 using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
 using Temp.Schema.Entry;
 
 namespace PerfConverter;
 
-class ThreadProcessor : IAsyncDisposable
+class ThreadProcessor : IDisposable
 {
     readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory;
     readonly Dictionary<string, SegmentProcessor> _eventMapping = [];
@@ -42,11 +42,11 @@ class ThreadProcessor : IAsyncDisposable
         processor.ProcessData(_currentEntryId++, sample, ip, address, srcFilePath, lineNumber);
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
-        var task = _stackPersister.DisposeAsync().AsTask();
-        var tasks = _tracePersisters.Select(x => x.DisposeAsync().AsTask());
-        await Task.WhenAll(tasks);
-        await task;
+        foreach (var persister in _tracePersisters)
+            persister.Dispose();
+
+        _stackPersister.Dispose();
     }
 }

@@ -105,8 +105,6 @@ public class TraceSampleSchema
     public PlankColumn<byte> AddressFiltered { get; } = new("addressFiltered", DictOnly);
     public PlankColumn<string?> AddressComm { get; } = new("addressComm", OptionalDictOnly);
 
-    static Task CompletedTask => Task.CompletedTask;
-
     void WriteTo(ParquetWriter writer)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -162,10 +160,9 @@ public class TraceSampleSchema
     public PlankParquetFileWriter CreateWriter(Stream stream)
         => PlankParquetFileWriter.Create(stream, Schema);
 
-    public Task Writer(PlankParquetFileWriter writer)
+    public void Writer(PlankParquetFileWriter writer)
     {
         WriteTo(writer.Writer);
-        return CompletedTask;
     }
 
     public IAsyncEnumerable<TraceEntry> ReadAll(string path)

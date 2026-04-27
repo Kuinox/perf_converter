@@ -1,6 +1,6 @@
-﻿namespace PerfConverter.Persistence;
+namespace PerfConverter.Persistence;
 
-public interface IBatchPersistence<T> : IAsyncDisposable
+public interface IBatchPersistence<T> : IDisposable
 {
-    Task PersistAsync(IReadOnlyCollection<T> batch);
+    void Persist(IReadOnlyCollection<T> batch);
 }

@@ -8,7 +8,7 @@ public sealed class ParquetStackRangePersistence(StackRangeSchema schema, PlankP
     int _prevSize;
     bool _disposed;
 
-    public async Task PersistAsync(IReadOnlyCollection<StackRange> batch)
+    public void Persist(IReadOnlyCollection<StackRange> batch)
     {
         if (batch.Count == 0) return;
 
@@ -26,26 +26,24 @@ public sealed class ParquetStackRangePersistence(StackRangeSchema schema, PlankP
             i++;
         }
 
-        await schema.Writer(writer);
+        schema.Writer(writer);
     }
 
-    public ValueTask DisposeAsync()
+    public void Dispose()
     {
         if (!_disposed)
         {
             writer.CloseFile();
             _disposed = true;
         }
-
-        return ValueTask.CompletedTask;
     }
 
-    public static Task<IBatchPersistence<StackRange>> Create(string filepath)
+    public static IBatchPersistence<StackRange> Create(string filepath)
     {
         var schema = new StackRangeSchema();
         var fileStream = new FileStream(filepath, FileMode.Create, FileAccess.ReadWrite);
         var writer = schema.CreateWriter(fileStream);
 
-        return Task.FromResult<IBatchPersistence<StackRange>>(new ParquetStackRangePersistence(schema, writer));
+        return new ParquetStackRangePersistence(schema, writer);
     }
 }

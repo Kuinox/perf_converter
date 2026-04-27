@@ -1,4 +1,4 @@
-﻿using PerfConverter.PerfStructs;
+using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.Plank;
 using System.Collections.Concurrent;
@@ -68,7 +68,7 @@ public unsafe class PerfDlFilter
         {
             if ((_count++) % 1000 == 0)
                 EntryContentPool.Shared.Tick();
-            
+
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             var state = (State)handle.Target!;
             state.EventCount++;
@@ -126,7 +126,7 @@ public unsafe class PerfDlFilter
             var state = (State)handle.Target!;
             handle.Free();
 
-            _persistenceLifetime.DisposeAsync().AsTask().Wait();
+            _persistenceLifetime.Dispose();
             Console.Error.WriteLine("Done.");
             Console.Error.WriteLine("EXIT_MESSAGE");
             return 0;
