@@ -10,7 +10,8 @@ namespace PerfConverter;
 [StructLayout(LayoutKind.Sequential)]
 public unsafe class PerfDlFilter
 {
-    [DllImport("PerfConverter", EntryPoint = "get_perf_dlfilter_fns")]
+    // This symbol is exported by the current NativeAOT shared library.
+    [DllImport("__Internal", EntryPoint = "get_perf_dlfilter_fns")]
     static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
     static TraceProcessor _traceProcessor = null!;

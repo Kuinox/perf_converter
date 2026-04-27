@@ -42,6 +42,7 @@
 	
 	<!-- Previously we only compiled the binary, this is to tell the NAOT Linker to link it.-->
 	<ItemGroup Condition="'$(OS)' == 'Unix'">
+		<DirectPInvoke Include="__Internal!get_perf_dlfilter_fns" />
 		<NativeLibrary Include="$(BaseOutputPath)exports.o" />
 	</ItemGroup>
 
