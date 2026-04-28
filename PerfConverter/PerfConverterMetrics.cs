@@ -24,7 +24,7 @@ static class PerfConverterMetrics
     static readonly ObservableGauge<double> CurrentRateGauge =
         Meter.CreateObservableGauge(
             name: "perfconverter.events.current_rate",
-            observeValue: ObserveCurrentRate,
+            observeValue: () => GetSnapshot().CurrentRate,
             unit: "{event}/s",
             description: "Current observed event processing rate.");
 
@@ -93,6 +93,32 @@ static class PerfConverterMetrics
         state.Status = FileTelemetryStatus.Closed;
     }
 
+    public static MetricsSnapshot GetSnapshot()
+    {
+        var currentRate = ObserveCurrentRate();
+        var files = new FileMetricsSnapshot[Files.Count];
+        var index = 0;
+
+        foreach (var (key, state) in Files)
+        {
+            files[index++] = new FileMetricsSnapshot(
+                FileName: key,
+                BufferedEntries: Math.Max(0, Interlocked.Read(ref state.BufferedEntries)),
+                FlushedEntries: Interlocked.Read(ref state.FlushedEntries),
+                Status: state.Status.ToString().ToUpperInvariant());
+        }
+
+        if (index != files.Length)
+        {
+            Array.Resize(ref files, index);
+        }
+
+        return new MetricsSnapshot(
+            TotalEvents: Interlocked.Read(ref _processedEvents),
+            CurrentRate: currentRate,
+            Files: files);
+    }
+
     static IEnumerable<Measurement<long>> ObserveFlushedEntries()
     {
         foreach (var (key, state) in Files)
@@ -154,4 +180,7 @@ static class PerfConverterMetrics
             return deltaEvents / elapsedSeconds;
         }
     }
+
+    public sealed record MetricsSnapshot(long TotalEvents, double CurrentRate, FileMetricsSnapshot[] Files);
+    public sealed record FileMetricsSnapshot(string FileName, long BufferedEntries, long FlushedEntries, string Status);
 }

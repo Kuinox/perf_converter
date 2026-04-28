@@ -118,6 +118,9 @@ internal class Program
     }
     private static async Task<int> RunPerfWithMonitor(ProcessStartInfo processInfo)
     {
+        var viewModel = new PerfMonitorViewModel();
+        using var metricsPipeServer = PerfMetricsPipeServer.Create(processInfo, viewModel);
+
         using var process = Process.Start(processInfo);
         if (process == null)
         {
@@ -126,28 +129,9 @@ internal class Program
         }
 
         var chrono = Stopwatch.StartNew();
-        var viewModel = new PerfMonitorViewModel();
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
-
-        // Diagnostics listener is started when the embedded .NET runtime is ready.
-        PerfDiagnosticsListener? diagnosticsListener = null;
-
-        void StartDiagnosticsListener()
-        {
-            if (diagnosticsListener == null)
-            {
-                try
-                {
-                    diagnosticsListener = new PerfDiagnosticsListener(process.Id, viewModel);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Warning: Could not start diagnostics listener: {ex.Message}");
-                }
-            }
-        }
 
         var exitTimeoutCts = new CancellationTokenSource();
         var stdoutDrained = false;
@@ -204,10 +188,6 @@ internal class Program
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                if (e.Data == "DOTNET_READY")
-                {
-                    StartDiagnosticsListener();
-                }
                 messageHandler.ProcessOutputMessage(e.Data);
             }
             else
@@ -309,9 +289,6 @@ internal class Program
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
         Console.CancelKeyPress -= cancelHandler;
-
-        // Clean up diagnostics listener
-        diagnosticsListener?.Dispose();
 
         // Ensure process has exited before accessing ExitCode
         if (!process.HasExited)

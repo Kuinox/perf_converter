@@ -15,6 +15,7 @@ public unsafe class PerfDlFilter
 
     static TraceProcessor _traceProcessor = null!;
     static ParquetPersistenceLifetime _persistenceLifetime = null!;
+    static MetricsPipeReporter? _metricsPipeReporter;
 
     class State
     {
@@ -39,6 +40,7 @@ public unsafe class PerfDlFilter
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
+            _metricsPipeReporter = MetricsPipeReporter.TryStart();
             _persistenceLifetime = PersistenceFactory.CreatePersistence();
 
             _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher, _persistenceLifetime.CreateStackRangeBatcher);
@@ -94,6 +96,8 @@ public unsafe class PerfDlFilter
             _ = (State)handle.Target!;
             handle.Free();
 
+            _metricsPipeReporter?.Dispose();
+            _metricsPipeReporter = null;
             _persistenceLifetime.Dispose();
             EntryContentPool.Shared.Dispose();
             Console.Error.WriteLine("Done.");
