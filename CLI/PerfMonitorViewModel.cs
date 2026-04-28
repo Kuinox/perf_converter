@@ -11,6 +11,7 @@ public class PerfMonitorViewModel
     public TimeSpan Elapsed { get; set; }
     public int OverallRate { get; set; }
     public int CurrentRate { get; set; }
+    public DateTime LastCurrentRateUpdateUtc { get; set; } = DateTime.MinValue;
     public DateTime LastGcEvent { get; set; } = DateTime.MinValue;
     public bool GcActive { get; set; } = false;
     public long TotalMemory { get; set; }
@@ -34,10 +35,6 @@ public class PerfMonitorViewModel
     public ConcurrentQueue<string> OutputLines { get; } = new();
     public ConcurrentQueue<string> ErrorLines { get; } = new();
     public ConcurrentQueue<string> RawErrorLines { get; } = new();
-
-    // Track event counts for 1-second sliding window rate calculation
-    public Queue<(long ticks, long eventCount)> RateHistory { get; } = new();
-
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
     
     [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]

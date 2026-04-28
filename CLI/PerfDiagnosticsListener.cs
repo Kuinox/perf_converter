@@ -1,4 +1,5 @@
 using System.Diagnostics.Tracing;
+using System.Globalization;
 using Microsoft.Diagnostics.NETCore.Client;
 using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
@@ -35,7 +36,7 @@ public sealed class PerfDiagnosticsListener : IDisposable
                 arguments: new Dictionary<string, string?>
                 {
                     ["Metrics"] = "PerfConverter*",
-                    ["RefreshInterval"] = "1"
+                    ["RefreshInterval"] = "0.25"
                 })
         };
 
@@ -132,10 +133,11 @@ public sealed class PerfDiagnosticsListener : IDisposable
 
         if (instrumentName == "perfconverter.events.processed")
         {
-            var valueText = GetPayloadString(traceEvent, "value");
-            if (long.TryParse(valueText, out var eventCount))
+            var rate = GetPayloadDouble(traceEvent, "value");
+            if (rate is not null)
             {
-                _viewModel.EventCount = eventCount;
+                _viewModel.CurrentRate = (int)Math.Round(rate.Value);
+                _viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
             }
             return;
         }
@@ -173,10 +175,53 @@ public sealed class PerfDiagnosticsListener : IDisposable
     void HandleGaugeMetric(TraceEvent traceEvent)
     {
         var instrumentName = GetPayloadString(traceEvent, "instrumentName");
-        if (instrumentName != "perfconverter.file.status")
+        if (string.IsNullOrEmpty(instrumentName))
             return;
 
         var fileName = GetTagValue(GetPayloadString(traceEvent, "tags"), "file");
+
+        if (instrumentName == "perfconverter.events.total")
+        {
+            var eventCount = GetPayloadLong(traceEvent, "lastValue");
+            if (eventCount is not null)
+            {
+                _viewModel.EventCount = eventCount.Value;
+            }
+            return;
+        }
+
+        if (instrumentName == "perfconverter.file.entries.buffered")
+        {
+            var bufferedCount = GetPayloadLong(traceEvent, "lastValue");
+            if (string.IsNullOrEmpty(fileName) || bufferedCount is null)
+                return;
+
+            _viewModel.FileStatuses.AddOrUpdate(
+                fileName,
+                key => new FileStatus
+                {
+                    FileName = key,
+                    Status = "BUFFERING",
+                    BufferedCount = bufferedCount.Value,
+                    LastActivity = DateTime.UtcNow
+                },
+                (_, existing) =>
+                {
+                    existing.BufferedCount = bufferedCount.Value;
+                    existing.LastActivity = DateTime.UtcNow;
+                    if (existing.Status != "CLOSED")
+                    {
+                        existing.Status = "BUFFERING";
+                    }
+
+                    return existing;
+                });
+            return;
+        }
+
+        if (instrumentName != "perfconverter.file.status")
+            return;
+
         var statusCode = GetPayloadInt(traceEvent, "lastValue");
         if (string.IsNullOrEmpty(fileName) || statusCode is null)
             return;
@@ -227,13 +272,19 @@ public sealed class PerfDiagnosticsListener : IDisposable
     static long? GetPayloadLong(TraceEvent traceEvent, string payloadName)
     {
         var valueText = GetPayloadString(traceEvent, payloadName);
-        return long.TryParse(valueText, out var value) ? value : null;
+        return long.TryParse(valueText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
 
     static int? GetPayloadInt(TraceEvent traceEvent, string payloadName)
     {
         var valueText = GetPayloadString(traceEvent, payloadName);
-        return int.TryParse(valueText, out var value) ? value : null;
+        return int.TryParse(valueText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
+    }
+
+    static double? GetPayloadDouble(TraceEvent traceEvent, string payloadName)
+    {
+        var valueText = GetPayloadString(traceEvent, payloadName);
+        return double.TryParse(valueText, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var value) ? value : null;
     }
 
     static string? GetTagValue(string? tags, string key)

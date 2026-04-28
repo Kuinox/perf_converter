@@ -55,7 +55,9 @@ public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatch
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                return ParquetTracePersistence.Create(path, CreateFlushNotifier(key));
+                return new MeteredTracePersister(
+                    key,
+                    ParquetTracePersistence.Create(path, CreateFlushNotifier(key)));
             },
             stackRangeBatcherFactory: (key) =>
             {
@@ -63,7 +65,40 @@ public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatch
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
-                return ParquetStackRangePersistence.Create(path, CreateFlushNotifier(key));
+                return new MeteredStackRangePersister(
+                    key,
+                    ParquetStackRangePersistence.Create(path, CreateFlushNotifier(key)));
             });
+    }
+
+    sealed class MeteredTracePersister(string key, ITracePersister inner) : ITracePersister
+    {
+        public unsafe void Persist(
+            ulong entryId,
+            PerfStructs.PerfDlFilterSample* sample,
+            PerfStructs.PerfDlfilterAl* ip,
+            PerfStructs.PerfDlfilterAl* address,
+            ReadOnlyMemory<byte>? srcFilePath,
+            uint lineNumber,
+            ReadOnlyMemory<byte> eventName)
+        {
+            PerfConverterMetrics.FileBuffered(key, 1);
+            inner.Persist(entryId, sample, ip, address, srcFilePath, lineNumber, eventName);
+        }
+
+        public void Dispose()
+            => inner.Dispose();
+    }
+
+    sealed class MeteredStackRangePersister(string key, IPersister<StackRange> inner) : IPersister<StackRange>
+    {
+        public void Persist(StackRange val)
+        {
+            PerfConverterMetrics.FileBuffered(key, 1);
+            inner.Persist(val);
+        }
+
+        public void Dispose()
+            => inner.Dispose();
     }
 }
