@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Linq;
 using Temp.Schema;
-using CLI.Display;
 
 namespace CLI;
 
@@ -227,8 +226,6 @@ internal class Program
             _ = RequestShutdownAsync();
         }
 
-        var display = new PerfMonitorDisplay(viewModel, RequestShutdown);
-
         // Set up Ctrl+C handler
         ConsoleCancelEventHandler cancelHandler = (sender, e) =>
         {
@@ -335,7 +332,7 @@ internal class Program
         process.BeginErrorReadLine();
 
         // Start background tasks
-        var displayTask = display.StartLiveDisplayAsync(exitTimeoutCts.Token);
+        var displayTask = StartStatusDisplayAsync(viewModel, exitTimeoutCts.Token);
         var updateTask = Task.Run(async () =>
         {
             while (!viewModel.IsComplete)
@@ -390,6 +387,78 @@ internal class Program
         }
 
         return exitCode;
+    }
+
+    static async Task StartStatusDisplayAsync(PerfMonitorViewModel viewModel, CancellationToken cancellationToken)
+    {
+        var interactive = !Console.IsErrorRedirected;
+        var lastLineLength = 0;
+        var lastRendered = DateTime.MinValue;
+
+        try
+        {
+            while (!viewModel.IsComplete)
+            {
+                if (!interactive)
+                {
+                    if ((DateTime.UtcNow - lastRendered) >= TimeSpan.FromSeconds(5))
+                    {
+                        Console.Error.WriteLine(BuildStatusLine(viewModel));
+                        lastRendered = DateTime.UtcNow;
+                    }
+                }
+                else
+                {
+                    var line = BuildStatusLine(viewModel);
+                    var paddedLine = line.Length < lastLineLength
+                        ? line + new string(' ', lastLineLength - line.Length)
+                        : line;
+                    Console.Error.Write('\r');
+                    Console.Error.Write(paddedLine);
+                    lastLineLength = paddedLine.Length;
+                }
+
+                await Task.Delay(250, cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (interactive)
+            {
+                var line = BuildStatusLine(viewModel);
+                var paddedLine = line.Length < lastLineLength
+                    ? line + new string(' ', lastLineLength - line.Length)
+                    : line;
+                Console.Error.Write('\r');
+                Console.Error.WriteLine(paddedLine);
+            }
+        }
+    }
+
+    static string BuildStatusLine(PerfMonitorViewModel viewModel)
+    {
+        var elapsed = viewModel.ProcessHasExited
+            ? viewModel.Elapsed
+            : DateTime.UtcNow - viewModel.ProcessStartTime;
+        if (elapsed < TimeSpan.Zero)
+            elapsed = TimeSpan.Zero;
+
+        var statusMessage = string.IsNullOrWhiteSpace(viewModel.StatusMessage)
+            ? viewModel.Status
+            : viewModel.StatusMessage;
+
+        return string.Join(
+            " | ",
+            [
+                $"status: {viewModel.Status}",
+                $"elapsed: {elapsed:hh\\:mm\\:ss}",
+                $"events: {viewModel.EventCount:N0}",
+                $"rate: {viewModel.CurrentRate:N0}/s",
+                statusMessage
+            ]);
     }
 
     static bool TryRequestGracefulShutdown(Process process)
