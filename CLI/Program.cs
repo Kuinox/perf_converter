@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Linq;
 using Temp.Schema;
@@ -10,6 +11,11 @@ namespace CLI;
 
 internal class Program
 {
+    const int SigInt = 2;
+
+    [DllImport("libc", SetLastError = true)]
+    static extern int kill(int pid, int sig);
+
     static async Task<int> Main(string[] args)
     {
         try
@@ -146,24 +152,52 @@ internal class Program
         var exitTimeoutCts = new CancellationTokenSource();
         var stdoutDrained = false;
         var stderrDrained = false;
+        var shutdownRequested = 0;
 
         // Set up Ctrl+C handler
-        Console.CancelKeyPress += (sender, e) =>
+        ConsoleCancelEventHandler cancelHandler = (sender, e) =>
         {
             e.Cancel = true;
-            if (!process.HasExited)
+            if (Interlocked.Exchange(ref shutdownRequested, 1) != 0)
+                return;
+
+            _ = Task.Run(async () =>
             {
                 try
                 {
-                    process.Kill(true);
+                    viewModel.StatusMessage = "Ctrl+C received, requesting graceful shutdown...";
+
+                    if (process.HasExited)
+                        return;
+
+                    if (!TryRequestGracefulShutdown(process))
+                    {
+                        viewModel.StatusMessage = "Could not signal perf cleanly, forcing termination...";
+                        process.Kill(true);
+                        return;
+                    }
+
+                    using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                    try
+                    {
+                        await process.WaitForExitAsync(shutdownTimeout.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        if (!process.HasExited)
+                        {
+                            viewModel.StatusMessage = "Graceful shutdown timed out, forcing termination...";
+                            process.Kill(true);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLine($"[red]Error killing process: {ex.Message}[/]");
-                    Environment.Exit(1);
                 }
-            }
+            });
         };
+        Console.CancelKeyPress += cancelHandler;
 
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
@@ -274,6 +308,7 @@ internal class Program
 
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
+        Console.CancelKeyPress -= cancelHandler;
 
         // Clean up diagnostics listener
         diagnosticsListener?.Dispose();
@@ -298,5 +333,18 @@ internal class Program
         }
 
         return exitCode;
+    }
+
+    static bool TryRequestGracefulShutdown(Process process)
+    {
+        if (process.HasExited)
+            return true;
+
+        if (OperatingSystem.IsWindows())
+        {
+            return process.CloseMainWindow();
+        }
+
+        return kill(process.Id, SigInt) == 0;
     }
 }
