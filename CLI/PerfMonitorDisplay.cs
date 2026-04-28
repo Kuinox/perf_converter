@@ -122,11 +122,11 @@ public class PerfMonitorDisplay
                         var statusText = file.Status;
                         if (file.Status == "BUFFERING" && file.BufferedCount > 0)
                         {
-                            statusText += $" ({file.BufferedCount:N0})";
+                            statusText += $" ({file.BufferedCount:N0} buffered)";
                         }
 
                         fileName = Markup.Escape(fileName);
-                        var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
+                        var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim](written: {file.FlushedCount:N0})[/]";
                         tidNode.AddNode(fileDisplay);
                     }
                 }

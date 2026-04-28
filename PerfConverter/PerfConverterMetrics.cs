@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
 
 namespace PerfConverter;
@@ -7,14 +8,11 @@ static class PerfConverterMetrics
 {
     static readonly Meter Meter = new("PerfConverter");
     static readonly ConcurrentDictionary<string, FileTelemetryState> Files = new(StringComparer.Ordinal);
-
-    static readonly Counter<long> ProcessedEventsRateCounter =
-        Meter.CreateCounter<long>(
-            name: "perfconverter.events.processed",
-            unit: "{event}",
-            description: "Perf events processed during the current collection interval.");
+    static readonly Lock RateLock = new();
 
     static long _processedEvents;
+    static long _lastObservedProcessedEvents;
+    static long _lastObservedTimestamp = Stopwatch.GetTimestamp();
 
     static readonly ObservableGauge<long> ProcessedEventsGauge =
         Meter.CreateObservableGauge(
@@ -22,6 +20,13 @@ static class PerfConverterMetrics
             observeValue: () => Interlocked.Read(ref _processedEvents),
             unit: "{event}",
             description: "Total perf events processed by PerfConverter.");
+
+    static readonly ObservableGauge<double> CurrentRateGauge =
+        Meter.CreateObservableGauge(
+            name: "perfconverter.events.current_rate",
+            observeValue: ObserveCurrentRate,
+            unit: "{event}/s",
+            description: "Current observed event processing rate.");
 
     static readonly ObservableGauge<long> FlushedEntriesGauge =
         Meter.CreateObservableGauge(
@@ -47,7 +52,6 @@ static class PerfConverterMetrics
     public static void IncrementProcessedEvents()
     {
         Interlocked.Increment(ref _processedEvents);
-        ProcessedEventsRateCounter.Add(1);
     }
 
     public static void FileOpened(string key)
@@ -130,5 +134,24 @@ static class PerfConverterMetrics
     {
         Buffering = 1,
         Closed = 2
+    }
+
+    static double ObserveCurrentRate()
+    {
+        lock (RateLock)
+        {
+            var nowTimestamp = Stopwatch.GetTimestamp();
+            var currentProcessedEvents = Interlocked.Read(ref _processedEvents);
+            var elapsedSeconds = (nowTimestamp - _lastObservedTimestamp) / (double)Stopwatch.Frequency;
+
+            if (elapsedSeconds <= 0)
+                return 0;
+
+            var deltaEvents = currentProcessedEvents - _lastObservedProcessedEvents;
+            _lastObservedProcessedEvents = currentProcessedEvents;
+            _lastObservedTimestamp = nowTimestamp;
+
+            return deltaEvents / elapsedSeconds;
+        }
     }
 }

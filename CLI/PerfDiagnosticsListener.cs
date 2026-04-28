@@ -116,60 +116,10 @@ public sealed class PerfDiagnosticsListener : IDisposable
 
         switch (traceEvent.EventName)
         {
-            case "CounterRateValuePublished":
-                HandleCounterMetric(traceEvent);
-                break;
             case "GaugeValuePublished":
                 HandleGaugeMetric(traceEvent);
                 break;
         }
-    }
-
-    void HandleCounterMetric(TraceEvent traceEvent)
-    {
-        var instrumentName = GetPayloadString(traceEvent, "instrumentName");
-        if (string.IsNullOrEmpty(instrumentName))
-            return;
-
-        if (instrumentName == "perfconverter.events.processed")
-        {
-            var rate = GetPayloadDouble(traceEvent, "value");
-            if (rate is not null)
-            {
-                _viewModel.CurrentRate = (int)Math.Round(rate.Value);
-                _viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
-            }
-            return;
-        }
-
-        if (instrumentName != "perfconverter.file.entries.flushed")
-            return;
-
-        var fileName = GetTagValue(GetPayloadString(traceEvent, "tags"), "file");
-        var value = GetPayloadLong(traceEvent, "value");
-        if (string.IsNullOrEmpty(fileName) || value is null)
-            return;
-
-        _viewModel.FileStatuses.AddOrUpdate(
-            fileName,
-            key => new FileStatus
-            {
-                FileName = key,
-                Status = "BUFFERING",
-                FlushedCount = value.Value,
-                LastActivity = DateTime.UtcNow
-            },
-            (_, existing) =>
-            {
-                existing.FlushedCount = value.Value;
-                existing.LastActivity = DateTime.UtcNow;
-                if (existing.Status != "CLOSED")
-                {
-                    existing.Status = "BUFFERING";
-                }
-
-                return existing;
-            });
     }
 
     void HandleGaugeMetric(TraceEvent traceEvent)
@@ -187,6 +137,46 @@ public sealed class PerfDiagnosticsListener : IDisposable
             {
                 _viewModel.EventCount = eventCount.Value;
             }
+            return;
+        }
+
+        if (instrumentName == "perfconverter.events.current_rate")
+        {
+            var rate = GetPayloadDouble(traceEvent, "lastValue");
+            if (rate is not null)
+            {
+                _viewModel.CurrentRate = (int)Math.Round(rate.Value);
+                _viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
+            }
+            return;
+        }
+
+        if (instrumentName == "perfconverter.file.entries.flushed")
+        {
+            var flushedCount = GetPayloadLong(traceEvent, "lastValue");
+            if (string.IsNullOrEmpty(fileName) || flushedCount is null)
+                return;
+
+            _viewModel.FileStatuses.AddOrUpdate(
+                fileName,
+                key => new FileStatus
+                {
+                    FileName = key,
+                    Status = "BUFFERING",
+                    FlushedCount = flushedCount.Value,
+                    LastActivity = DateTime.UtcNow
+                },
+                (_, existing) =>
+                {
+                    existing.FlushedCount = flushedCount.Value;
+                    existing.LastActivity = DateTime.UtcNow;
+                    if (existing.Status != "CLOSED")
+                    {
+                        existing.Status = "BUFFERING";
+                    }
+
+                    return existing;
+                });
             return;
         }
 
