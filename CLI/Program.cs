@@ -11,9 +11,13 @@ namespace CLI;
 internal class Program
 {
     const int SigInt = 2;
+    const int SigTerm = 15;
 
     [DllImport("libc", SetLastError = true)]
     static extern int kill(int pid, int sig);
+
+    [DllImport("libc", SetLastError = true)]
+    static extern int setpgid(int pid, int pgid);
 
     static async Task<int> Main(string[] args)
     {
@@ -127,6 +131,8 @@ internal class Program
             return 1;
         }
 
+        TryAssignUnixProcessGroup(process);
+
         viewModel.ProcessStartTime = DateTime.UtcNow;
         var chrono = Stopwatch.StartNew();
         var commandProcessor = new CommandProcessor(viewModel);
@@ -135,14 +141,15 @@ internal class Program
         var stdoutDrained = false;
         var stderrDrained = false;
         var shutdownRequested = 0;
+        Task? shutdownTask = null;
 
-        void RequestShutdown()
+        Task RequestShutdownAsync()
         {
             if (Interlocked.Exchange(ref shutdownRequested, 1) != 0)
-                return;
+                return shutdownTask ?? Task.CompletedTask;
 
             viewModel.ShutdownRequested = true;
-            _ = Task.Run(async () =>
+            shutdownTask = Task.Run(async () =>
             {
                 try
                 {
@@ -155,6 +162,7 @@ internal class Program
                     {
                         viewModel.StatusMessage = "Could not signal perf cleanly, forcing termination...";
                         process.Kill(true);
+                        await process.WaitForExitAsync();
                         return;
                     }
 
@@ -167,16 +175,56 @@ internal class Program
                     {
                         if (!process.HasExited)
                         {
-                            viewModel.StatusMessage = "Graceful shutdown timed out, forcing termination...";
-                            process.Kill(true);
+                            viewModel.StatusMessage = "SIGINT timed out, escalating to SIGTERM...";
+                            TrySendUnixSignal(process, SigTerm, preferProcessGroup: true);
                         }
                     }
+
+                    if (!process.HasExited)
+                    {
+                        using var terminateTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        try
+                        {
+                            await process.WaitForExitAsync(terminateTimeout.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            if (!process.HasExited)
+                            {
+                                viewModel.StatusMessage = "Graceful shutdown timed out, forcing termination...";
+                                process.Kill(true);
+                                await process.WaitForExitAsync();
+                            }
+                        }
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited while shutdown was in flight.
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error killing process: {ex.Message}");
+                    if (!process.HasExited)
+                    {
+                        try
+                        {
+                            process.Kill(true);
+                            await process.WaitForExitAsync();
+                        }
+                        catch (InvalidOperationException)
+                        {
+                        }
+                    }
                 }
             });
+
+            return shutdownTask;
+        }
+
+        void RequestShutdown()
+        {
+            _ = RequestShutdownAsync();
         }
 
         var display = new PerfMonitorDisplay(viewModel, RequestShutdown);
@@ -188,6 +236,22 @@ internal class Program
             RequestShutdown();
         };
         Console.CancelKeyPress += cancelHandler;
+        PosixSignalRegistration? sigIntRegistration = null;
+        PosixSignalRegistration? sigTermRegistration = null;
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            sigIntRegistration = PosixSignalRegistration.Create(PosixSignal.SIGINT, ctx =>
+            {
+                ctx.Cancel = true;
+                RequestShutdown();
+            });
+
+            sigTermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, ctx =>
+            {
+                ctx.Cancel = true;
+                RequestShutdown();
+            });
+        }
 
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
@@ -298,6 +362,13 @@ internal class Program
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
         Console.CancelKeyPress -= cancelHandler;
+        sigIntRegistration?.Dispose();
+        sigTermRegistration?.Dispose();
+
+        if (shutdownTask is not null)
+        {
+            await shutdownTask;
+        }
 
         // Ensure process has exited before accessing ExitCode
         if (!process.HasExited)
@@ -331,6 +402,45 @@ internal class Program
             return process.CloseMainWindow();
         }
 
-        return kill(process.Id, SigInt) == 0;
+        return TrySendUnixSignal(process, SigInt, preferProcessGroup: true);
+    }
+
+    static void TryAssignUnixProcessGroup(Process process)
+    {
+        if (OperatingSystem.IsWindows() || process.HasExited)
+            return;
+
+        try
+        {
+            _ = setpgid(process.Id, process.Id);
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+    }
+
+    static bool TrySendUnixSignal(Process process, int signal, bool preferProcessGroup)
+    {
+        if (OperatingSystem.IsWindows() || process.HasExited)
+            return false;
+
+        try
+        {
+            if (preferProcessGroup && kill(-process.Id, signal) == 0)
+                return true;
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+
+        return kill(process.Id, signal) == 0;
     }
 }
