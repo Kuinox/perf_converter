@@ -12,7 +12,7 @@ public sealed class PerfMonitorDisplay
     const int MaxFileRows = 10;
     readonly PerfMonitorViewModel _viewModel;
     readonly TextBlock _summaryText;
-    readonly BarChart _throughputChart;
+    readonly Sparkline _totalRateSparkline;
     readonly BreakdownChart _fileStateChart;
     readonly Table _fileTable;
     readonly TextBlock _logsText;
@@ -22,7 +22,7 @@ public sealed class PerfMonitorDisplay
     {
         _viewModel = viewModel;
         _summaryText = new TextBlock { Wrap = true };
-        _throughputChart = new BarChart { ShowValues = true, ShowPercentages = false };
+        _totalRateSparkline = new Sparkline().Stretch().MinHeight(1).MinWidth(20);
         _fileStateChart = new BreakdownChart { ShowValues = true, ShowPercentages = true };
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
@@ -67,7 +67,7 @@ public sealed class PerfMonitorDisplay
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
 
         contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryText, "Ctrl+C stops perf")) { Row = 0, Column = 0 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", _throughputChart.Stretch(), "events/sec")) { Row = 0, Column = 1 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("File States", _fileStateChart.Stretch(), "live status mix")) { Row = 1, Column = 0 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity")) { Row = 1, Column = 1 });
 
@@ -86,6 +86,15 @@ public sealed class PerfMonitorDisplay
         {
             BottomRightText = string.IsNullOrWhiteSpace(footer) ? null : new TextBlock(footer)
         }.Stretch();
+    }
+
+    Visual CreateThroughputVisual()
+    {
+        return new DockLayout(
+            top: new TextBlock("Total current throughput trend").MinHeight(1),
+            content: _totalRateSparkline,
+            bottom: null)
+            .Stretch();
     }
 
     void UpdateDisplay()
@@ -122,20 +131,10 @@ public sealed class PerfMonitorDisplay
 
     void UpdateThroughputChart()
     {
-        var items = new[]
-        {
-            CreateBarItem("Current", _viewModel.CurrentRate, Colors.DodgerBlue),
-            CreateBarItem("Overall", _viewModel.OverallRate, Colors.MediumSeaGreen)
-        };
-
-        _throughputChart.Items.Clear();
-        foreach (var item in items)
-        {
-            _throughputChart.Items.Add(item);
-        }
-
-        _throughputChart.Maximum = Math.Max(1, items.Max(x => x.Value));
-        _throughputChart.Minimum = 0;
+        var history = _viewModel.GetTotalRateHistorySnapshot();
+        SparklineExtensions.Values(_totalRateSparkline, history);
+        _totalRateSparkline.Minimum = 0;
+        _totalRateSparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
     }
 
     void UpdateFileStateChart()
@@ -179,14 +178,15 @@ public sealed class PerfMonitorDisplay
                     new TextBlock(tid),
                     new TextBlock(fileName),
                     new TextBlock(kvp.Value.Status),
-                    new TextBlock(kvp.Value.BufferedCount.ToString("N0", CultureInfo.InvariantCulture)),
+                    new TextBlock(kvp.Value.CurrentRate.ToString("N0", CultureInfo.InvariantCulture)),
+                    CreateSparkline(kvp.Value.GetRateHistorySnapshot()),
                     new TextBlock(kvp.Value.FlushedCount.ToString("N0", CultureInfo.InvariantCulture))
                 };
             })
             .ToArray();
 
         _fileTable.HeaderCells.Clear();
-        foreach (var header in new[] { "PID", "TID", "File", "State", "Buffered", "Flushed" })
+        foreach (var header in new[] { "PID", "TID", "File", "State", "Rate/s", "Trend", "Flushed" })
         {
             _fileTable.HeaderCells.Add(new TextBlock(header));
         }
@@ -203,6 +203,7 @@ public sealed class PerfMonitorDisplay
                 new TextBlock(""),
                 new TextBlock(""),
                 new TextBlock("No files yet"),
+                new TextBlock(""),
                 new TextBlock(""),
                 new TextBlock(""),
                 new TextBlock(""));
@@ -222,21 +223,20 @@ public sealed class PerfMonitorDisplay
             : string.Join(Environment.NewLine, lines);
     }
 
-    static BarChartItem CreateBarItem(string label, double value, Color color)
-    {
-        return new BarChartItem(new TextBlock(label), value)
-        {
-            ValueLabel = new TextBlock(value.ToString("N0", CultureInfo.InvariantCulture)),
-            BarColor = color
-        };
-    }
-
     static BreakdownSegment CreateSegment(string label, double value, Color color)
     {
         return new BreakdownSegment(value, new TextBlock(label))
         {
             Color = color
         };
+    }
+
+    static Sparkline CreateSparkline(double[] history)
+    {
+        var sparkline = new Sparkline(history).MinWidth(12);
+        sparkline.Minimum = 0;
+        sparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
+        return sparkline;
     }
 
     static (string Pid, string Tid, string FileName) SplitFileKey(string key)

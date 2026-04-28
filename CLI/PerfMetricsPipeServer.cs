@@ -46,6 +46,9 @@ sealed class PerfMetricsPipeServer : IDisposable
                 viewModel.EventCount = snapshot.TotalEvents;
                 viewModel.CurrentRate = (int)Math.Round(snapshot.CurrentRate);
                 viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
+                viewModel.RecordTotalRate(snapshot.CurrentRate);
+
+                var observedAtUtc = DateTime.UtcNow;
 
                 foreach (var file in snapshot.Files)
                 {
@@ -56,7 +59,6 @@ sealed class PerfMetricsPipeServer : IDisposable
                             FileName = key,
                             Status = file.Status,
                             BufferedCount = file.BufferedEntries,
-                            FlushedCount = file.FlushedEntries,
                             ClosedAt = file.Status == "CLOSED" ? DateTime.UtcNow : null,
                             LastActivity = DateTime.UtcNow,
                             LastUpdated = DateTime.UtcNow
@@ -65,7 +67,6 @@ sealed class PerfMetricsPipeServer : IDisposable
                         {
                             existing.Status = file.Status;
                             existing.BufferedCount = file.BufferedEntries;
-                            existing.FlushedCount = file.FlushedEntries;
                             existing.LastActivity = DateTime.UtcNow;
                             existing.LastUpdated = DateTime.UtcNow;
                             if (file.Status == "CLOSED")
@@ -75,6 +76,15 @@ sealed class PerfMetricsPipeServer : IDisposable
 
                             return existing;
                         });
+
+                    if (viewModel.FileStatuses.TryGetValue(file.FileName, out var fileStatus))
+                    {
+                        fileStatus.RecordFlushedCount(file.FlushedEntries, observedAtUtc);
+                        if (file.Status == "CLOSED")
+                        {
+                            fileStatus.ResetCurrentRate();
+                        }
+                    }
                 }
             }
         }

@@ -277,6 +277,7 @@ internal class Program
                 else if ((DateTime.UtcNow - viewModel.LastCurrentRateUpdateUtc) > TimeSpan.FromSeconds(1))
                 {
                     viewModel.CurrentRate = 0;
+                    viewModel.RecordTotalRate(0);
                 }
 
                 await Task.Delay(100, exitTimeoutCts.Token);

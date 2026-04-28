@@ -7,6 +7,11 @@ namespace CLI;
 [AddINotifyPropertyChangedInterface]
 public class PerfMonitorViewModel
 {
+    static readonly TimeSpan HistoryWindow = TimeSpan.FromMinutes(1);
+
+    readonly Lock _rateHistorySync = new();
+    readonly Queue<RateSample> _totalRateHistory = new();
+
     public long EventCount { get; set; }
     public TimeSpan Elapsed { get; set; }
     public int OverallRate { get; set; }
@@ -86,6 +91,24 @@ public class PerfMonitorViewModel
         }
     }
 
+    public void RecordTotalRate(double rate)
+    {
+        lock (_rateHistorySync)
+        {
+            _totalRateHistory.Enqueue(new RateSample(DateTime.UtcNow, rate));
+            TrimTotalRateHistoryUnsafe(DateTime.UtcNow);
+        }
+    }
+
+    public double[] GetTotalRateHistorySnapshot()
+    {
+        lock (_rateHistorySync)
+        {
+            TrimTotalRateHistoryUnsafe(DateTime.UtcNow);
+            return _totalRateHistory.Select(x => x.Value).ToArray();
+        }
+    }
+
     public void TrimOutputLines(int maxLines = 50)
     {
         while (OutputLines.Count > maxLines)
@@ -101,4 +124,14 @@ public class PerfMonitorViewModel
             ErrorLines.TryDequeue(out _);
         }
     }
+
+    void TrimTotalRateHistoryUnsafe(DateTime nowUtc)
+    {
+        while (_totalRateHistory.Count > 0 && (nowUtc - _totalRateHistory.Peek().TimestampUtc) > HistoryWindow)
+        {
+            _totalRateHistory.Dequeue();
+        }
+    }
+
+    readonly record struct RateSample(DateTime TimestampUtc, double Value);
 }

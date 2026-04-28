@@ -147,6 +147,7 @@ public sealed class PerfDiagnosticsListener : IDisposable
             {
                 _viewModel.CurrentRate = (int)Math.Round(rate.Value);
                 _viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
+                _viewModel.RecordTotalRate(rate.Value);
             }
             return;
         }
@@ -163,12 +164,10 @@ public sealed class PerfDiagnosticsListener : IDisposable
                 {
                     FileName = key,
                     Status = "BUFFERING",
-                    FlushedCount = flushedCount.Value,
                     LastActivity = DateTime.UtcNow
                 },
                 (_, existing) =>
                 {
-                    existing.FlushedCount = flushedCount.Value;
                     existing.LastActivity = DateTime.UtcNow;
                     if (existing.Status != "CLOSED")
                     {
@@ -177,6 +176,11 @@ public sealed class PerfDiagnosticsListener : IDisposable
 
                     return existing;
                 });
+
+            if (_viewModel.FileStatuses.TryGetValue(fileName, out var fileStatus))
+            {
+                fileStatus.RecordFlushedCount(flushedCount.Value, DateTime.UtcNow);
+            }
             return;
         }
 
@@ -237,6 +241,7 @@ public sealed class PerfDiagnosticsListener : IDisposable
                 if (status == "CLOSED")
                 {
                     existing.ClosedAt = DateTime.UtcNow;
+                    existing.ResetCurrentRate();
                 }
 
                 return existing;
