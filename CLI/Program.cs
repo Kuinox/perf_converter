@@ -257,29 +257,13 @@ internal class Program
                 viewModel.Elapsed = chrono.Elapsed;
                 viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
 
-                // Calculate CurrentRate using 1-second sliding window
-                long nowTicks = Environment.TickCount64;
-                viewModel.RateHistory.Enqueue((nowTicks, viewModel.EventCount));
-
-                // Remove entries older than 1 second
-                while (viewModel.RateHistory.Count > 0 && (nowTicks - viewModel.RateHistory.Peek().ticks) > 1000)
-                {
-                    viewModel.RateHistory.Dequeue();
-                }
-
-                if (viewModel.RateHistory.Count >= 2)
-                {
-                    var oldest = viewModel.RateHistory.Peek();
-                    var newest = viewModel.RateHistory.Last();
-                    long elapsedMs = newest.ticks - oldest.ticks;
-                    if (elapsedMs > 0)
-                    {
-                        viewModel.CurrentRate = (int)((newest.eventCount - oldest.eventCount) * 1000 / elapsedMs);
-                    }
-                }
-                else
+                if (viewModel.LastCurrentRateUpdateUtc == DateTime.MinValue)
                 {
                     viewModel.CurrentRate = viewModel.OverallRate;
+                }
+                else if ((DateTime.UtcNow - viewModel.LastCurrentRateUpdateUtc) > TimeSpan.FromSeconds(1))
+                {
+                    viewModel.CurrentRate = 0;
                 }
 
                 await Task.Delay(100, exitTimeoutCts.Token);
