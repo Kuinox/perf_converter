@@ -8,17 +8,18 @@ namespace PerfConverter;
 
 class ThreadProcessor : IDisposable
 {
-    readonly Func<string, IPersister<TraceEntry>> _tracePersistenceFactory;
-    readonly Dictionary<ReadOnlyMemory<byte>, SegmentProcessor> _eventMapping = [];
-    readonly List<IPersister<TraceEntry>> _tracePersisters = [];
+    readonly Func<string, ITracePersister> _tracePersistenceFactory;
+    readonly Dictionary<ReadOnlyMemory<byte>, ITracePersister> _eventMapping = [];
+    readonly List<ITracePersister> _tracePersisters = [];
     readonly IPersister<StackRange> _stackPersister;
+    readonly Stack<ulong> _stackStarts = [];
 
     ulong _currentEntryId = 1;
 
     public ThreadProcessor(
         uint pid,
         uint tid,
-        Func<string, IPersister<TraceEntry>> tracePersistenceFactory,
+        Func<string, ITracePersister> tracePersistenceFactory,
         Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
     {
         _tracePersistenceFactory = tracePersistenceFactory;
@@ -42,10 +43,12 @@ class ThreadProcessor : IDisposable
             var tracePersister = _tracePersistenceFactory(traceKey);
             _tracePersisters.Add(tracePersister);
 
-            processor = new SegmentProcessor(tracePersister, _stackPersister);
+            processor = tracePersister;
         }
 
-        processor!.ProcessData(_currentEntryId++, sample, ip, address, srcFilePath, lineNumber, @event);
+        var entryId = _currentEntryId++;
+        processor!.Persist(entryId, sample, ip, address, srcFilePath, lineNumber, @event);
+        ProcessStackTracking(entryId, (DLFilterFlag)sample->flags);
     }
 
     public void Dispose()
@@ -88,5 +91,21 @@ class ThreadProcessor : IDisposable
         }
 
         return Convert.ToHexString(eventBytes);
+    }
+
+    void ProcessStackTracking(ulong entryId, DLFilterFlag flags)
+    {
+        if (flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
+            _stackStarts.Push(entryId);
+
+        if (flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
+        {
+            var startTrace = _stackStarts.Count == 0 ? 0 : _stackStarts.Pop();
+            _stackPersister.Persist(new StackRange
+            {
+                StartTrace = startTrace,
+                EndTrace = entryId
+            });
+        }
     }
 }

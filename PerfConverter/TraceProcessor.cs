@@ -5,7 +5,7 @@ using PerfConverter.Persistence;
 
 namespace PerfConverter;
 
-public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
+public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
 {
     readonly Dictionary<(uint, uint), ThreadProcessor> _processors = [];
 

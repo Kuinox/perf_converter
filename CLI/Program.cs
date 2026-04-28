@@ -100,8 +100,6 @@ internal class Program
         };
 
         processInfo.Environment["OUTPUT_DIRECTORY"] = outputDir.FullName;
-        processInfo.Environment["ENABLE_PROGRESS_SIGNALS"] = "true";
-
         try
         {
             return await RunPerfWithMonitor(processInfo);
@@ -127,21 +125,20 @@ internal class Program
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var display = new PerfMonitorDisplay(viewModel);
 
-        // GC event listener will be started when .NET runtime is ready
-        GcEventListener? gcEventListener = null;
+        // Diagnostics listener is started when the embedded .NET runtime is ready.
+        PerfDiagnosticsListener? diagnosticsListener = null;
 
-        // Function to start GC listener when .NET runtime is ready
-        void StartGcListener()
+        void StartDiagnosticsListener()
         {
-            if (gcEventListener == null)
+            if (diagnosticsListener == null)
             {
                 try
                 {
-                    gcEventListener = new GcEventListener(process.Id, viewModel);
+                    diagnosticsListener = new PerfDiagnosticsListener(process.Id, viewModel);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Warning: Could not start GC event listener: {ex.Message}");
+                    Console.WriteLine($"Warning: Could not start diagnostics listener: {ex.Message}");
                 }
             }
         }
@@ -175,7 +172,7 @@ internal class Program
             {
                 if (e.Data == "DOTNET_READY")
                 {
-                    StartGcListener();
+                    StartDiagnosticsListener();
                 }
                 messageHandler.ProcessOutputMessage(e.Data);
             }
@@ -294,8 +291,8 @@ internal class Program
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
 
-        // Clean up GC event listener
-        gcEventListener?.Dispose();
+        // Clean up diagnostics listener
+        diagnosticsListener?.Dispose();
 
         // Ensure process has exited before accessing ExitCode
         if (!process.HasExited)

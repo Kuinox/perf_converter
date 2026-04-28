@@ -6,12 +6,12 @@ namespace PerfConverter.Persistence.Plank;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> traceBatcherFactory, Func<string, IPersister<StackRange>> stackRangeBatcherFactory) : IDisposable
+public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatcherFactory, Func<string, IPersister<StackRange>> stackRangeBatcherFactory) : IDisposable
 {
-    readonly Dictionary<string, IPersister<TraceEntry>> _tracePersister = [];
+    readonly Dictionary<string, ITracePersister> _tracePersister = [];
     readonly Dictionary<string, IPersister<StackRange>> _stackRangePersister = [];
 
-    public IPersister<TraceEntry> CreateTraceBatcher(string key)
+    public ITracePersister CreateTraceBatcher(string key)
     {
         ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_tracePersister, key, out _);
         persistence ??= traceBatcherFactory(key);
@@ -27,11 +27,17 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
 
     public void Dispose()
     {
-        foreach (var entry in _tracePersister.Values)
+        foreach (var (key, entry) in _tracePersister)
+        {
             entry.Dispose();
+            PerfConverterMetrics.FileClosed(key);
+        }
 
-        foreach (var entry in _stackRangePersister.Values)
+        foreach (var (key, entry) in _stackRangePersister)
+        {
             entry.Dispose();
+            PerfConverterMetrics.FileClosed(key);
+        }
     }
 
     public static ParquetPersistenceLifetime Create(
@@ -39,29 +45,13 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
     {
         Directory.CreateDirectory(outputDirectory);
 
-        static Action<int>? CreateFlushNotifier(string key)
-        {
-            if (!Configuration.EnableProgressSignals)
-                return null;
-
-            return flushedCount =>
-            {
-                if (flushedCount <= 0)
-                    return;
-
-                Console.Error.WriteLine($"FILE_STATUS|{key}|FLUSHING");
-                Console.Error.WriteLine($"FILE_ACTIVITY|{key}|FLUSHED|{flushedCount}");
-                Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
-            };
-        }
+        static Action<int> CreateFlushNotifier(string key)
+            => flushedCount => PerfConverterMetrics.FileFlushed(key, flushedCount);
 
         return new ParquetPersistenceLifetime(
             traceBatcherFactory: (key) =>
             {
-                if (Configuration.EnableProgressSignals)
-                {
-                    Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
-                }
+                PerfConverterMetrics.FileOpened(key);
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);
@@ -69,10 +59,7 @@ public class ParquetPersistenceLifetime(Func<string, IPersister<TraceEntry>> tra
             },
             stackRangeBatcherFactory: (key) =>
             {
-                if (Configuration.EnableProgressSignals)
-                {
-                    Console.Error.WriteLine($"FILE_STATUS|{key}|BUFFERING");
-                }
+                PerfConverterMetrics.FileOpened(key);
                 var path = Path.Combine(outputDirectory, key);
                 var dir = Path.GetDirectoryName(path)!; // key can be a path.
                 Directory.CreateDirectory(dir);

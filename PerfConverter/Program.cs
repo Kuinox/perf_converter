@@ -18,9 +18,6 @@ public unsafe class PerfDlFilter
 
     class State
     {
-        public long EventCount { get; set; }
-        public long LastReportedCount { get; set; }
-        public long LastReportTicks { get; set; } = Environment.TickCount64;
     }
 
     [UnmanagedCallersOnly(EntryPoint = "start")]
@@ -38,7 +35,7 @@ public unsafe class PerfDlFilter
             {
                 args[i] = Marshal.PtrToStringUTF8((nint)argsPtr[i])!;
             }
-            var state = new State { EventCount = 0 };
+            var state = new State();
 
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
@@ -66,23 +63,8 @@ public unsafe class PerfDlFilter
                 EntryContentPool.Shared.Tick();
 
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-            var state = (State)handle.Target!;
-            state.EventCount++;
-
-            // Report progress every 1 second - BEFORE ProcessData which may block
-            if (Configuration.EnableProgressSignals)
-            {
-                long now = Environment.TickCount64;
-                long elapsed = now - state.LastReportTicks;
-                if (elapsed >= 1000)
-                {
-                    long eventsInWindow = state.EventCount - state.LastReportedCount;
-                    long rate = eventsInWindow * 1000 / elapsed;
-                    Console.Error.WriteLine($"PROGRESS:{state.EventCount}|{rate}/s");
-                    state.LastReportedCount = state.EventCount;
-                    state.LastReportTicks = now;
-                }
-            }
+            _ = (State)handle.Target!;
+            PerfConverterMetrics.IncrementProcessedEvents();
 
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
@@ -109,7 +91,7 @@ public unsafe class PerfDlFilter
         try
         {
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
-            var state = (State)handle.Target!;
+            _ = (State)handle.Target!;
             handle.Free();
 
             _persistenceLifetime.Dispose();

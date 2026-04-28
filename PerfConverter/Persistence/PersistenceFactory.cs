@@ -13,7 +13,7 @@ public static class PersistenceFactory
         return ParquetPersistenceLifetime.Create(outputDirectory);
     }
 
-    public static (Func<string, IPersister<TraceEntry>>, Func<string, IPersister<StackRange>>) CreateDualPersistenceFactories()
+    public static (Func<string, ITracePersister>, Func<string, IPersister<StackRange>>) CreateDualPersistenceFactories()
     {
         var persistenceLifetime = CreatePersistence();
         return (persistenceLifetime.CreateTraceBatcher, persistenceLifetime.CreateStackRangeBatcher);

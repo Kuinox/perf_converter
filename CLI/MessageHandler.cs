@@ -45,11 +45,8 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
 
     private static bool IsCommand(string message)
     {
-        return message.StartsWith("PROGRESS:") ||
-               message.StartsWith("GC_EVENT:") ||
+        return message.StartsWith("GC_EVENT:") ||
                message.StartsWith("MEMORY_STATS:") ||
-               message.StartsWith("FILE_STATUS|") ||
-               message.StartsWith("FILE_ACTIVITY|") ||
                message.StartsWith("EXIT_MESSAGE") ||
                message.StartsWith("DOTNET_READY");
     }
