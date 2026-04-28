@@ -12,10 +12,4 @@ public static class PersistenceFactory
         Console.Error.WriteLine($"Using Parquet output directory: {outputDirectory}");
         return ParquetPersistenceLifetime.Create(outputDirectory);
     }
-
-    public static (Func<string, ITracePersister>, Func<string, IPersister<StackRange>>) CreateDualPersistenceFactories()
-    {
-        var persistenceLifetime = CreatePersistence();
-        return (persistenceLifetime.CreateTraceBatcher, persistenceLifetime.CreateStackRangeBatcher);
-    }
 }

@@ -5,7 +5,7 @@ using PerfConverter.Persistence;
 
 namespace PerfConverter;
 
-public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenceFactory, Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
+public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenceFactory)
 {
     readonly Dictionary<(uint, uint), ThreadProcessor> _processors = [];
 
@@ -17,7 +17,7 @@ public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenc
         uint lineNumber)
     {
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
-        processor ??= new ThreadProcessor(sample->pid, sample->tid, tracePersistenceFactory, stackRangePersistenceFactory);
+        processor ??= new ThreadProcessor(tracePersistenceFactory);
         processor.ProcessData(sample, ip, address, srcFileName, lineNumber);
     }
 }

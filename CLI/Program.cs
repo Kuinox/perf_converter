@@ -127,6 +127,7 @@ internal class Program
             return 1;
         }
 
+        viewModel.ProcessStartTime = DateTime.UtcNow;
         var chrono = Stopwatch.StartNew();
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);

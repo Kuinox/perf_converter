@@ -22,7 +22,7 @@ public sealed class PerfMonitorDisplay
     {
         _viewModel = viewModel;
         _summaryText = new TextBlock { Wrap = true };
-        _totalRateSparkline = new Sparkline().Stretch().MinHeight(1).MinWidth(20);
+        _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
         _fileStateChart = new BreakdownChart { ShowValues = true, ShowPercentages = true };
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
@@ -61,9 +61,9 @@ public sealed class PerfMonitorDisplay
             ColumnGap = 1
         }.Stretch();
 
+        contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Auto, 0) });
         contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Star, 1) });
-        contentGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Star, 1) });
-        contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
+        contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Fixed, 42) });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
 
         contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryText, "Ctrl+C stops perf")) { Row = 0, Column = 0 });
@@ -90,11 +90,18 @@ public sealed class PerfMonitorDisplay
 
     Visual CreateThroughputVisual()
     {
-        return new DockLayout(
-            top: new TextBlock("Total current throughput trend").MinHeight(1),
-            content: _totalRateSparkline,
-            bottom: null)
-            .Stretch();
+        var grid = new Grid
+        {
+            RowGap = 1
+        }.Stretch();
+
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Auto, 0) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Auto, 0) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
+        grid.Cells.Add(new GridCell(new TextBlock("Total current throughput trend")) { Row = 0, Column = 0 });
+        grid.Cells.Add(new GridCell(_totalRateSparkline.HorizontalAlignment(Align.Stretch).VerticalAlignment(Align.Start)) { Row = 1, Column = 0 });
+
+        return grid;
     }
 
     void UpdateDisplay()
@@ -113,13 +120,14 @@ public sealed class PerfMonitorDisplay
         var statusMessage = string.IsNullOrWhiteSpace(_viewModel.StatusMessage)
             ? "Monitoring perf script output"
             : _viewModel.StatusMessage;
+        var elapsed = GetDisplayElapsed();
 
         _summaryText.Text = string.Join(
             Environment.NewLine,
             [
                 $"Status: {_viewModel.Status}",
-                $"Message: {statusMessage}",
-                $"Elapsed: {_viewModel.Elapsed:hh\\:mm\\:ss}",
+                statusMessage,
+                $"Elapsed: {elapsed:hh\\:mm\\:ss}",
                 $"Events: {_viewModel.EventCount:N0}",
                 $"Current rate: {_viewModel.CurrentRate:N0}/s",
                 $"Overall rate: {_viewModel.OverallRate:N0}/s",
@@ -213,14 +221,26 @@ public sealed class PerfMonitorDisplay
 
     void UpdateLogs()
     {
+        var elapsed = GetDisplayElapsed();
         var lines = _viewModel.OutputLines
             .Concat(_viewModel.ErrorLines)
             .TakeLast(MaxLogLines)
             .ToArray();
 
         _logsText.Text = lines.Length == 0
-            ? $"Waiting for perf output...{Environment.NewLine}Process uptime: {_viewModel.Elapsed:hh\\:mm\\:ss}"
+            ? $"Waiting for perf output...{Environment.NewLine}Process uptime: {elapsed:hh\\:mm\\:ss}"
             : string.Join(Environment.NewLine, lines);
+    }
+
+    TimeSpan GetDisplayElapsed()
+    {
+        if (!_viewModel.ProcessHasExited)
+        {
+            var elapsed = DateTime.UtcNow - _viewModel.ProcessStartTime;
+            return elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
+        }
+
+        return _viewModel.Elapsed;
     }
 
     static BreakdownSegment CreateSegment(string label, double value, Color color)
@@ -233,7 +253,7 @@ public sealed class PerfMonitorDisplay
 
     static Sparkline CreateSparkline(double[] history)
     {
-        var sparkline = new Sparkline(history).MinWidth(12);
+        var sparkline = new Sparkline(history).MinWidth(12).MinHeight(1).MaxHeight(1).VerticalAlignment(Align.Start);
         sparkline.Minimum = 0;
         sparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
         return sparkline;

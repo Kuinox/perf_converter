@@ -11,20 +11,12 @@ class ThreadProcessor : IDisposable
     readonly Func<string, ITracePersister> _tracePersistenceFactory;
     readonly Dictionary<ReadOnlyMemory<byte>, ITracePersister> _eventMapping = [];
     readonly List<ITracePersister> _tracePersisters = [];
-    readonly IPersister<StackRange> _stackPersister;
-    readonly Stack<ulong> _stackStarts = [];
 
     ulong _currentEntryId = 1;
 
-    public ThreadProcessor(
-        uint pid,
-        uint tid,
-        Func<string, ITracePersister> tracePersistenceFactory,
-        Func<string, IPersister<StackRange>> stackRangePersistenceFactory)
+    public ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory)
     {
         _tracePersistenceFactory = tracePersistenceFactory;
-        var key = $"pid={pid}/tid={tid}/branches_stackranges.parquet";
-        _stackPersister = stackRangePersistenceFactory(key);
     }
 
     public unsafe void ProcessData(
@@ -48,15 +40,12 @@ class ThreadProcessor : IDisposable
 
         var entryId = _currentEntryId++;
         processor!.Persist(entryId, sample, ip, address, srcFilePath, lineNumber, @event);
-        ProcessStackTracking(entryId, (DLFilterFlag)sample->flags);
     }
 
     public void Dispose()
     {
         foreach (var persister in _tracePersisters)
             persister.Dispose();
-
-        _stackPersister.Dispose();
     }
 
     static string GetEventFileComponent(ReadOnlySpan<byte> eventBytes)
@@ -91,21 +80,5 @@ class ThreadProcessor : IDisposable
         }
 
         return Convert.ToHexString(eventBytes);
-    }
-
-    void ProcessStackTracking(ulong entryId, DLFilterFlag flags)
-    {
-        if (flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_CALL))
-            _stackStarts.Push(entryId);
-
-        if (flags.HasFlag(DLFilterFlag.PERF_DLFILTER_FLAG_RETURN))
-        {
-            var startTrace = _stackStarts.Count == 0 ? 0 : _stackStarts.Pop();
-            _stackPersister.Persist(new StackRange
-            {
-                StartTrace = startTrace,
-                EndTrace = entryId
-            });
-        }
     }
 }

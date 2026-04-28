@@ -6,10 +6,9 @@ namespace PerfConverter.Persistence.Plank;
 /// <summary>
 /// Manages the lifetime of Parquet persistence components
 /// </summary>
-public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatcherFactory, Func<string, IPersister<StackRange>> stackRangeBatcherFactory) : IDisposable
+public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatcherFactory) : IDisposable
 {
     readonly Dictionary<string, ITracePersister> _tracePersister = [];
-    readonly Dictionary<string, IPersister<StackRange>> _stackRangePersister = [];
 
     public ITracePersister CreateTraceBatcher(string key)
     {
@@ -18,22 +17,9 @@ public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatch
         return persistence;
     }
 
-    public IPersister<StackRange> CreateStackRangeBatcher(string key)
-    {
-        ref var persistence = ref CollectionsMarshal.GetValueRefOrAddDefault(_stackRangePersister, key, out _);
-        persistence ??= stackRangeBatcherFactory(key);
-        return persistence;
-    }
-
     public void Dispose()
     {
         foreach (var (key, entry) in _tracePersister)
-        {
-            entry.Dispose();
-            PerfConverterMetrics.FileClosed(key);
-        }
-
-        foreach (var (key, entry) in _stackRangePersister)
         {
             entry.Dispose();
             PerfConverterMetrics.FileClosed(key);
@@ -58,16 +44,6 @@ public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatch
                 return new MeteredTracePersister(
                     key,
                     ParquetTracePersistence.Create(path, CreateFlushNotifier(key)));
-            },
-            stackRangeBatcherFactory: (key) =>
-            {
-                PerfConverterMetrics.FileOpened(key);
-                var path = Path.Combine(outputDirectory, key);
-                var dir = Path.GetDirectoryName(path)!; // key can be a path.
-                Directory.CreateDirectory(dir);
-                return new MeteredStackRangePersister(
-                    key,
-                    ParquetStackRangePersistence.Create(path, CreateFlushNotifier(key)));
             });
     }
 
@@ -84,18 +60,6 @@ public class ParquetPersistenceLifetime(Func<string, ITracePersister> traceBatch
         {
             PerfConverterMetrics.FileBuffered(key, 1);
             inner.Persist(entryId, sample, ip, address, srcFilePath, lineNumber, eventName);
-        }
-
-        public void Dispose()
-            => inner.Dispose();
-    }
-
-    sealed class MeteredStackRangePersister(string key, IPersister<StackRange> inner) : IPersister<StackRange>
-    {
-        public void Persist(StackRange val)
-        {
-            PerfConverterMetrics.FileBuffered(key, 1);
-            inner.Persist(val);
         }
 
         public void Dispose()
