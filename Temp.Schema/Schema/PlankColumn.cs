@@ -39,7 +39,7 @@ public class PlankColumn<T>(string name, ColumnOptions? options = null)
             return ParquetPhysicalType.Float;
         if (type == typeof(double))
             return ParquetPhysicalType.Double;
-        if (type == typeof(string) || type == typeof(byte[]))
+        if (type == typeof(string) || type == typeof(byte[]) || type == typeof(ReadOnlyMemory<byte>))
             return ParquetPhysicalType.ByteArray;
 
         throw new NotSupportedException($"Unsupported parquet CLR type: {typeof(T)}.");

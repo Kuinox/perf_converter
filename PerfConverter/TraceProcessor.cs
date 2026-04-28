@@ -9,7 +9,12 @@ public unsafe class TraceProcessor(Func<string, IPersister<TraceEntry>> tracePer
 {
     readonly Dictionary<(uint, uint), ThreadProcessor> _processors = [];
 
-    public void ProcessData(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, string? srcFileName, uint lineNumber)
+    public void ProcessData(
+        PerfDlFilterSample* sample,
+        PerfDlfilterAl* ip,
+        PerfDlfilterAl* address,
+        ReadOnlyMemory<byte>? srcFileName,
+        uint lineNumber)
     {
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
         processor ??= new ThreadProcessor(sample->pid, sample->tid, tracePersistenceFactory, stackRangePersistenceFactory);

@@ -51,7 +51,7 @@ public sealed partial class TraceSampleRowSchema
     public byte AddrCorrelatesSym { get; set; }
 
     [ParquetColumn("event", Encodings = [EncodingKind.RleDictionary])]
-    public string? Event { get; set; }
+    public ReadOnlyMemory<byte> Event { get; set; }
 
     [ParquetColumn("machinePid", Encodings = [EncodingKind.RleDictionary])]
     public uint MachinePid { get; set; }
@@ -60,7 +60,7 @@ public sealed partial class TraceSampleRowSchema
     public uint Vcpu { get; set; }
 
     [ParquetColumn("srcFileName", Encodings = [EncodingKind.RleDictionary])]
-    public string SourceFileName { get; set; } = string.Empty;
+    public ReadOnlyMemory<byte>? SourceFileName { get; set; }
 
     [ParquetColumn("srcLineNumber", Encodings = [EncodingKind.RleDictionary])]
     public uint SourceLineNumber { get; set; }
@@ -69,7 +69,7 @@ public sealed partial class TraceSampleRowSchema
     public uint IpSymoff { get; set; }
 
     [ParquetColumn("ipSym", Encodings = [EncodingKind.RleDictionary])]
-    public string? IpSym { get; set; }
+    public ReadOnlyMemory<byte>? IpSym { get; set; }
 
     [ParquetColumn("ipSymStart", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong IpSymStart { get; set; }
@@ -78,7 +78,7 @@ public sealed partial class TraceSampleRowSchema
     public ulong IpSymEnd { get; set; }
 
     [ParquetColumn("ipDso", Encodings = [EncodingKind.RleDictionary])]
-    public string? IpDso { get; set; }
+    public ReadOnlyMemory<byte>? IpDso { get; set; }
 
     [ParquetColumn("ipSymBinding", Encodings = [EncodingKind.RleDictionary])]
     public byte IpSymBinding { get; set; }
@@ -90,13 +90,13 @@ public sealed partial class TraceSampleRowSchema
     public byte IpIsKernelIp { get; set; }
 
     [ParquetColumn("ipBuildId", Encodings = [EncodingKind.Plain])]
-    public byte[] IpBuildId { get; set; } = [];
+    public ReadOnlyMemory<byte> IpBuildId { get; set; }
 
     [ParquetColumn("ipFiltered", Encodings = [EncodingKind.RleDictionary])]
     public byte IpFiltered { get; set; }
 
     [ParquetColumn("ipComm", Encodings = [EncodingKind.RleDictionary])]
-    public string? IpComm { get; set; }
+    public ReadOnlyMemory<byte>? IpComm { get; set; }
 
     [ParquetColumn("haveAddress", Encodings = [EncodingKind.RleDictionary])]
     public bool HaveAddress { get; set; }
@@ -105,7 +105,7 @@ public sealed partial class TraceSampleRowSchema
     public uint AddressSymoff { get; set; }
 
     [ParquetColumn("addressSym", Encodings = [EncodingKind.RleDictionary])]
-    public string? AddressSym { get; set; }
+    public ReadOnlyMemory<byte>? AddressSym { get; set; }
 
     [ParquetColumn("addressSymStart", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong AddressSymStart { get; set; }
@@ -114,7 +114,7 @@ public sealed partial class TraceSampleRowSchema
     public ulong AddressSymEnd { get; set; }
 
     [ParquetColumn("addressDso", Encodings = [EncodingKind.RleDictionary])]
-    public string? AddressDso { get; set; }
+    public ReadOnlyMemory<byte>? AddressDso { get; set; }
 
     [ParquetColumn("addressSymBinding", Encodings = [EncodingKind.RleDictionary])]
     public byte AddressSymBinding { get; set; }
@@ -126,11 +126,11 @@ public sealed partial class TraceSampleRowSchema
     public byte AddressIsKernelIp { get; set; }
 
     [ParquetColumn("addressBuildId", Encodings = [EncodingKind.Plain])]
-    public byte[]? AddressBuildId { get; set; }
+    public ReadOnlyMemory<byte>? AddressBuildId { get; set; }
 
     [ParquetColumn("addressFiltered", Encodings = [EncodingKind.RleDictionary])]
     public byte AddressFiltered { get; set; }
 
     [ParquetColumn("addressComm", Encodings = [EncodingKind.RleDictionary])]
-    public string? AddressComm { get; set; }
+    public ReadOnlyMemory<byte>? AddressComm { get; set; }
 }

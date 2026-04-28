@@ -1,4 +1,4 @@
-﻿using PerfConverter.PerfStructs;
+using PerfConverter.PerfStructs;
 using System.Runtime.InteropServices;
 using Temp.Schema.Entry;
 
@@ -21,42 +21,47 @@ public struct TraceEntry
     public ulong Weight;
     public byte Cpumode;
     public byte AddrCorrelatesSym;
-    public string Event;
+    public ReadOnlyMemory<byte> Event;
     public uint MachinePid;
     public uint Vcpu;
-    public string? SourceFileName;
+    public ReadOnlyMemory<byte>? SourceFileName;
     public uint SourceLineNumber;
 
-    // ip
     public ulong IpAddress;
     public uint IpSymoff;
-    public string? IpSym;
+    public ReadOnlyMemory<byte>? IpSym;
     public ulong IpSymStart;
     public ulong IpSymEnd;
-    public string? IpDso;
+    public ReadOnlyMemory<byte>? IpDso;
     public byte IpSymBinding;
     public byte IpIs64Bit;
     public byte IpIsKernelIp;
-    public byte[] IpBuildId;
+    public ReadOnlyMemory<byte> IpBuildId;
     public byte IpFiltered;
-    public string? IpComm;
+    public ReadOnlyMemory<byte>? IpComm;
 
-    // address
     public bool HaveAddress;
     public ulong AddressAddress;
     public uint AddressSymoff;
-    public string? AddressSym;
+    public ReadOnlyMemory<byte>? AddressSym;
     public ulong AddressSymStart;
     public ulong AddressSymEnd;
-    public string? AddressDso;
+    public ReadOnlyMemory<byte>? AddressDso;
     public byte AddressSymBinding;
     public byte AddressIs64Bit;
     public byte AddressIsKernelIp;
-    public byte[]? AddressBuildId;
+    public ReadOnlyMemory<byte>? AddressBuildId;
     public byte AddressFiltered;
-    public string? AddressComm;
+    public ReadOnlyMemory<byte>? AddressComm;
 
-    public static unsafe TraceEntry CreateFromPerf(PerfDlFilterSample* sample, PerfDlfilterAl* ip, PerfDlfilterAl* address, ulong id, string? srcFilePath, uint lineNumber)
+    public static unsafe TraceEntry CreateFromPerf(
+        PerfDlFilterSample* sample,
+        PerfDlfilterAl* ip,
+        PerfDlfilterAl* address,
+        ulong id,
+        ReadOnlyMemory<byte>? srcFilePath,
+        uint lineNumber,
+        ReadOnlyMemory<byte> eventName)
     {
         var entry = new TraceEntry
         {
@@ -73,7 +78,7 @@ public struct TraceEntry
             Weight = sample->weight,
             Cpumode = sample->cpumode,
             AddrCorrelatesSym = sample->addr_correlates_sym,
-            Event = EntryContentPool.Shared.GetStringFromUtf8Ptr(sample->@event),
+            Event = eventName,
             MachinePid = (uint)sample->machine_pid,
             Vcpu = (uint)sample->vcpu,
             SourceFileName = srcFilePath,
@@ -81,16 +86,16 @@ public struct TraceEntry
 
             IpAddress = ip->addr,
             IpSymoff = ip->symoff,
-            IpSym = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->sym),
+            IpSym = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->sym),
             IpSymStart = ip->sym_start,
             IpSymEnd = ip->sym_end,
-            IpDso = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->dso),
+            IpDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->dso),
             IpSymBinding = ip->sym_binding,
             IpIs64Bit = ip->is_64_bit,
             IpIsKernelIp = ip->is_kernel_ip,
-            IpBuildId = EntryContentPool.Shared.GetByteArray(new Span<byte>(ip->buildid, ip->buildid_size)),
+            IpBuildId = EntryContentPool.Shared.GetByteMemory(new ReadOnlySpan<byte>(ip->buildid, ip->buildid_size)),
             IpFiltered = ip->filtered,
-            IpComm = EntryContentPool.Shared.GetStringFromUtf8Ptr(ip->comm)
+            IpComm = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->comm)
         };
 
         if (address != null)
@@ -98,16 +103,16 @@ public struct TraceEntry
             entry.HaveAddress = true;
             entry.AddressAddress = address->addr;
             entry.AddressSymoff = address->symoff;
-            entry.AddressSym = EntryContentPool.Shared.GetStringFromUtf8Ptr(address->sym);
+            entry.AddressSym = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->sym);
             entry.AddressSymStart = address->sym_start;
             entry.AddressSymEnd = address->sym_end;
-            entry.AddressDso = EntryContentPool.Shared.GetStringFromUtf8Ptr(address->dso);
+            entry.AddressDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->dso);
             entry.AddressSymBinding = address->sym_binding;
             entry.AddressIs64Bit = address->is_64_bit;
             entry.AddressIsKernelIp = address->is_kernel_ip;
-            entry.AddressBuildId = EntryContentPool.Shared.GetByteArray(new Span<byte>(address->buildid, address->buildid_size));
+            entry.AddressBuildId = EntryContentPool.Shared.GetByteMemory(new ReadOnlySpan<byte>(address->buildid, address->buildid_size));
             entry.AddressFiltered = address->filtered;
-            entry.AddressComm = EntryContentPool.Shared.GetStringFromUtf8Ptr(address->comm);
+            entry.AddressComm = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->comm);
         }
 
         return entry;

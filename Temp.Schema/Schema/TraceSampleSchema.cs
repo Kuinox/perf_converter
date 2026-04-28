@@ -76,34 +76,34 @@ public class TraceSampleSchema
     public PlankColumn<ulong> Weight { get; } = new("weight", DeltaOnly);
     public PlankColumn<byte> Cpumode { get; } = new("cpumode", DictOnly);
     public PlankColumn<byte> AddrCorrelatesSym { get; } = new("addrCorrelatesSym", DictOnly);
-    public PlankColumn<string?> Event { get; } = new("event", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>> Event { get; } = new("event", DictOnly);
     public PlankColumn<uint> MachinePid { get; } = new("machinePid", DictOnly);
     public PlankColumn<uint> Vcpu { get; } = new("vcpu", DictOnly);
-    public PlankColumn<string?> SourceFileName { get; } = new("srcFileName", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> SourceFileName { get; } = new("srcFileName", OptionalDictOnly);
     public PlankColumn<uint> SourceLineNumber { get; } = new("srcLineNumber", DictOnly);
     public PlankColumn<uint> IpSymoff { get; } = new("ipSymoff", PlainOnly);
-    public PlankColumn<string?> IpSym { get; } = new("ipSym", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> IpSym { get; } = new("ipSym", OptionalDictOnly);
     public PlankColumn<ulong> IpSymStart { get; } = new("ipSymStart", DeltaOnly);
     public PlankColumn<ulong> IpSymEnd { get; } = new("ipSymEnd", DeltaOnly);
-    public PlankColumn<string?> IpDso { get; } = new("ipDso", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> IpDso { get; } = new("ipDso", OptionalDictOnly);
     public PlankColumn<byte> IpSymBinding { get; } = new("ipSymBinding", DictOnly);
     public PlankColumn<byte> IpIs64Bit { get; } = new("ipIs64Bit", DictOnly);
     public PlankColumn<byte> IpIsKernelIp { get; } = new("ipIsKernelIp", DictOnly);
-    public PlankColumn<byte[]> IpBuildId { get; } = new("ipBuildId", PlainOnly);
+    public PlankColumn<ReadOnlyMemory<byte>> IpBuildId { get; } = new("ipBuildId", PlainOnly);
     public PlankColumn<byte> IpFiltered { get; } = new("ipFiltered", DictOnly);
-    public PlankColumn<string?> IpComm { get; } = new("ipComm", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> IpComm { get; } = new("ipComm", OptionalDictOnly);
     public PlankColumn<bool> HaveAddress { get; } = new("haveAddress", DictOnly);
     public PlankColumn<uint> AddressSymoff { get; } = new("addressSymoff", PlainOnly);
-    public PlankColumn<string?> AddressSym { get; } = new("addressSym", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> AddressSym { get; } = new("addressSym", OptionalDictOnly);
     public PlankColumn<ulong> AddressSymStart { get; } = new("addressSymStart", DeltaOnly);
     public PlankColumn<ulong> AddressSymEnd { get; } = new("addressSymEnd", DeltaOnly);
-    public PlankColumn<string?> AddressDso { get; } = new("addressDso", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> AddressDso { get; } = new("addressDso", OptionalDictOnly);
     public PlankColumn<byte> AddressSymBinding { get; } = new("addressSymBinding", DictOnly);
     public PlankColumn<byte> AddressIs64Bit { get; } = new("addressIs64Bit", DictOnly);
     public PlankColumn<byte> AddressIsKernelIp { get; } = new("addressIsKernelIp", DictOnly);
-    public PlankColumn<byte[]> AddressBuildId { get; } = new("addressBuildId", PlainOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> AddressBuildId { get; } = new("addressBuildId", PlainOnly);
     public PlankColumn<byte> AddressFiltered { get; } = new("addressFiltered", DictOnly);
-    public PlankColumn<string?> AddressComm { get; } = new("addressComm", OptionalDictOnly);
+    public PlankColumn<ReadOnlyMemory<byte>?> AddressComm { get; } = new("addressComm", OptionalDictOnly);
 
     void WriteTo(ParquetWriter writer)
     {

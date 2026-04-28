@@ -20,11 +20,11 @@ public class TraceVisitor(IAsyncEnumerable<TraceEntry> entries)
 
     protected virtual void VisitEntry(TraceEntry entry)
     {
-        if (entry.Event.StartsWith("branches:"))
+        if (entry.Event.Span.StartsWith("branches:"u8))
         {
             VisitBranch(entry);
         }
-        if (entry.Event.StartsWith("instructions:"))
+        if (entry.Event.Span.StartsWith("instructions:"u8))
         {
             VisitInstruction(entry);
         }

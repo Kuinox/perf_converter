@@ -28,7 +28,7 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         row.Event = entry.Event;
         row.MachinePid = entry.MachinePid;
         row.Vcpu = entry.Vcpu;
-        row.SourceFileName = entry.SourceFileName ?? string.Empty;
+        row.SourceFileName = entry.SourceFileName;
         row.SourceLineNumber = entry.SourceLineNumber;
         row.IpSymoff = entry.IpSymoff;
         row.IpSym = entry.IpSym;
