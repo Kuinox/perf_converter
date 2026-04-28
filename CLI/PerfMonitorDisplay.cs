@@ -3,6 +3,7 @@ using System.Linq;
 using XenoAtom.Terminal;
 using XenoAtom.Terminal.UI;
 using XenoAtom.Terminal.UI.Controls;
+using XenoAtom.Terminal.UI.Input;
 
 namespace CLI.Display;
 
@@ -11,6 +12,7 @@ public sealed class PerfMonitorDisplay
     const int MaxLogLines = 12;
     const int MaxFileRows = 10;
     readonly PerfMonitorViewModel _viewModel;
+    readonly Action _requestShutdown;
     readonly TextBlock _summaryText;
     readonly Sparkline _totalRateSparkline;
     readonly BreakdownChart _fileStateChart;
@@ -18,9 +20,10 @@ public sealed class PerfMonitorDisplay
     readonly TextBlock _logsText;
     readonly Visual _root;
 
-    public PerfMonitorDisplay(PerfMonitorViewModel viewModel)
+    public PerfMonitorDisplay(PerfMonitorViewModel viewModel, Action requestShutdown)
     {
         _viewModel = viewModel;
+        _requestShutdown = requestShutdown;
         _summaryText = new TextBlock { Wrap = true };
         _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
         _fileStateChart = new BreakdownChart { ShowValues = true, ShowPercentages = true };
@@ -73,11 +76,14 @@ public sealed class PerfMonitorDisplay
 
         var logsGroup = CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8);
 
-        return new DockLayout(
+        var root = new DockLayout(
             top: new TextBlock("PerfConverter Monitor").MinHeight(1),
             content: contentGrid,
             bottom: logsGroup)
             .Stretch();
+
+        root.AddKeyBinding(new KeyGesture('c', TerminalModifiers.Ctrl), _requestShutdown);
+        return root;
     }
 
     static Group CreateGroup(string title, Visual content, string? footer = null)

@@ -24,12 +24,25 @@ public class PerfMonitorViewModel
     public long Gen1Count { get; set; }
     public long Gen2Count { get; set; }
     public bool IsComplete { get; set; }
+    public bool ShutdownRequested { get; set; }
     public bool ExitMessageReceived { get; set; }
     public bool ProcessHasExited { get; set; }
     public bool PipesDrained { get; set; }
 
-    [DependsOn(nameof(ExitMessageReceived), nameof(ProcessHasExited), nameof(PipesDrained))]
-    public string Status => (ExitMessageReceived || (ProcessHasExited && PipesDrained)) ? "Process exited" : "Running";
+    [DependsOn(nameof(ShutdownRequested), nameof(ExitMessageReceived), nameof(ProcessHasExited), nameof(PipesDrained))]
+    public string Status
+    {
+        get
+        {
+            if (ProcessHasExited && PipesDrained)
+                return "Process exited";
+
+            if (ShutdownRequested || ExitMessageReceived || ProcessHasExited)
+                return "Exiting";
+
+            return "Running";
+        }
+    }
 
     public double TotalGcTimeMs { get; set; }
     public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;

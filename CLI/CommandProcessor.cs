@@ -29,6 +29,9 @@ public class CommandProcessor(PerfMonitorViewModel viewModel)
     private void HandleExitMessage()
     {
         viewModel.ExitMessageReceived = true;
-        viewModel.IsComplete = true;
+        if (string.IsNullOrWhiteSpace(viewModel.StatusMessage))
+        {
+            viewModel.StatusMessage = "PerfConverter requested a clean shutdown, waiting for perf to exit...";
+        }
     }
 }

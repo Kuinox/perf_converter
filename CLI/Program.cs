@@ -131,20 +131,17 @@ internal class Program
         var chrono = Stopwatch.StartNew();
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
-        var display = new PerfMonitorDisplay(viewModel);
-
         var exitTimeoutCts = new CancellationTokenSource();
         var stdoutDrained = false;
         var stderrDrained = false;
         var shutdownRequested = 0;
 
-        // Set up Ctrl+C handler
-        ConsoleCancelEventHandler cancelHandler = (sender, e) =>
+        void RequestShutdown()
         {
-            e.Cancel = true;
             if (Interlocked.Exchange(ref shutdownRequested, 1) != 0)
                 return;
 
+            viewModel.ShutdownRequested = true;
             _ = Task.Run(async () =>
             {
                 try
@@ -180,6 +177,15 @@ internal class Program
                     Console.Error.WriteLine($"Error killing process: {ex.Message}");
                 }
             });
+        }
+
+        var display = new PerfMonitorDisplay(viewModel, RequestShutdown);
+
+        // Set up Ctrl+C handler
+        ConsoleCancelEventHandler cancelHandler = (sender, e) =>
+        {
+            e.Cancel = true;
+            RequestShutdown();
         };
         Console.CancelKeyPress += cancelHandler;
 
@@ -223,7 +229,9 @@ internal class Program
         process.Exited += (sender, e) =>
         {
             viewModel.ProcessHasExited = true;
-            viewModel.StatusMessage = "Process completed, waiting for pipes to drain...";
+            viewModel.StatusMessage = viewModel.ExitMessageReceived
+                ? "PerfConverter finished cleanup, waiting for pipes to drain..."
+                : "Process completed, waiting for pipes to drain...";
             
             // Check if pipes are already drained
             if (stdoutDrained && stderrDrained)
