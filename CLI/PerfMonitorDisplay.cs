@@ -124,7 +124,8 @@ public class PerfMonitorDisplay
                         {
                             statusText += $" ({file.BufferedCount:N0})";
                         }
-                        
+
+                        fileName = Markup.Escape(fileName);
                         var fileDisplay = $"{statusColor}{statusText}[/] [blue]{fileName}[/] [dim]({file.FlushedCount:N0})[/]";
                         tidNode.AddNode(fileDisplay);
                     }
@@ -161,15 +162,18 @@ public class PerfMonitorDisplay
         var maxLines = Math.Max(1, Console.WindowHeight - 10);
         var displayLines = consoleLines.TakeLast(maxLines).ToArray();
 
-        var consoleContent = displayLines.Length > 0
-            ? string.Join("\n", displayLines)
-            : $"[dim]Waiting for perf output...\nProcess started at {_viewModel.Elapsed:hh\\:mm\\:ss}[/]";
-
-        var consolePanel = new Panel(new Markup(consoleContent))
+        Panel consolePanel;
+        if (displayLines.Length > 0)
         {
-            Header = new PanelHeader("[bold]Perf Output[/]"),
-            Border = BoxBorder.Rounded
-        };
+            consolePanel = new Panel(new Text(string.Join(Environment.NewLine, displayLines)));
+        }
+        else
+        {
+            consolePanel = new Panel(new Markup($"[dim]Waiting for perf output...{Environment.NewLine}Process started at {_viewModel.Elapsed:hh\\:mm\\:ss}[/]"));
+        }
+
+        consolePanel.Header = new PanelHeader("[bold]Perf Output[/]");
+        consolePanel.Border = BoxBorder.Rounded;
 
         _layout["Logs"].Update(consolePanel);
     }

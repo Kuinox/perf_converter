@@ -38,7 +38,7 @@ public class MessageHandler(PerfMonitorViewModel viewModel, CommandProcessor com
         else
         {
             viewModel.RawErrorLines.Enqueue(message);
-            viewModel.ErrorLines.Enqueue($"[red]{message}[/]");
+            viewModel.ErrorLines.Enqueue(message);
             viewModel.TrimErrorLines();
         }
     }
