@@ -28,6 +28,22 @@ public sealed class EntryContentPool : IDisposable
         return GetByteMemory(new ReadOnlySpan<byte>(bytePtr, length));
     }
 
+    public unsafe ReadOnlyMemory<byte> CopyByteMemoryFromNullTerminatedPtr(nint ptr)
+    {
+        if (ptr == 0)
+            return ReadOnlyMemory<byte>.Empty;
+
+        var bytePtr = (byte*)ptr;
+        var length = 0;
+        while (bytePtr[length] != 0)
+            length++;
+
+        if (length == 0)
+            return ReadOnlyMemory<byte>.Empty;
+
+        return CopyByteMemory(new ReadOnlySpan<byte>(bytePtr, length));
+    }
+
     public ReadOnlyMemory<byte> GetByteMemory(ReadOnlySpan<byte> source)
     {
         if (source.IsEmpty)
@@ -46,6 +62,16 @@ public sealed class EntryContentPool : IDisposable
         var entry = MemoryEntry.Create(source);
         bucket.Add(entry);
         return entry.Memory;
+    }
+
+    public ReadOnlyMemory<byte> CopyByteMemory(ReadOnlySpan<byte> source)
+    {
+        if (source.IsEmpty)
+            return ReadOnlyMemory<byte>.Empty;
+
+        var buffer = new byte[source.Length];
+        source.CopyTo(buffer);
+        return buffer;
     }
 
     public void Tick()

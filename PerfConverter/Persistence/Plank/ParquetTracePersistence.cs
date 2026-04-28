@@ -40,7 +40,7 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         row.SourceLineNumber = lineNumber;
 
         row.IpSymoff = ip->symoff;
-        row.IpSym = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->sym);
+        row.IpSym = EntryContentPool.Shared.CopyByteMemoryFromNullTerminatedPtr((nint)ip->sym);
         row.IpSymStart = ip->sym_start;
         row.IpSymEnd = ip->sym_end;
         row.IpDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->dso);
@@ -70,7 +70,7 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         {
             row.HaveAddress = true;
             row.AddressSymoff = address->symoff;
-            row.AddressSym = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->sym);
+            row.AddressSym = EntryContentPool.Shared.CopyByteMemoryFromNullTerminatedPtr((nint)address->sym);
             row.AddressSymStart = address->sym_start;
             row.AddressSymEnd = address->sym_end;
             row.AddressDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->dso);
