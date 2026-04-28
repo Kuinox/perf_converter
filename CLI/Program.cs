@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Linq;
 using Temp.Schema;
-using Spectre.Console;
 using CLI.Display;
 
 namespace CLI;
@@ -69,7 +68,7 @@ internal class Program
     {
         if (!inputFile.Exists)
         {
-            AnsiConsole.MarkupLine($"[red]Error: Input file '{inputFile.FullName}' does not exist.[/]");
+            Console.Error.WriteLine($"Error: Input file '{inputFile.FullName}' does not exist.");
             return 1;
         }
 
@@ -77,7 +76,7 @@ internal class Program
 
         if (!File.Exists(dlFilterPath))
         {
-            AnsiConsole.MarkupLine($"[red]Error: PerfConverter.so not found at '{dlFilterPath}'[/]");
+            Console.Error.WriteLine($"Error: PerfConverter.so not found at '{dlFilterPath}'.");
             return 1;
         }
 
@@ -90,9 +89,9 @@ internal class Program
 
         if (dryRun)
         {
-            AnsiConsole.MarkupLine("[green]Would execute:[/]");
-            AnsiConsole.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
-            AnsiConsole.WriteLine(perfCommand);
+            Console.WriteLine("Would execute:");
+            Console.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
+            Console.WriteLine(perfCommand);
             return 0;
         }
 
@@ -112,7 +111,7 @@ internal class Program
         }
         catch (Exception ex)
         {
-            AnsiConsole.WriteException(ex);
+            Console.Error.WriteLine(ex);
             return 1;
         }
     }
@@ -124,7 +123,7 @@ internal class Program
         using var process = Process.Start(processInfo);
         if (process == null)
         {
-            AnsiConsole.MarkupLine("[red]Failed to start perf process.[/]");
+            Console.Error.WriteLine("Failed to start perf process.");
             return 1;
         }
 
@@ -177,7 +176,7 @@ internal class Program
                 }
                 catch (Exception ex)
                 {
-                    AnsiConsole.MarkupLine($"[red]Error killing process: {ex.Message}[/]");
+                    Console.Error.WriteLine($"Error killing process: {ex.Message}");
                 }
             });
         };

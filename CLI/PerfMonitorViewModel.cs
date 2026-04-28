@@ -13,7 +13,7 @@ public class PerfMonitorViewModel
     public int CurrentRate { get; set; }
     public DateTime LastCurrentRateUpdateUtc { get; set; } = DateTime.MinValue;
     public DateTime LastGcEvent { get; set; } = DateTime.MinValue;
-    public bool GcActive { get; set; } = false;
+    public bool GcActive { get; set; }
     public long TotalMemory { get; set; }
     public long Gen0Count { get; set; }
     public long Gen1Count { get; set; }
@@ -24,25 +24,26 @@ public class PerfMonitorViewModel
     public bool PipesDrained { get; set; }
 
     [DependsOn(nameof(ExitMessageReceived), nameof(ProcessHasExited), nameof(PipesDrained))]
-    public string Status => (ExitMessageReceived || (ProcessHasExited && PipesDrained)) ? "[red]Process exited[/]" : "[green]Running[/]";
+    public string Status => (ExitMessageReceived || (ProcessHasExited && PipesDrained)) ? "Process exited" : "Running";
 
     public double TotalGcTimeMs { get; set; }
     public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;
     public string StatusMessage { get; set; } = string.Empty;
-
 
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
     public ConcurrentQueue<string> OutputLines { get; } = new();
     public ConcurrentQueue<string> ErrorLines { get; } = new();
     public ConcurrentQueue<string> RawErrorLines { get; } = new();
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
-    
+
     [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]
     public double GcPercentage
     {
         get
         {
-            if (Elapsed.TotalMilliseconds <= 0) return 0;
+            if (Elapsed.TotalMilliseconds <= 0)
+                return 0;
+
             return (TotalGcTimeMs / Elapsed.TotalMilliseconds) * 100;
         }
     }
@@ -53,15 +54,15 @@ public class PerfMonitorViewModel
         get
         {
             if (GcActive)
-            {
-                return "[red]🔥 GC ACTIVE[/]";
-            }
-            else if (LastGcEvent != DateTime.MinValue)
+                return "GC ACTIVE";
+
+            if (LastGcEvent != DateTime.MinValue)
             {
                 var timeSinceLastGc = DateTime.UtcNow - LastGcEvent;
-                return $"[dim]Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago[/]";
+                return $"Last GC: {timeSinceLastGc.TotalSeconds:F0}s ago";
             }
-            return "";
+
+            return "No GC activity yet";
         }
     }
 
@@ -69,7 +70,7 @@ public class PerfMonitorViewModel
     {
         var now = DateTime.UtcNow;
         var filesToRemove = new List<string>();
-        
+
         foreach (var kvp in FileStatuses.ToArray())
         {
             var file = kvp.Value;
@@ -78,7 +79,7 @@ public class PerfMonitorViewModel
                 filesToRemove.Add(kvp.Key);
             }
         }
-        
+
         foreach (var key in filesToRemove)
         {
             FileStatuses.TryRemove(key, out _);

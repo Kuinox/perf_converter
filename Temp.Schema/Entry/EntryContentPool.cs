@@ -44,6 +44,22 @@ public sealed class EntryContentPool : IDisposable
         return CopyByteMemory(new ReadOnlySpan<byte>(bytePtr, length));
     }
 
+    public unsafe IMemoryOwner<byte>? RentByteMemoryOwnerFromNullTerminatedPtr(nint ptr)
+    {
+        if (ptr == 0)
+            return null;
+
+        var bytePtr = (byte*)ptr;
+        var length = 0;
+        while (bytePtr[length] != 0)
+            length++;
+
+        if (length == 0)
+            return null;
+
+        return RentByteMemoryOwner(new ReadOnlySpan<byte>(bytePtr, length));
+    }
+
     public ReadOnlyMemory<byte> GetByteMemory(ReadOnlySpan<byte> source)
     {
         if (source.IsEmpty)
@@ -72,6 +88,16 @@ public sealed class EntryContentPool : IDisposable
         var buffer = new byte[source.Length];
         source.CopyTo(buffer);
         return buffer;
+    }
+
+    public IMemoryOwner<byte>? RentByteMemoryOwner(ReadOnlySpan<byte> source)
+    {
+        if (source.IsEmpty)
+            return null;
+
+        var buffer = ArrayPool<byte>.Shared.Rent(source.Length);
+        source.CopyTo(buffer);
+        return new ArrayPoolMemoryOwner(buffer, source.Length);
     }
 
     public void Tick()
@@ -127,6 +153,24 @@ public sealed class EntryContentPool : IDisposable
 
         public bool Matches(ReadOnlySpan<byte> source)
             => source.Length == _length && source.SequenceEqual(_buffer.AsSpan(0, _length));
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            ArrayPool<byte>.Shared.Return(_buffer, clearArray: false);
+            _disposed = true;
+        }
+    }
+
+    sealed class ArrayPoolMemoryOwner(byte[] buffer, int length) : IMemoryOwner<byte>
+    {
+        readonly byte[] _buffer = buffer;
+        readonly int _length = length;
+        bool _disposed;
+
+        public Memory<byte> Memory => new(_buffer, 0, _length);
 
         public void Dispose()
         {
