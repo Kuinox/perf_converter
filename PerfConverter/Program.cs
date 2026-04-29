@@ -66,7 +66,7 @@ public unsafe class PerfDlFilter
 
             var handle = GCHandle.FromIntPtr((IntPtr)rawState);
             _ = (State)handle.Target!;
-            PerfConverterMetrics.IncrementProcessedEvents();
+            PerfConverterMetrics.IncrementProcessedEvents(sample->time);
 
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);

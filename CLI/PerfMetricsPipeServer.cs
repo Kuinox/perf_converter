@@ -47,6 +47,8 @@ sealed class PerfMetricsPipeServer : IDisposable
                 viewModel.CurrentRate = (int)Math.Round(snapshot.CurrentRate);
                 viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
                 viewModel.RecordTotalRate(snapshot.CurrentRate);
+                viewModel.FirstTraceTimestampNs = snapshot.FirstTraceTimestampNs;
+                viewModel.LastTraceTimestampNs = snapshot.LastTraceTimestampNs;
 
                 var observedAtUtc = DateTime.UtcNow;
 
@@ -109,7 +111,7 @@ sealed class PerfMetricsPipeServer : IDisposable
 
     static PerfMetricsSnapshot? ParseSnapshot(string line)
     {
-        var topLevelParts = line.Split('|', 3);
+        var topLevelParts = line.Split('|', 5);
         if (topLevelParts.Length < 2)
             return null;
 
@@ -119,10 +121,33 @@ sealed class PerfMetricsPipeServer : IDisposable
         if (!double.TryParse(topLevelParts[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var currentRate))
             return null;
 
-        var files = Array.Empty<FileMetricsSnapshot>();
-        if (topLevelParts.Length == 3 && !string.IsNullOrEmpty(topLevelParts[2]))
+        long? firstTraceTimestampNs = null;
+        long? lastTraceTimestampNs = null;
+        var filesPart = string.Empty;
+
+        if (topLevelParts.Length >= 5)
         {
-            var fileParts = topLevelParts[2].Split(';', StringSplitOptions.RemoveEmptyEntries);
+            if (long.TryParse(topLevelParts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var firstTimestamp))
+            {
+                firstTraceTimestampNs = firstTimestamp;
+            }
+
+            if (long.TryParse(topLevelParts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var lastTimestamp))
+            {
+                lastTraceTimestampNs = lastTimestamp;
+            }
+
+            filesPart = topLevelParts[4];
+        }
+        else if (topLevelParts.Length >= 3)
+        {
+            filesPart = topLevelParts[2];
+        }
+
+        var files = Array.Empty<FileMetricsSnapshot>();
+        if (!string.IsNullOrEmpty(filesPart))
+        {
+            var fileParts = filesPart.Split(';', StringSplitOptions.RemoveEmptyEntries);
             files = new FileMetricsSnapshot[fileParts.Length];
             var count = 0;
 
@@ -147,9 +172,14 @@ sealed class PerfMetricsPipeServer : IDisposable
             }
         }
 
-        return new PerfMetricsSnapshot(totalEvents, currentRate, files);
+        return new PerfMetricsSnapshot(totalEvents, currentRate, firstTraceTimestampNs, lastTraceTimestampNs, files);
     }
 
-    sealed record PerfMetricsSnapshot(long TotalEvents, double CurrentRate, FileMetricsSnapshot[] Files);
+    sealed record PerfMetricsSnapshot(
+        long TotalEvents,
+        double CurrentRate,
+        long? FirstTraceTimestampNs,
+        long? LastTraceTimestampNs,
+        FileMetricsSnapshot[] Files);
     sealed record FileMetricsSnapshot(string FileName, long BufferedEntries, long FlushedEntries, string Status);
 }
