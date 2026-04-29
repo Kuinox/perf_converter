@@ -29,8 +29,14 @@ public sealed partial class TraceSampleRowSchema
     [ParquetColumn("ip", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong Ip { get; set; }
 
+    [ParquetColumn("ipLocationId", Encodings = [EncodingKind.DeltaBinaryPacked])]
+    public ulong IpLocationId { get; set; }
+
     [ParquetColumn("addr", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong Addr { get; set; }
+
+    [ParquetColumn("addressLocationId", Encodings = [EncodingKind.DeltaBinaryPacked])]
+    public ulong AddressLocationId { get; set; }
 
     [ParquetColumn("period", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong Period { get; set; }

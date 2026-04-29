@@ -13,11 +13,13 @@ public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenc
         PerfDlFilterSample* sample,
         PerfDlfilterAl* ip,
         PerfDlfilterAl* address,
+        ulong ipLocationId,
+        ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFileName,
         uint lineNumber)
     {
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
         processor ??= new ThreadProcessor(tracePersistenceFactory);
-        processor.ProcessData(sample, ip, address, srcFileName, lineNumber);
+        processor.ProcessData(sample, ip, address, ipLocationId, addressLocationId, srcFileName, lineNumber);
     }
 }

@@ -23,6 +23,8 @@ class ThreadProcessor : IDisposable
         PerfDlFilterSample* sample,
         PerfDlfilterAl* ip,
         PerfDlfilterAl* address,
+        ulong ipLocationId,
+        ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,
         uint lineNumber)
     {
@@ -39,7 +41,7 @@ class ThreadProcessor : IDisposable
         }
 
         var entryId = _currentEntryId++;
-        processor!.Persist(entryId, sample, ip, address, srcFilePath, lineNumber, @event);
+        processor!.Persist(entryId, sample, ip, address, ipLocationId, addressLocationId, srcFilePath, lineNumber, @event);
     }
 
     public void Dispose()

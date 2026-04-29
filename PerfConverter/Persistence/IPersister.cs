@@ -12,6 +12,8 @@ public unsafe interface ITracePersister : IDisposable
         PerfConverter.PerfStructs.PerfDlFilterSample* sample,
         PerfConverter.PerfStructs.PerfDlfilterAl* ip,
         PerfConverter.PerfStructs.PerfDlfilterAl* address,
+        ulong ipLocationId,
+        ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,
         uint lineNumber,
         ReadOnlyMemory<byte> eventName);

@@ -70,13 +70,16 @@ public unsafe class PerfDlFilter
 
             var fns = get_perf_dlfilter_fns();
             var ip = fns->resolve_ip(ctx);
+            var ipLocationId = _persistenceLifetime.GetOrAddSourceLocation(ip);
 
             PerfDlfilterAl* address = null;
+            var addressLocationId = 0UL;
             if (sample->addr_correlates_sym != 0)
             {
                 address = fns->resolve_addr(ctx);
+                addressLocationId = _persistenceLifetime.GetOrAddSourceLocation(address);
             }
-            _traceProcessor.ProcessData(sample, ip, address, null, 0);
+            _traceProcessor.ProcessData(sample, ip, address, ipLocationId, addressLocationId, null, 0);
 
         }
         catch (Exception ex)

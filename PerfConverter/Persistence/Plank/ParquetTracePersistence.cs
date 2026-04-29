@@ -13,6 +13,8 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         PerfDlFilterSample* sample,
         PerfDlfilterAl* ip,
         PerfDlfilterAl* address,
+        ulong ipLocationId,
+        ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,
         uint lineNumber,
         ReadOnlyMemory<byte> eventName)
@@ -26,7 +28,9 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         row.Cpu = (uint)sample->cpu;
         row.Flags = sample->flags;
         row.Ip = ip->addr;
+        row.IpLocationId = ipLocationId;
         row.Addr = address == null ? 0UL : address->addr;
+        row.AddressLocationId = addressLocationId;
         row.Period = sample->period;
         row.InsnCnt = sample->insn_cnt;
         row.CycCnt = sample->cyc_cnt;
