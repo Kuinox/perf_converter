@@ -26,9 +26,9 @@ internal class Program
 
             var rootCommand = new RootCommand("PerfConverter CLI - Helper tool for running perf with PerfConverter DLFilter");
 
-            var inputFileArgument = new Argument<FileInfo>(
+            var inputFileArgument = new Argument<string>(
                 name: "input-file",
-                description: "Path to the perf data file");
+                description: "Path to the perf data file or directory");
 
             var perfArgsOption = new Option<string>(
                 ["--perf-args", "-p"],
@@ -56,7 +56,7 @@ internal class Program
                 var outputDir = context.ParseResult.GetValueForOption(outputOption)!;
                 var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
 
-                await RunPerfCommand(inputFile, perfArgs, outputDir, dryRun);
+                await RunPerfCommand(inputFile, outputDir, dryRun, perfArgs);
             });
 
             return await rootCommand.InvokeAsync(args);
@@ -68,11 +68,14 @@ internal class Program
         }
     }
 
-    private static async Task<int> RunPerfCommand(FileInfo inputFile, string perfArgs, DirectoryInfo outputDir, bool dryRun)
+    private static async Task<int> RunPerfCommand(string inputPath, DirectoryInfo outputDir, bool dryRun, string perfArgs)
     {
-        if (!inputFile.Exists)
+        var fullInputPath = Path.GetFullPath(inputPath);
+        var inputExists = File.Exists(fullInputPath) || Directory.Exists(fullInputPath);
+
+        if (!inputExists)
         {
-            Console.Error.WriteLine($"Error: Input file '{inputFile.FullName}' does not exist.");
+            Console.Error.WriteLine($"Error: Input path '{fullInputPath}' does not exist.");
             return 1;
         }
 
@@ -89,7 +92,7 @@ internal class Program
 
         Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
 
-        var perfCommand = $"perf script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}";
+        var perfCommand = $"perf script {perfArgs} -i {QuoteArgument(fullInputPath)} --dlfilter {QuoteArgument(dlFilterPath)}";
 
         if (dryRun)
         {
@@ -102,7 +105,7 @@ internal class Program
         var processInfo = new ProcessStartInfo
         {
             FileName = "perf",
-            Arguments = $"script {perfArgs} -i {inputFile.FullName} --dlfilter {dlFilterPath}",
+            Arguments = $"script {perfArgs} -i {QuoteArgument(fullInputPath)} --dlfilter {QuoteArgument(dlFilterPath)}",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true
@@ -513,5 +516,10 @@ internal class Program
         }
 
         return kill(process.Id, signal) == 0;
+    }
+
+    static string QuoteArgument(string value)
+    {
+        return $"\"{value.Replace("\"", "\\\"")}\"";
     }
 }
