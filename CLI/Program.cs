@@ -11,13 +11,9 @@ namespace CLI;
 internal class Program
 {
     const int SigInt = 2;
-    const int SigTerm = 15;
 
     [DllImport("libc", SetLastError = true)]
     static extern int kill(int pid, int sig);
-
-    [DllImport("libc", SetLastError = true)]
-    static extern int setpgid(int pid, int pgid);
 
     static async Task<int> Main(string[] args)
     {
@@ -134,8 +130,6 @@ internal class Program
             return 1;
         }
 
-        TryAssignUnixProcessGroup(process);
-
         viewModel.ProcessStartTime = DateTime.UtcNow;
         var chrono = Stopwatch.StartNew();
         var commandProcessor = new CommandProcessor(viewModel);
@@ -144,15 +138,14 @@ internal class Program
         var stdoutDrained = false;
         var stderrDrained = false;
         var shutdownRequested = 0;
-        Task? shutdownTask = null;
 
-        Task RequestShutdownAsync()
+        void RequestShutdown()
         {
             if (Interlocked.Exchange(ref shutdownRequested, 1) != 0)
-                return shutdownTask ?? Task.CompletedTask;
+                return;
 
             viewModel.ShutdownRequested = true;
-            shutdownTask = Task.Run(async () =>
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -165,7 +158,6 @@ internal class Program
                     {
                         viewModel.StatusMessage = "Could not signal perf cleanly, forcing termination...";
                         process.Kill(true);
-                        await process.WaitForExitAsync();
                         return;
                     }
 
@@ -178,56 +170,16 @@ internal class Program
                     {
                         if (!process.HasExited)
                         {
-                            viewModel.StatusMessage = "SIGINT timed out, escalating to SIGTERM...";
-                            TrySendUnixSignal(process, SigTerm, preferProcessGroup: true);
+                            viewModel.StatusMessage = "Graceful shutdown timed out, forcing termination...";
+                            process.Kill(true);
                         }
                     }
-
-                    if (!process.HasExited)
-                    {
-                        using var terminateTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                        try
-                        {
-                            await process.WaitForExitAsync(terminateTimeout.Token);
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            if (!process.HasExited)
-                            {
-                                viewModel.StatusMessage = "Graceful shutdown timed out, forcing termination...";
-                                process.Kill(true);
-                                await process.WaitForExitAsync();
-                            }
-                        }
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                    // The process exited while shutdown was in flight.
                 }
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"Error killing process: {ex.Message}");
-                    if (!process.HasExited)
-                    {
-                        try
-                        {
-                            process.Kill(true);
-                            await process.WaitForExitAsync();
-                        }
-                        catch (InvalidOperationException)
-                        {
-                        }
-                    }
                 }
             });
-
-            return shutdownTask;
-        }
-
-        void RequestShutdown()
-        {
-            _ = RequestShutdownAsync();
         }
 
         var display = new PerfMonitorDisplay(viewModel, RequestShutdown);
@@ -239,22 +191,6 @@ internal class Program
             RequestShutdown();
         };
         Console.CancelKeyPress += cancelHandler;
-        PosixSignalRegistration? sigIntRegistration = null;
-        PosixSignalRegistration? sigTermRegistration = null;
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-        {
-            sigIntRegistration = PosixSignalRegistration.Create(PosixSignal.SIGINT, ctx =>
-            {
-                ctx.Cancel = true;
-                RequestShutdown();
-            });
-
-            sigTermRegistration = PosixSignalRegistration.Create(PosixSignal.SIGTERM, ctx =>
-            {
-                ctx.Cancel = true;
-                RequestShutdown();
-            });
-        }
 
         // Set up process event handlers
         process.OutputDataReceived += (sender, e) =>
@@ -337,10 +273,8 @@ internal class Program
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        var displayTask = display.StartLiveDisplayAsync(exitTimeoutCts.Token);
         // Start background tasks
-        var displayTask = ShouldUseInteractiveDisplay()
-            ? display.StartLiveDisplayAsync(exitTimeoutCts.Token)
-            : StartStatusDisplayAsync(viewModel, exitTimeoutCts.Token);
         var updateTask = Task.Run(async () =>
         {
             while (!viewModel.IsComplete)
@@ -367,13 +301,6 @@ internal class Program
         exitTimeoutCts.Cancel();
         exitTimeoutCts.Dispose();
         Console.CancelKeyPress -= cancelHandler;
-        sigIntRegistration?.Dispose();
-        sigTermRegistration?.Dispose();
-
-        if (shutdownTask is not null)
-        {
-            await shutdownTask;
-        }
 
         // Ensure process has exited before accessing ExitCode
         if (!process.HasExited)
@@ -397,75 +324,6 @@ internal class Program
         return exitCode;
     }
 
-    static async Task StartStatusDisplayAsync(PerfMonitorViewModel viewModel, CancellationToken cancellationToken)
-    {
-        var lastLineLength = 0;
-        var lastRendered = DateTime.MinValue;
-
-        try
-        {
-            while (!viewModel.IsComplete)
-            {
-                if ((DateTime.UtcNow - lastRendered) >= TimeSpan.FromSeconds(5))
-                {
-                    var line = BuildStatusLine(viewModel);
-                    var paddedLine = line.Length < lastLineLength
-                        ? line + new string(' ', lastLineLength - line.Length)
-                        : line;
-                    Console.Error.WriteLine(paddedLine);
-                    lastLineLength = paddedLine.Length;
-                    lastRendered = DateTime.UtcNow;
-                }
-
-                await Task.Delay(250, cancellationToken);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            var line = BuildStatusLine(viewModel);
-            var paddedLine = line.Length < lastLineLength
-                ? line + new string(' ', lastLineLength - line.Length)
-                : line;
-            Console.Error.WriteLine(paddedLine);
-        }
-    }
-
-    static string BuildStatusLine(PerfMonitorViewModel viewModel)
-    {
-        var elapsed = viewModel.ProcessHasExited
-            ? viewModel.Elapsed
-            : DateTime.UtcNow - viewModel.ProcessStartTime;
-        if (elapsed < TimeSpan.Zero)
-            elapsed = TimeSpan.Zero;
-
-        var statusMessage = string.IsNullOrWhiteSpace(viewModel.StatusMessage)
-            ? viewModel.Status
-            : viewModel.StatusMessage;
-
-        return string.Join(
-            " | ",
-            [
-                $"status: {viewModel.Status}",
-                $"elapsed: {elapsed:hh\\:mm\\:ss}",
-                $"trace start: {TraceTimestampFormatter.Format(viewModel.FirstTraceTimestampNs)}",
-                $"trace now: {TraceTimestampFormatter.Format(viewModel.LastTraceTimestampNs)}",
-                $"trace span: {TraceTimestampFormatter.FormatRange(viewModel.FirstTraceTimestampNs, viewModel.LastTraceTimestampNs)}",
-                $"events: {viewModel.EventCount:N0}",
-                $"rate: {viewModel.CurrentRate:N0}/s",
-                statusMessage
-            ]);
-    }
-
-    static bool ShouldUseInteractiveDisplay()
-    {
-        return !Console.IsInputRedirected
-            && !Console.IsOutputRedirected
-            && !Console.IsErrorRedirected;
-    }
-
     static bool TryRequestGracefulShutdown(Process process)
     {
         if (process.HasExited)
@@ -476,46 +334,7 @@ internal class Program
             return process.CloseMainWindow();
         }
 
-        return TrySendUnixSignal(process, SigInt, preferProcessGroup: true);
-    }
-
-    static void TryAssignUnixProcessGroup(Process process)
-    {
-        if (OperatingSystem.IsWindows() || process.HasExited)
-            return;
-
-        try
-        {
-            _ = setpgid(process.Id, process.Id);
-        }
-        catch (DllNotFoundException)
-        {
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-    }
-
-    static bool TrySendUnixSignal(Process process, int signal, bool preferProcessGroup)
-    {
-        if (OperatingSystem.IsWindows() || process.HasExited)
-            return false;
-
-        try
-        {
-            if (preferProcessGroup && kill(-process.Id, signal) == 0)
-                return true;
-        }
-        catch (DllNotFoundException)
-        {
-            return false;
-        }
-        catch (EntryPointNotFoundException)
-        {
-            return false;
-        }
-
-        return kill(process.Id, signal) == 0;
+        return kill(process.Id, SigInt) == 0;
     }
 
     static string QuoteArgument(string value)
