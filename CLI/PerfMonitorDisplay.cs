@@ -13,7 +13,7 @@ public sealed class PerfMonitorDisplay
     const int MaxFileRows = 10;
     readonly PerfMonitorViewModel _viewModel;
     readonly Action _requestShutdown;
-    readonly TextBlock _summaryText;
+    readonly Table _summaryTable;
     readonly Sparkline _totalRateSparkline;
     readonly Table _fileTable;
     readonly TextBlock _logsText;
@@ -23,7 +23,7 @@ public sealed class PerfMonitorDisplay
     {
         _viewModel = viewModel;
         _requestShutdown = requestShutdown;
-        _summaryText = new TextBlock { Wrap = true };
+        _summaryTable = new Table { ShowHeaderSeparator = true };
         _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
@@ -67,7 +67,7 @@ public sealed class PerfMonitorDisplay
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Fixed, 42) });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
 
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryText, "Ctrl+C stops perf")) { Row = 0, Column = 0 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryTable.Stretch(), "Ctrl+C stops perf")) { Row = 0, Column = 0 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity"))
         {
@@ -129,22 +129,31 @@ public sealed class PerfMonitorDisplay
             : _viewModel.StatusMessage;
         var elapsed = GetDisplayElapsed();
 
-        _summaryText.Text = string.Join(
-            Environment.NewLine,
-            [
-                $"Status: {_viewModel.Status}",
-                statusMessage,
-                $"Elapsed: {elapsed:hh\\:mm\\:ss}",
-                $"Trace Start: {TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs)}",
-                $"Trace Now: {TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs)}",
-                $"Trace Span: {TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs)}",
-                $"Events: {_viewModel.EventCount:N0}",
-                $"Current rate: {_viewModel.CurrentRate:N0}/s",
-                $"Overall rate: {_viewModel.OverallRate:N0}/s",
-                $"Memory: {_viewModel.MemoryMB.ToString("F1", CultureInfo.InvariantCulture)} MB",
-                $"GC: {_viewModel.Gen0Count}/{_viewModel.Gen1Count}/{_viewModel.Gen2Count}  ({_viewModel.GcPercentage.ToString("F1", CultureInfo.InvariantCulture)}%)",
-                _viewModel.GcStatus
-            ]);
+        var rows = new (string Metric, string Value)[]
+        {
+            ("Status", _viewModel.Status),
+            ("Message", statusMessage),
+            ("Elapsed", elapsed.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)),
+            ("Trace Start", TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs)),
+            ("Trace Now", TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs)),
+            ("Trace Span", TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs)),
+            ("Events", _viewModel.EventCount.ToString("N0", CultureInfo.InvariantCulture)),
+            ("Current rate", $"{_viewModel.CurrentRate.ToString("N0", CultureInfo.InvariantCulture)}/s"),
+            ("Overall rate", $"{_viewModel.OverallRate.ToString("N0", CultureInfo.InvariantCulture)}/s"),
+            ("Memory", $"{_viewModel.MemoryMB.ToString("F1", CultureInfo.InvariantCulture)} MB"),
+            ("GC", $"{_viewModel.Gen0Count.ToString("N0", CultureInfo.InvariantCulture)}/{_viewModel.Gen1Count.ToString("N0", CultureInfo.InvariantCulture)}/{_viewModel.Gen2Count.ToString("N0", CultureInfo.InvariantCulture)} ({_viewModel.GcPercentage.ToString("F1", CultureInfo.InvariantCulture)}%)"),
+            ("GC Status", _viewModel.GcStatus)
+        };
+
+        _summaryTable.HeaderCells.Clear();
+        _summaryTable.HeaderCells.Add(new TextBlock("Metric"));
+        _summaryTable.HeaderCells.Add(new TextBlock("Value"));
+
+        _summaryTable.RowCells.Clear();
+        foreach (var (metric, value) in rows)
+        {
+            _summaryTable.AddRow(new TextBlock(metric), new TextBlock(value));
+        }
     }
 
     void UpdateThroughputChart()
@@ -229,7 +238,7 @@ public sealed class PerfMonitorDisplay
 
     static Sparkline CreateSparkline(double[] history)
     {
-        var sparkline = new Sparkline(history).MinWidth(12).MinHeight(1).MaxHeight(1).VerticalAlignment(Align.Start);
+        var sparkline = new Sparkline(history).MinWidth(8).MaxWidth(8).MinHeight(1).MaxHeight(1).VerticalAlignment(Align.Start);
         sparkline.Minimum = 0;
         sparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
         return sparkline;

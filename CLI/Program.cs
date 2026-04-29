@@ -131,12 +131,13 @@ internal class Program
         }
 
         viewModel.ProcessStartTime = DateTime.UtcNow;
+        using var diagnosticsListener = TryStartDiagnosticsListener(process.Id, viewModel);
         var chrono = Stopwatch.StartNew();
         var commandProcessor = new CommandProcessor(viewModel);
         var messageHandler = new MessageHandler(viewModel, commandProcessor);
         var exitTimeoutCts = new CancellationTokenSource();
-        var stdoutDrained = false;
-        var stderrDrained = false;
+        var stdoutDrained = 0;
+        var stderrDrained = 0;
         var shutdownRequested = 0;
 
         void RequestShutdown()
@@ -202,8 +203,8 @@ internal class Program
             else
             {
                 // e.Data is null when stdout is closed
-                stdoutDrained = true;
-                if (stdoutDrained && stderrDrained && process.HasExited)
+                Interlocked.Exchange(ref stdoutDrained, 1);
+                if (Volatile.Read(ref stdoutDrained) == 1 && Volatile.Read(ref stderrDrained) == 1 && process.HasExited)
                 {
                     viewModel.PipesDrained = true;
                 }
@@ -219,53 +220,12 @@ internal class Program
             else
             {
                 // e.Data is null when stderr is closed
-                stderrDrained = true;
-                if (stdoutDrained && stderrDrained && process.HasExited)
+                Interlocked.Exchange(ref stderrDrained, 1);
+                if (Volatile.Read(ref stdoutDrained) == 1 && Volatile.Read(ref stderrDrained) == 1 && process.HasExited)
                 {
                     viewModel.PipesDrained = true;
                 }
             }
-        };
-
-        process.EnableRaisingEvents = true;
-
-        process.Exited += (sender, e) =>
-        {
-            viewModel.ProcessHasExited = true;
-            viewModel.StatusMessage = viewModel.ExitMessageReceived
-                ? "PerfConverter finished cleanup, waiting for pipes to drain..."
-                : "Process completed, waiting for pipes to drain...";
-            
-            // Check if pipes are already drained
-            if (stdoutDrained && stderrDrained)
-            {
-                viewModel.PipesDrained = true;
-            }
-            
-            _ = Task.Run(async () =>
-            {
-                // Wait for pipes to drain, but with a reasonable timeout
-                var maxWait = TimeSpan.FromSeconds(5);
-                var start = DateTime.UtcNow;
-                
-                while (!viewModel.PipesDrained && (DateTime.UtcNow - start) < maxWait)
-                {
-                    try
-                    {
-                        await Task.Delay(100);
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                        // If we get disposed, just break out
-                        break;
-                    }
-                }
-                
-                // Force completion even if pipes didn't drain cleanly
-                viewModel.PipesDrained = true;
-                viewModel.StatusMessage = "Done.";
-                viewModel.IsComplete = true;
-            });
         };
 
         viewModel.IsComplete = process.HasExited;
@@ -273,8 +233,33 @@ internal class Program
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
+        var completionTask = Task.Run(async () =>
+        {
+            await process.WaitForExitAsync();
+
+            viewModel.ProcessHasExited = true;
+            viewModel.StatusMessage = viewModel.ExitMessageReceived
+                ? "PerfConverter finished cleanup, waiting for pipes to drain..."
+                : "Process completed, waiting for pipes to drain...";
+
+            if (Volatile.Read(ref stdoutDrained) == 1 && Volatile.Read(ref stderrDrained) == 1)
+            {
+                viewModel.PipesDrained = true;
+            }
+
+            var maxWait = TimeSpan.FromSeconds(5);
+            var start = DateTime.UtcNow;
+            while (!viewModel.PipesDrained && (DateTime.UtcNow - start) < maxWait)
+            {
+                await Task.Delay(100);
+            }
+
+            viewModel.PipesDrained = true;
+            viewModel.StatusMessage = "Done.";
+            viewModel.IsComplete = true;
+        });
+
         var displayTask = display.StartLiveDisplayAsync(exitTimeoutCts.Token);
-        // Start background tasks
         var updateTask = Task.Run(async () =>
         {
             while (!viewModel.IsComplete)
@@ -296,11 +281,28 @@ internal class Program
             }
         }, exitTimeoutCts.Token);
 
-        await Task.WhenAny(displayTask, updateTask);
+        await completionTask;
 
         exitTimeoutCts.Cancel();
-        exitTimeoutCts.Dispose();
         Console.CancelKeyPress -= cancelHandler;
+
+        try
+        {
+            await displayTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        try
+        {
+            await updateTask;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+
+        exitTimeoutCts.Dispose();
 
         // Ensure process has exited before accessing ExitCode
         if (!process.HasExited)
@@ -322,6 +324,19 @@ internal class Program
         }
 
         return exitCode;
+    }
+
+    static PerfDiagnosticsListener? TryStartDiagnosticsListener(int processId, PerfMonitorViewModel viewModel)
+    {
+        try
+        {
+            return new PerfDiagnosticsListener(processId, viewModel);
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusMessage = $"Diagnostics unavailable: {ex.Message}";
+            return null;
+        }
     }
 
     static bool TryRequestGracefulShutdown(Process process)
