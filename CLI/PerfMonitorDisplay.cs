@@ -13,8 +13,9 @@ public sealed class PerfMonitorDisplay
     const int MaxFileRows = 10;
     readonly PerfMonitorViewModel _viewModel;
     readonly Action _requestShutdown;
-    readonly Table _summaryTable;
+    readonly TextBlock _summaryText;
     readonly Sparkline _totalRateSparkline;
+    readonly BreakdownChart _fileStateChart;
     readonly Table _fileTable;
     readonly TextBlock _logsText;
     readonly Visual _root;
@@ -23,8 +24,9 @@ public sealed class PerfMonitorDisplay
     {
         _viewModel = viewModel;
         _requestShutdown = requestShutdown;
-        _summaryTable = new Table { ShowHeaderSeparator = false };
+        _summaryText = new TextBlock { Wrap = true };
         _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
+        _fileStateChart = new BreakdownChart { ShowValues = true, ShowPercentages = true };
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
         _root = CreateRoot();
@@ -67,9 +69,10 @@ public sealed class PerfMonitorDisplay
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Fixed, 42) });
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
 
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryTable.Stretch(), "Ctrl+C stops perf")) { Row = 0, Column = 0 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryText, "Ctrl+C stops perf")) { Row = 0, Column = 0 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity")) { Row = 1, Column = 0, ColumnSpan = 2 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("File States", _fileStateChart.Stretch(), "live status mix")) { Row = 1, Column = 0 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity")) { Row = 1, Column = 1 });
 
         var logsGroup = CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8);
 
@@ -113,6 +116,7 @@ public sealed class PerfMonitorDisplay
 
         UpdateSummary();
         UpdateThroughputChart();
+        UpdateFileStateChart();
         UpdateFileTable();
         UpdateLogs();
     }
@@ -124,20 +128,22 @@ public sealed class PerfMonitorDisplay
             : _viewModel.StatusMessage;
         var elapsed = GetDisplayElapsed();
 
-        _summaryTable.HeaderCells.Clear();
-        _summaryTable.RowCells.Clear();
-        AddSummaryRow("Status", _viewModel.Status);
-        AddSummaryRow("Message", statusMessage);
-        AddSummaryRow("Elapsed", $"{elapsed:hh\\:mm\\:ss}");
-        AddSummaryRow("Trace Start", TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs));
-        AddSummaryRow("Trace Now", TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs));
-        AddSummaryRow("Trace Span", TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs));
-        AddSummaryRow("Events", _viewModel.EventCount.ToString("N0", CultureInfo.InvariantCulture));
-        AddSummaryRow("Current", $"{_viewModel.CurrentRate:N0}/s");
-        AddSummaryRow("Overall", $"{_viewModel.OverallRate:N0}/s");
-        AddSummaryRow("Memory", $"{_viewModel.MemoryMB.ToString("F1", CultureInfo.InvariantCulture)} MB");
-        AddSummaryRow("GC", $"{_viewModel.Gen0Count}/{_viewModel.Gen1Count}/{_viewModel.Gen2Count} ({_viewModel.GcPercentage.ToString("F1", CultureInfo.InvariantCulture)}%)");
-        AddSummaryRow("GC Status", _viewModel.GcStatus);
+        _summaryText.Text = string.Join(
+            Environment.NewLine,
+            [
+                $"Status: {_viewModel.Status}",
+                statusMessage,
+                $"Elapsed: {elapsed:hh\\:mm\\:ss}",
+                $"Trace Start: {TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs)}",
+                $"Trace Now: {TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs)}",
+                $"Trace Span: {TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs)}",
+                $"Events: {_viewModel.EventCount:N0}",
+                $"Current rate: {_viewModel.CurrentRate:N0}/s",
+                $"Overall rate: {_viewModel.OverallRate:N0}/s",
+                $"Memory: {_viewModel.MemoryMB.ToString("F1", CultureInfo.InvariantCulture)} MB",
+                $"GC: {_viewModel.Gen0Count}/{_viewModel.Gen1Count}/{_viewModel.Gen2Count}  ({_viewModel.GcPercentage.ToString("F1", CultureInfo.InvariantCulture)}%)",
+                _viewModel.GcStatus
+            ]);
     }
 
     void UpdateThroughputChart()
@@ -146,6 +152,32 @@ public sealed class PerfMonitorDisplay
         SparklineExtensions.Values(_totalRateSparkline, history);
         _totalRateSparkline.Minimum = 0;
         _totalRateSparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
+    }
+
+    void UpdateFileStateChart()
+    {
+        var files = _viewModel.FileStatuses.Values.ToArray();
+        var buffering = files.Count(x => x.Status == "BUFFERING");
+        var flushing = files.Count(x => x.Status == "FLUSHING");
+        var closed = files.Count(x => x.Status == "CLOSED");
+
+        var segments = new[]
+        {
+            CreateSegment("BUFFERING", buffering, Colors.MediumSeaGreen),
+            CreateSegment("FLUSHING", flushing, Colors.Goldenrod),
+            CreateSegment("CLOSED", closed, Colors.SlateGray)
+        };
+
+        _fileStateChart.Segments.Clear();
+        foreach (var segment in segments.Where(x => x.Value > 0))
+        {
+            _fileStateChart.Segments.Add(segment);
+        }
+
+        if (_fileStateChart.Segments.Count == 0)
+        {
+            _fileStateChart.Segments.Add(CreateSegment("No files", 1, Colors.DimGray));
+        }
     }
 
     void UpdateFileTable()
@@ -220,9 +252,12 @@ public sealed class PerfMonitorDisplay
         return _viewModel.Elapsed;
     }
 
-    void AddSummaryRow(string key, string value)
+    static BreakdownSegment CreateSegment(string label, double value, Color color)
     {
-        _summaryTable.AddRow(new TextBlock(key), new TextBlock(value) { Wrap = true });
+        return new BreakdownSegment(value, new TextBlock(label))
+        {
+            Color = color
+        };
     }
 
     static Sparkline CreateSparkline(double[] history)
