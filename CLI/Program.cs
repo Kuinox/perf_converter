@@ -455,10 +455,28 @@ internal class Program
             [
                 $"status: {viewModel.Status}",
                 $"elapsed: {elapsed:hh\\:mm\\:ss}",
+                $"trace: {FormatTraceTime(viewModel.TraceTimeProcessed)}",
                 $"events: {viewModel.EventCount:N0}",
                 $"rate: {viewModel.CurrentRate:N0}/s",
                 statusMessage
             ]);
+    }
+
+    static string FormatTraceTime(TimeSpan? traceTime)
+    {
+        if (!traceTime.HasValue)
+            return "-";
+
+        var value = traceTime.Value;
+        if (value < TimeSpan.FromSeconds(1))
+            return $"{value.TotalMilliseconds:F0}ms";
+
+        if (value < TimeSpan.FromMinutes(1))
+            return $"{value.TotalSeconds:F1}s";
+
+        return value < TimeSpan.FromHours(1)
+            ? value.ToString("mm\\:ss")
+            : value.ToString("hh\\:mm\\:ss");
     }
 
     static bool TryRequestGracefulShutdown(Process process)

@@ -9,10 +9,13 @@ static class PerfConverterMetrics
     static readonly Meter Meter = new("PerfConverter");
     static readonly ConcurrentDictionary<string, FileTelemetryState> Files = new(StringComparer.Ordinal);
     static readonly Lock RateLock = new();
+    static readonly Lock TraceTimeLock = new();
 
     static long _processedEvents;
     static long _lastObservedProcessedEvents;
     static long _lastObservedTimestamp = Stopwatch.GetTimestamp();
+    static long _firstTraceTimestampNs = long.MaxValue;
+    static long _lastTraceTimestampNs = long.MinValue;
 
     static readonly ObservableGauge<long> ProcessedEventsGauge =
         Meter.CreateObservableGauge(
@@ -49,9 +52,10 @@ static class PerfConverterMetrics
             unit: "{state}",
             description: "Current output file status. 1=buffering, 2=closed.");
 
-    public static void IncrementProcessedEvents()
+    public static void IncrementProcessedEvents(ulong traceTimestampNs)
     {
         Interlocked.Increment(ref _processedEvents);
+        ObserveTraceTimestamp(traceTimestampNs);
     }
 
     public static void FileOpened(string key)
@@ -96,6 +100,7 @@ static class PerfConverterMetrics
     public static MetricsSnapshot GetSnapshot()
     {
         var currentRate = ObserveCurrentRate();
+        var (firstTraceTimestampNs, lastTraceTimestampNs) = GetTraceTimeRange();
         var files = new FileMetricsSnapshot[Files.Count];
         var index = 0;
 
@@ -116,6 +121,8 @@ static class PerfConverterMetrics
         return new MetricsSnapshot(
             TotalEvents: Interlocked.Read(ref _processedEvents),
             CurrentRate: currentRate,
+            FirstTraceTimestampNs: firstTraceTimestampNs,
+            LastTraceTimestampNs: lastTraceTimestampNs,
             Files: files);
     }
 
@@ -181,6 +188,44 @@ static class PerfConverterMetrics
         }
     }
 
-    public sealed record MetricsSnapshot(long TotalEvents, double CurrentRate, FileMetricsSnapshot[] Files);
+    static void ObserveTraceTimestamp(ulong traceTimestampNs)
+    {
+        if (traceTimestampNs > long.MaxValue)
+            return;
+
+        var timestampNs = (long)traceTimestampNs;
+        lock (TraceTimeLock)
+        {
+            if (timestampNs < _firstTraceTimestampNs)
+            {
+                _firstTraceTimestampNs = timestampNs;
+            }
+
+            if (timestampNs > _lastTraceTimestampNs)
+            {
+                _lastTraceTimestampNs = timestampNs;
+            }
+        }
+    }
+
+    static (long? FirstTraceTimestampNs, long? LastTraceTimestampNs) GetTraceTimeRange()
+    {
+        lock (TraceTimeLock)
+        {
+            if (_firstTraceTimestampNs == long.MaxValue || _lastTraceTimestampNs == long.MinValue)
+            {
+                return (null, null);
+            }
+
+            return (_firstTraceTimestampNs, _lastTraceTimestampNs);
+        }
+    }
+
+    public sealed record MetricsSnapshot(
+        long TotalEvents,
+        double CurrentRate,
+        long? FirstTraceTimestampNs,
+        long? LastTraceTimestampNs,
+        FileMetricsSnapshot[] Files);
     public sealed record FileMetricsSnapshot(string FileName, long BufferedEntries, long FlushedEntries, string Status);
 }

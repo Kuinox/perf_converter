@@ -71,6 +71,10 @@ sealed class MetricsPipeReporter : IDisposable
         builder.Append('|');
         builder.Append(snapshot.CurrentRate.ToString("F3", CultureInfo.InvariantCulture));
         builder.Append('|');
+        builder.Append(snapshot.FirstTraceTimestampNs?.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
+        builder.Append(snapshot.LastTraceTimestampNs?.ToString(CultureInfo.InvariantCulture));
+        builder.Append('|');
 
         for (var i = 0; i < snapshot.Files.Length; i++)
         {
