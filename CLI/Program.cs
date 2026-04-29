@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Linq;
 using Temp.Schema;
+using CLI.Display;
 
 namespace CLI;
 
@@ -226,6 +227,8 @@ internal class Program
             _ = RequestShutdownAsync();
         }
 
+        var display = new PerfMonitorDisplay(viewModel, RequestShutdown);
+
         // Set up Ctrl+C handler
         ConsoleCancelEventHandler cancelHandler = (sender, e) =>
         {
@@ -332,7 +335,9 @@ internal class Program
         process.BeginErrorReadLine();
 
         // Start background tasks
-        var displayTask = StartStatusDisplayAsync(viewModel, exitTimeoutCts.Token);
+        var displayTask = ShouldUseInteractiveDisplay()
+            ? display.StartLiveDisplayAsync(exitTimeoutCts.Token)
+            : StartStatusDisplayAsync(viewModel, exitTimeoutCts.Token);
         var updateTask = Task.Run(async () =>
         {
             while (!viewModel.IsComplete)
@@ -391,7 +396,6 @@ internal class Program
 
     static async Task StartStatusDisplayAsync(PerfMonitorViewModel viewModel, CancellationToken cancellationToken)
     {
-        var interactive = !Console.IsErrorRedirected;
         var lastLineLength = 0;
         var lastRendered = DateTime.MinValue;
 
@@ -399,23 +403,15 @@ internal class Program
         {
             while (!viewModel.IsComplete)
             {
-                if (!interactive)
-                {
-                    if ((DateTime.UtcNow - lastRendered) >= TimeSpan.FromSeconds(5))
-                    {
-                        Console.Error.WriteLine(BuildStatusLine(viewModel));
-                        lastRendered = DateTime.UtcNow;
-                    }
-                }
-                else
+                if ((DateTime.UtcNow - lastRendered) >= TimeSpan.FromSeconds(5))
                 {
                     var line = BuildStatusLine(viewModel);
                     var paddedLine = line.Length < lastLineLength
                         ? line + new string(' ', lastLineLength - line.Length)
                         : line;
-                    Console.Error.Write('\r');
-                    Console.Error.Write(paddedLine);
+                    Console.Error.WriteLine(paddedLine);
                     lastLineLength = paddedLine.Length;
+                    lastRendered = DateTime.UtcNow;
                 }
 
                 await Task.Delay(250, cancellationToken);
@@ -426,15 +422,11 @@ internal class Program
         }
         finally
         {
-            if (interactive)
-            {
-                var line = BuildStatusLine(viewModel);
-                var paddedLine = line.Length < lastLineLength
-                    ? line + new string(' ', lastLineLength - line.Length)
-                    : line;
-                Console.Error.Write('\r');
-                Console.Error.WriteLine(paddedLine);
-            }
+            var line = BuildStatusLine(viewModel);
+            var paddedLine = line.Length < lastLineLength
+                ? line + new string(' ', lastLineLength - line.Length)
+                : line;
+            Console.Error.WriteLine(paddedLine);
         }
     }
 
@@ -455,28 +447,20 @@ internal class Program
             [
                 $"status: {viewModel.Status}",
                 $"elapsed: {elapsed:hh\\:mm\\:ss}",
-                $"trace: {FormatTraceTime(viewModel.TraceTimeProcessed)}",
+                $"trace start: {TraceTimestampFormatter.Format(viewModel.FirstTraceTimestampNs)}",
+                $"trace now: {TraceTimestampFormatter.Format(viewModel.LastTraceTimestampNs)}",
+                $"trace span: {TraceTimestampFormatter.FormatRange(viewModel.FirstTraceTimestampNs, viewModel.LastTraceTimestampNs)}",
                 $"events: {viewModel.EventCount:N0}",
                 $"rate: {viewModel.CurrentRate:N0}/s",
                 statusMessage
             ]);
     }
 
-    static string FormatTraceTime(TimeSpan? traceTime)
+    static bool ShouldUseInteractiveDisplay()
     {
-        if (!traceTime.HasValue)
-            return "-";
-
-        var value = traceTime.Value;
-        if (value < TimeSpan.FromSeconds(1))
-            return $"{value.TotalMilliseconds:F0}ms";
-
-        if (value < TimeSpan.FromMinutes(1))
-            return $"{value.TotalSeconds:F1}s";
-
-        return value < TimeSpan.FromHours(1)
-            ? value.ToString("mm\\:ss")
-            : value.ToString("hh\\:mm\\:ss");
+        return !Console.IsInputRedirected
+            && !Console.IsOutputRedirected
+            && !Console.IsErrorRedirected;
     }
 
     static bool TryRequestGracefulShutdown(Process process)

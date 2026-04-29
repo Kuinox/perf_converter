@@ -55,20 +55,6 @@ public class PerfMonitorViewModel
     public ConcurrentQueue<string> ErrorLines { get; } = new();
     public ConcurrentQueue<string> RawErrorLines { get; } = new();
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
-    public TimeSpan? TraceTimeProcessed
-    {
-        get
-        {
-            if (!FirstTraceTimestampNs.HasValue || !LastTraceTimestampNs.HasValue)
-                return null;
-
-            var deltaNs = LastTraceTimestampNs.Value - FirstTraceTimestampNs.Value;
-            if (deltaNs < 0)
-                return null;
-
-            return TimeSpan.FromTicks(deltaNs / 100);
-        }
-    }
 
     [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]
     public double GcPercentage

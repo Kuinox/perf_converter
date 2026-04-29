@@ -129,7 +129,9 @@ public sealed class PerfMonitorDisplay
         AddSummaryRow("Status", _viewModel.Status);
         AddSummaryRow("Message", statusMessage);
         AddSummaryRow("Elapsed", $"{elapsed:hh\\:mm\\:ss}");
-        AddSummaryRow("Trace Time", FormatTraceTime(_viewModel.TraceTimeProcessed));
+        AddSummaryRow("Trace Start", TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs));
+        AddSummaryRow("Trace Now", TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs));
+        AddSummaryRow("Trace Span", TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs));
         AddSummaryRow("Events", _viewModel.EventCount.ToString("N0", CultureInfo.InvariantCulture));
         AddSummaryRow("Current", $"{_viewModel.CurrentRate:N0}/s");
         AddSummaryRow("Overall", $"{_viewModel.OverallRate:N0}/s");
@@ -240,22 +242,5 @@ public sealed class PerfMonitorDisplay
         }
 
         return ("-", "-", key);
-    }
-
-    static string FormatTraceTime(TimeSpan? traceTime)
-    {
-        if (!traceTime.HasValue)
-            return "-";
-
-        var value = traceTime.Value;
-        if (value < TimeSpan.FromSeconds(1))
-            return $"{value.TotalMilliseconds:F0} ms";
-
-        if (value < TimeSpan.FromMinutes(1))
-            return $"{value.TotalSeconds:F1} s";
-
-        return value < TimeSpan.FromHours(1)
-            ? value.ToString("mm\\:ss")
-            : value.ToString("hh\\:mm\\:ss");
     }
 }
