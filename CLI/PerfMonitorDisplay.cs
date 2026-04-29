@@ -15,7 +15,6 @@ public sealed class PerfMonitorDisplay
     readonly Action _requestShutdown;
     readonly TextBlock _summaryText;
     readonly Sparkline _totalRateSparkline;
-    readonly BreakdownChart _fileStateChart;
     readonly Table _fileTable;
     readonly TextBlock _logsText;
     readonly Visual _root;
@@ -26,7 +25,6 @@ public sealed class PerfMonitorDisplay
         _requestShutdown = requestShutdown;
         _summaryText = new TextBlock { Wrap = true };
         _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
-        _fileStateChart = new BreakdownChart { ShowValues = true, ShowPercentages = true };
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
         _root = CreateRoot();
@@ -71,8 +69,12 @@ public sealed class PerfMonitorDisplay
 
         contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryText, "Ctrl+C stops perf")) { Row = 0, Column = 0 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("File States", _fileStateChart.Stretch(), "live status mix")) { Row = 1, Column = 0 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity")) { Row = 1, Column = 1 });
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity"))
+        {
+            Row = 1,
+            Column = 0,
+            ColumnSpan = 2
+        });
 
         var logsGroup = CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8);
 
@@ -116,7 +118,6 @@ public sealed class PerfMonitorDisplay
 
         UpdateSummary();
         UpdateThroughputChart();
-        UpdateFileStateChart();
         UpdateFileTable();
         UpdateLogs();
     }
@@ -152,32 +153,6 @@ public sealed class PerfMonitorDisplay
         SparklineExtensions.Values(_totalRateSparkline, history);
         _totalRateSparkline.Minimum = 0;
         _totalRateSparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
-    }
-
-    void UpdateFileStateChart()
-    {
-        var files = _viewModel.FileStatuses.Values.ToArray();
-        var buffering = files.Count(x => x.Status == "BUFFERING");
-        var flushing = files.Count(x => x.Status == "FLUSHING");
-        var closed = files.Count(x => x.Status == "CLOSED");
-
-        var segments = new[]
-        {
-            CreateSegment("BUFFERING", buffering, Colors.MediumSeaGreen),
-            CreateSegment("FLUSHING", flushing, Colors.Goldenrod),
-            CreateSegment("CLOSED", closed, Colors.SlateGray)
-        };
-
-        _fileStateChart.Segments.Clear();
-        foreach (var segment in segments.Where(x => x.Value > 0))
-        {
-            _fileStateChart.Segments.Add(segment);
-        }
-
-        if (_fileStateChart.Segments.Count == 0)
-        {
-            _fileStateChart.Segments.Add(CreateSegment("No files", 1, Colors.DimGray));
-        }
     }
 
     void UpdateFileTable()
@@ -250,14 +225,6 @@ public sealed class PerfMonitorDisplay
         }
 
         return _viewModel.Elapsed;
-    }
-
-    static BreakdownSegment CreateSegment(string label, double value, Color color)
-    {
-        return new BreakdownSegment(value, new TextBlock(label))
-        {
-            Color = color
-        };
     }
 
     static Sparkline CreateSparkline(double[] history)
