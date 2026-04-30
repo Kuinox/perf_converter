@@ -265,7 +265,6 @@ internal class Program
             while (!viewModel.IsComplete)
             {
                 viewModel.Elapsed = chrono.Elapsed;
-                viewModel.OverallRate = viewModel.Elapsed.TotalSeconds > 0 ? (int)(viewModel.EventCount / viewModel.Elapsed.TotalSeconds) : 0;
 
                 if (viewModel.LastCurrentRateUpdateUtc == DateTime.MinValue)
                 {

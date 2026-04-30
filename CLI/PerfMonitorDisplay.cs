@@ -10,7 +10,7 @@ namespace CLI.Display;
 public sealed class PerfMonitorDisplay
 {
     const int MaxLogLines = 12;
-    const int MaxFileRows = 10;
+    const int MaxFileRows = 16;
     readonly PerfMonitorViewModel _viewModel;
     readonly Action _requestShutdown;
     readonly Table _summaryTable;
@@ -41,6 +41,11 @@ public sealed class PerfMonitorDisplay
         await Terminal.RunAsync(_root, async _ =>
         {
             UpdateDisplay();
+            if (_viewModel.IsComplete)
+            {
+                return TerminalLoopResult.Stop;
+            }
+
             try
             {
                 await Task.Delay(100, cancellationToken);
@@ -50,7 +55,9 @@ public sealed class PerfMonitorDisplay
                 return TerminalLoopResult.Stop;
             }
 
-            return cancellationToken.IsCancellationRequested ? TerminalLoopResult.Stop : TerminalLoopResult.Continue;
+            return cancellationToken.IsCancellationRequested || _viewModel.IsComplete
+                ? TerminalLoopResult.Stop
+                : TerminalLoopResult.Continue;
         }, options, cancellationToken);
     }
 
@@ -69,19 +76,21 @@ public sealed class PerfMonitorDisplay
 
         contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryTable.Stretch(), "Ctrl+C stops perf")) { Row = 0, Column = 0 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity"))
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity").Stretch())
         {
             Row = 1,
-            Column = 0,
-            ColumnSpan = 2
+            Column = 0
         });
-
-        var logsGroup = CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8);
+        contentGrid.Cells.Add(new GridCell(CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8))
+        {
+            Row = 1,
+            Column = 1
+        });
 
         var root = new DockLayout(
             top: new TextBlock("PerfConverter Monitor").MinHeight(1),
             content: contentGrid,
-            bottom: logsGroup)
+            bottom: null)
             .Stretch();
 
         root.AddKeyBinding(new KeyGesture('c', TerminalModifiers.Ctrl), _requestShutdown);
@@ -134,8 +143,6 @@ public sealed class PerfMonitorDisplay
             ("Status", _viewModel.Status),
             ("Message", statusMessage),
             ("Elapsed", elapsed.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)),
-            ("Trace Start", TraceTimestampFormatter.Format(_viewModel.FirstTraceTimestampNs)),
-            ("Trace Now", TraceTimestampFormatter.Format(_viewModel.LastTraceTimestampNs)),
             ("Trace Span", TraceTimestampFormatter.FormatRange(_viewModel.FirstTraceTimestampNs, _viewModel.LastTraceTimestampNs)),
             ("Events", _viewModel.EventCount.ToString("N0", CultureInfo.InvariantCulture)),
             ("Current rate", $"{_viewModel.CurrentRate.ToString("N0", CultureInfo.InvariantCulture)}/s"),

@@ -11,10 +11,12 @@ public class PerfMonitorViewModel
 
     readonly Lock _rateHistorySync = new();
     readonly Queue<RateSample> _totalRateHistory = new();
+    readonly Lock _eventTimingSync = new();
+    DateTime? _firstEventObservedUtc;
+    DateTime? _lastEventObservedUtc;
 
     public long EventCount { get; set; }
     public TimeSpan Elapsed { get; set; }
-    public int OverallRate { get; set; }
     public int CurrentRate { get; set; }
     public long? FirstTraceTimestampNs { get; set; }
     public long? LastTraceTimestampNs { get; set; }
@@ -55,6 +57,25 @@ public class PerfMonitorViewModel
     public ConcurrentQueue<string> ErrorLines { get; } = new();
     public ConcurrentQueue<string> RawErrorLines { get; } = new();
     public double MemoryMB => TotalMemory / 1024.0 / 1024.0;
+
+    public int OverallRate
+    {
+        get
+        {
+            lock (_eventTimingSync)
+            {
+                if (!_firstEventObservedUtc.HasValue)
+                    return 0;
+
+                var endUtc = _lastEventObservedUtc ?? DateTime.UtcNow;
+                var elapsedSeconds = Math.Max((endUtc - _firstEventObservedUtc.Value).TotalSeconds, 0);
+                if (elapsedSeconds <= 0)
+                    return CurrentRate;
+
+                return (int)Math.Round(EventCount / elapsedSeconds);
+            }
+        }
+    }
 
     [DependsOn(nameof(TotalGcTimeMs), nameof(Elapsed))]
     public double GcPercentage
@@ -103,6 +124,20 @@ public class PerfMonitorViewModel
         foreach (var key in filesToRemove)
         {
             FileStatuses.TryRemove(key, out _);
+        }
+    }
+
+    public void UpdateEventCount(long eventCount, DateTime observedAtUtc)
+    {
+        EventCount = eventCount;
+
+        if (eventCount <= 0)
+            return;
+
+        lock (_eventTimingSync)
+        {
+            _firstEventObservedUtc ??= observedAtUtc;
+            _lastEventObservedUtc = observedAtUtc;
         }
     }
 

@@ -1,6 +1,3 @@
-using Google.Protobuf;
-using Perfetto.Protos;
-
 namespace PerfToPerfetto;
 
 class Program
@@ -9,7 +6,7 @@ class Program
     {
         if (args.Length != 2)
         {
-            Console.Error.WriteLine("Usage: PerfToPerfetto <inputFolder> <outputFile.fxt>");
+            Console.Error.WriteLine("Usage: PerfToPerfetto <inputFolder> <outputFile.perfetto-trace>");
             return 1;
         }
 
@@ -24,12 +21,12 @@ class Program
 
         try
         {
-            if(File.Exists(outputFile))
+            if (File.Exists(outputFile))
                 File.Delete(outputFile);
+
             using var fs = File.Create(outputFile);
-            var converter = new Processor();
-            await converter.VisitRoot(inputFolder);
-            converter.Trace.WriteTo(fs);
+            using var converter = new Processor(fs);
+            await converter.ProcessAsync(inputFolder);
             Console.WriteLine($"Successfully converted {inputFolder} to {outputFile}");
             return 0;
         }

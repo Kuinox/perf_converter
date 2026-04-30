@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Perfetto.Protos\Perfetto.Protos.csproj" />
     <ProjectReference Include="..\Plank\Plank\Plank.csproj" />
     <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
   </ItemGroup>

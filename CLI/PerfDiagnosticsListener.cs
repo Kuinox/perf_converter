@@ -135,7 +135,7 @@ public sealed class PerfDiagnosticsListener : IDisposable
             var eventCount = GetPayloadLong(traceEvent, "lastValue");
             if (eventCount is not null)
             {
-                _viewModel.EventCount = eventCount.Value;
+                _viewModel.UpdateEventCount(eventCount.Value, DateTime.UtcNow);
             }
             return;
         }

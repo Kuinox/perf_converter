@@ -43,7 +43,7 @@ sealed class PerfMetricsPipeServer : IDisposable
                 if (snapshot is null)
                     continue;
 
-                viewModel.EventCount = snapshot.TotalEvents;
+                viewModel.UpdateEventCount(snapshot.TotalEvents, DateTime.UtcNow);
                 viewModel.CurrentRate = (int)Math.Round(snapshot.CurrentRate);
                 viewModel.LastCurrentRateUpdateUtc = DateTime.UtcNow;
                 viewModel.RecordTotalRate(snapshot.CurrentRate);
