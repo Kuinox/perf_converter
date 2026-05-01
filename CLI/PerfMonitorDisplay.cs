@@ -75,16 +75,12 @@ public sealed class PerfMonitorDisplay
         contentGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
 
         contentGrid.Cells.Add(new GridCell(CreateGroup("Summary", _summaryTable.Stretch(), "Ctrl+C stops perf")) { Row = 0, Column = 0 });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec")) { Row = 0, Column = 1 });
+        contentGrid.Cells.Add(new GridCell(CreateRightColumn().Stretch()) { Row = 0, Column = 1 });
         contentGrid.Cells.Add(new GridCell(CreateGroup("Files", _fileTable.Stretch(), "recent activity").Stretch())
         {
             Row = 1,
-            Column = 0
-        });
-        contentGrid.Cells.Add(new GridCell(CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8))
-        {
-            Row = 1,
-            Column = 1
+            Column = 0,
+            ColumnSpan = 2
         });
 
         var root = new DockLayout(
@@ -95,6 +91,31 @@ public sealed class PerfMonitorDisplay
 
         root.AddKeyBinding(new KeyGesture('c', TerminalModifiers.Ctrl), _requestShutdown);
         return root;
+    }
+
+    Visual CreateRightColumn()
+    {
+        var rightColumn = new Grid
+        {
+            RowGap = 1
+        }.Stretch();
+
+        rightColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Star, 1) });
+        rightColumn.RowDefinitions.Add(new RowDefinition { Height = new GridLength(GridUnitType.Star, 1) });
+        rightColumn.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(GridUnitType.Star, 1) });
+
+        rightColumn.Cells.Add(new GridCell(CreateGroup("Throughput", CreateThroughputVisual(), "current events/sec").Stretch())
+        {
+            Row = 0,
+            Column = 0
+        });
+        rightColumn.Cells.Add(new GridCell(CreateGroup("Perf Output", _logsText.Scrollable().Stretch(), "latest stdout/stderr").Stretch().MinHeight(8))
+        {
+            Row = 1,
+            Column = 0
+        });
+
+        return rightColumn;
     }
 
     static Group CreateGroup(string title, Visual content, string? footer = null)
