@@ -104,7 +104,7 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
     public static ITracePersister Create(string filePath, Action<int>? onFlush)
     {
         var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = TraceSampleRowSchema.CreateRowWriter(fileStream, onFlush);
+        var writer = TraceSampleRowSchema.CreateRowWriter(fileStream, onFlush, ParquetPersistenceOptions.WriterOptions);
 
         return new ParquetTracePersistence(writer);
     }

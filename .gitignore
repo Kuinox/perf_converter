@@ -9,6 +9,10 @@ src/artifacts
 
 /viewer/venv/Lib/
 /viewer/venv/share/
+/viewer/node_modules/
+/viewer/dist/
+/viewer/public/trace-summary.json
+*.tsbuildinfo
 dotnet-sdk-*.tar.gz
 /venv/
 /parquet_output/

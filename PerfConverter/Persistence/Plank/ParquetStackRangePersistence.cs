@@ -30,7 +30,7 @@ public sealed class ParquetStackRangePersistence(StackRangeRowSchema.PipelineWri
     public static IPersister<StackRange> Create(string filepath, Action<int>? onFlush)
     {
         var fileStream = new FileStream(filepath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = StackRangeRowSchema.CreateRowWriter(fileStream, onFlush);
+        var writer = StackRangeRowSchema.CreateRowWriter(fileStream, onFlush, ParquetPersistenceOptions.WriterOptions);
 
         return new ParquetStackRangePersistence(writer);
     }

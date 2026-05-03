@@ -74,7 +74,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         _entries.Sort(SourceLocationEntryComparer.Instance);
 
         using var fileStream = new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
-        var writer = SourceLocationRowSchema.CreateRowWriter(fileStream, _onFlush);
+        var writer = SourceLocationRowSchema.CreateRowWriter(fileStream, _onFlush, ParquetPersistenceOptions.WriterOptions);
 
         foreach (var entry in _entries)
         {

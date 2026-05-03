@@ -6,18 +6,12 @@ using Temp.Schema.Entry;
 
 namespace PerfConverter;
 
-class ThreadProcessor : IDisposable
+class ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory) : IDisposable
 {
-    readonly Func<string, ITracePersister> _tracePersistenceFactory;
     readonly Dictionary<ReadOnlyMemory<byte>, ITracePersister> _eventMapping = [];
     readonly List<ITracePersister> _tracePersisters = [];
 
     ulong _currentEntryId = 1;
-
-    public ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory)
-    {
-        _tracePersistenceFactory = tracePersistenceFactory;
-    }
 
     public unsafe void ProcessData(
         PerfDlFilterSample* sample,
@@ -34,7 +28,7 @@ class ThreadProcessor : IDisposable
         {
             var eventName = GetEventFileComponent(@event.Span);
             var traceKey = $"pid={sample->pid}/tid={sample->tid}/{eventName}.parquet";
-            var tracePersister = _tracePersistenceFactory(traceKey);
+            var tracePersister = tracePersistenceFactory(traceKey);
             _tracePersisters.Add(tracePersister);
 
             processor = tracePersister;
