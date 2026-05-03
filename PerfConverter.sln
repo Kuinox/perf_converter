@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11010.61 d18.0
+VisualStudioVersion = 18.0.11010.61
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfConverter", "PerfConverter\PerfConverter.csproj", "{4FCC1249-59B7-483F-AC37-D49E1504FB10}"
 EndProject
@@ -24,8 +24,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetto", "PerfToPerfetto\PerfToPerfetto.csproj", "{A1B2C3D4-E5F6-7890-ABCD-1234567890EF}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Perfetto.Protos", "Perfetto.Protos\Perfetto.Protos.csproj", "{FA057653-36E3-4B0A-805B-4BA75024CA5E}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfToPerfetoo.Tests", "PerfToPerfetoo.Tests\PerfToPerfetoo.Tests.csproj", "{3E342268-EE14-4665-BAFA-AB7CCE9BB324}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Temp.Schema.Tests", "Temp.Schema.Tests\Temp.Schema.Tests.csproj", "{13E4A42D-7232-45D0-B393-CB08926F92DF}"
 EndProject
@@ -113,18 +111,6 @@ Global
 		{FA057653-36E3-4B0A-805B-4BA75024CA5E}.Release|x64.Build.0 = Release|Any CPU
 		{FA057653-36E3-4B0A-805B-4BA75024CA5E}.Release|x86.ActiveCfg = Release|Any CPU
 		{FA057653-36E3-4B0A-805B-4BA75024CA5E}.Release|x86.Build.0 = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|x64.Build.0 = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Debug|x86.Build.0 = Debug|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x64.ActiveCfg = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x64.Build.0 = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x86.ActiveCfg = Release|Any CPU
-		{3E342268-EE14-4665-BAFA-AB7CCE9BB324}.Release|x86.Build.0 = Release|Any CPU
 		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{13E4A42D-7232-45D0-B393-CB08926F92DF}.Debug|x64.ActiveCfg = Debug|Any CPU
