@@ -7,7 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "manifest": "python tools/export-manifest.py"
+    "manifest": "python tools/export-manifest.py",
+    "web-index": "python tools/build-web-trace.py"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.30.0",

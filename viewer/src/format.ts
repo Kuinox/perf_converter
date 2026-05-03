@@ -32,6 +32,20 @@ export function formatDurationNs(ns: number): string {
   return `${(ns / 60_000_000_000).toFixed(2)} min`;
 }
 
+export function formatTimeOffsetNs(time: number, origin: number): string {
+  if (!Number.isFinite(time) || !Number.isFinite(origin)) {
+    return "-";
+  }
+
+  const delta = time - origin;
+  if (delta === 0) {
+    return "0 ns";
+  }
+
+  const sign = delta < 0 ? "-" : "+";
+  return `${sign}${formatDurationNs(Math.abs(delta))}`;
+}
+
 export function formatHex(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "0x0";

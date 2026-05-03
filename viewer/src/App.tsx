@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Cpu,
@@ -10,12 +10,10 @@ import {
   Loader2,
   Network,
   Rows3,
-  Sparkles,
-  Zap
+  Sparkles
 } from "lucide-react";
 import { AddressMap } from "./components/AddressMap";
 import { BranchFlows } from "./components/BranchFlows";
-import { CaptureLanes } from "./components/CaptureLanes";
 import { CpuHeatmap } from "./components/CpuHeatmap";
 import { ModuleBars } from "./components/ModuleBars";
 import { StackTracePanel } from "./components/StackTracePanel";
@@ -33,18 +31,21 @@ import {
   buildOverview,
   profileTraceCapture,
   queryCaptureRows,
+  queryStackSlices,
+  summarizeTraceMetadata,
   summarizeTraceSet
 } from "./data/queries";
 import type {
   LoadedTraceSet,
   LoadProgress,
+  StackSlice,
   TraceRow,
   TraceFileSummary,
   TraceOverview,
   TraceProfile,
   TraceSnapshot
 } from "./data/types";
-import { formatCompact, formatDurationNs, formatInteger } from "./format";
+import { formatDurationNs } from "./format";
 
 type StatusKind = "idle" | "busy" | "error" | "ready";
 
@@ -56,6 +57,7 @@ interface StatusState {
 export function App() {
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const snapshotInputRef = useRef<HTMLInputElement | null>(null);
+  const stackRequestKeyRef = useRef<string | null>(null);
   const [traceSet, setTraceSet] = useState<LoadedTraceSet | null>(null);
   const [snapshot, setSnapshot] = useState<TraceSnapshot | null>(null);
   const [summaries, setSummaries] = useState<TraceFileSummary[]>([]);
@@ -65,6 +67,12 @@ export function App() {
     null
   );
   const [detailRows, setDetailRows] = useState<TraceRow[]>([]);
+  const [stackSlices, setStackSlices] = useState<StackSlice[]>([]);
+  const [stackViewportRequest, setStackViewportRequest] = useState<{
+    startTime: number;
+    endTime: number;
+    minDurationNs: number;
+  } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [status, setStatus] = useState<StatusState>({
@@ -110,13 +118,56 @@ export function App() {
     () => traceSet?.files.filter((file) => activeFileIds.has(file.id)) ?? [],
     [activeFileIds, traceSet]
   );
+  const originTime = useMemo(
+    () => captureProfile?.timeline[0]?.startTime ?? activeOverview.minTime,
+    [activeOverview.minTime, captureProfile?.timeline]
+  );
+
+  const fullTimeRange = useMemo(
+    () => ({
+      startTime: captureProfile?.timeline[0]?.startTime ?? activeOverview.minTime,
+      endTime:
+        captureProfile?.timeline[captureProfile.timeline.length - 1]?.endTime ??
+        activeOverview.maxTime
+    }),
+    [activeOverview.maxTime, activeOverview.minTime, captureProfile?.timeline]
+  );
+
+  const handleStackViewportChange = useCallback(
+    (viewport: { startTime: number; endTime: number; minDurationNs: number }) => {
+      setStackViewportRequest(viewport);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!traceSet?.stackIndex || !stackViewportRequest) {
+      return;
+    }
+
+    const key = [
+      Math.round(stackViewportRequest.startTime),
+      Math.round(stackViewportRequest.endTime),
+      Math.round(stackViewportRequest.minDurationNs)
+    ].join(":");
+    if (stackRequestKeyRef.current === key) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      stackRequestKeyRef.current = key;
+      void runStackViewportQuery(stackViewportRequest);
+    }, 160);
+
+    return () => window.clearTimeout(timeout);
+  }, [stackViewportRequest, traceSet?.stackIndex]);
 
   async function handleFolderInput(files: FileList | null) {
     if (!files?.length) {
       return;
     }
 
-    await activateTraceSet(parseFileList(files));
+    await activateTraceSet(await parseFileList(files));
     if (folderInputRef.current) {
       folderInputRef.current.value = "";
     }
@@ -156,8 +207,11 @@ export function App() {
   async function activateTraceSet(nextTraceSet: LoadedTraceSet) {
     setSnapshot(null);
     setTraceSet(nextTraceSet);
+    stackRequestKeyRef.current = null;
     setCaptureProfile(null);
     setDetailRows([]);
+    setStackSlices([]);
+    setStackViewportRequest(null);
     setSelectedRange(null);
     setStatus({ kind: "busy", message: "Preparing DuckDB-WASM." });
     setProgress({ phase: "Preparing DuckDB-WASM", completed: 0, total: 1 });
@@ -171,13 +225,34 @@ export function App() {
     }
 
     try {
+      if (
+        nextTraceSet.overview ||
+        nextTraceSet.files.every(
+          (file) =>
+            file.rows !== undefined &&
+            file.minTime !== undefined &&
+            file.maxTime !== undefined
+        )
+      ) {
+        const result = summarizeTraceMetadata(nextTraceSet);
+        setSummaries(result.summaries);
+        setOverview(nextTraceSet.overview ?? result.overview);
+        setCaptureProfile(nextTraceSet.profiles?.capture ?? null);
+        setStatus({
+          kind: "ready",
+          message: nextTraceSet.profiles?.capture ? "Capture loaded." : "Capture loaded. Ready to profile."
+        });
+        return;
+      }
+
       const client = await getDuckDbClient();
       const result = await summarizeTraceSet(client, nextTraceSet, setProgress);
       setSummaries(result.summaries);
-      setOverview(result.overview);
+      setOverview(nextTraceSet.overview ?? result.overview);
+      setCaptureProfile(nextTraceSet.profiles?.capture ?? null);
       setStatus({
         kind: "ready",
-        message: "Capture loaded. Ready to profile."
+        message: nextTraceSet.profiles?.capture ? "Capture loaded." : "Capture loaded. Ready to profile."
       });
     } catch (error) {
       setStatus({ kind: "error", message: errorMessage(error) });
@@ -188,11 +263,14 @@ export function App() {
 
   function activateSnapshot(nextSnapshot: TraceSnapshot) {
     setSnapshot(nextSnapshot);
+    stackRequestKeyRef.current = null;
     setTraceSet(null);
     setSummaries(nextSnapshot.files);
     setOverview(nextSnapshot.overview);
     setCaptureProfile(nextSnapshot.profiles.capture ?? Object.values(nextSnapshot.profiles)[0] ?? null);
     setDetailRows([]);
+    setStackSlices([]);
+    setStackViewportRequest(null);
     setSelectedRange(null);
     setStatus({
       kind: "ready",
@@ -203,6 +281,12 @@ export function App() {
 
   async function runCaptureProfile() {
     if (!traceSet || !summaries.length) {
+      return;
+    }
+
+    if (traceSet.profiles?.capture) {
+      setCaptureProfile(traceSet.profiles.capture);
+      setStatus({ kind: "ready", message: "Capture profile ready." });
       return;
     }
 
@@ -242,6 +326,24 @@ export function App() {
     setDetailLoading(true);
     try {
       const client = await getDuckDbClient();
+      if (traceSet.stackIndex) {
+        const slices = await queryStackSlices(
+          client,
+          traceSet.stackIndex,
+          range,
+          traceSet.sourceLocations,
+          18_000,
+          Math.max(0, (Math.max(range.startTime, range.endTime) - Math.min(range.startTime, range.endTime)) / 1400)
+        );
+        setStackSlices(slices);
+        setDetailRows([]);
+        setStatus({
+          kind: "ready",
+          message: "Loaded stack slices for the selected window."
+        });
+        return;
+      }
+
       const rows = await queryCaptureRows(
         client,
         activeFiles,
@@ -251,9 +353,43 @@ export function App() {
         600
       );
       setDetailRows(rows);
+      setStackSlices([]);
       setStatus({
         kind: "ready",
-        message: `Loaded ${formatInteger(rows.length)} instruction/branch rows for the selected window.`
+        message: "Loaded instruction/branch rows for the selected window."
+      });
+    } catch (error) {
+      setStatus({ kind: "error", message: errorMessage(error) });
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function runStackViewportQuery(viewport: {
+    startTime: number;
+    endTime: number;
+    minDurationNs: number;
+  }) {
+    if (!traceSet?.stackIndex) {
+      return;
+    }
+
+    setDetailLoading(true);
+    try {
+      const client = await getDuckDbClient();
+      const slices = await queryStackSlices(
+        client,
+        traceSet.stackIndex,
+        viewport,
+        traceSet.sourceLocations,
+        6_000,
+        viewport.minDurationNs
+      );
+      setStackSlices(slices);
+      setDetailRows([]);
+      setStatus({
+        kind: "ready",
+        message: "Loaded stack slices for the visible stack viewport."
       });
     } catch (error) {
       setStatus({ kind: "error", message: errorMessage(error) });
@@ -332,33 +468,22 @@ export function App() {
       ) : (
         <section className="dashboard">
           <section className="overview-grid">
-            <Metric icon={<Zap size={18} />} label="Rows" value={formatCompact(overview.totalRows)} detail={overview.totalRows ? formatInteger(overview.totalRows) : "profile to populate"} />
-            <Metric icon={<Gauge size={18} />} label="Duration" value={formatDurationNs(overview.maxTime - overview.minTime)} detail={`${overview.events.length} events`} />
-            <Metric icon={<Cpu size={18} />} label="CPU Range" value={formatCpuRange(overview)} detail={`${overview.tids.length} threads`} />
-            <Metric icon={<Database size={18} />} label="Streams" value={formatCompact(summaries.length)} detail="capture-wide view" />
+            <Metric icon={<Gauge size={18} />} label="Duration" value={formatDurationNs(overview.maxTime - overview.minTime)} detail="relative timeline" />
+            <Metric icon={<Cpu size={18} />} label="CPU Range" value={formatCpuRange(overview)} detail="thread-aware stack" />
           </section>
 
           <section className="workspace-grid capture-workspace">
             <section className="main-pane">
-              <section className="panel lanes-panel">
-                <PanelTitle icon={<Layers size={16} />} title="Capture Lanes" />
-                <CaptureLanes streams={summaries} />
-              </section>
-
               <div className="profile-header">
                 <div>
                   <span className="eyebrow">Capture view</span>
                   <h2>Full trace capture</h2>
-                  <p>
-                    {summaries.length} streams,{" "}
-                    {activeOverview.totalRows
-                      ? `${formatCompact(activeOverview.totalRows)} known rows`
-                      : "profile to populate the timeline"}
-                  </p>
                 </div>
                 <div className="profile-actions">
                   <span className="profile-chip">all events</span>
-                  {traceSet ? (
+                  {traceSet?.profiles?.capture ? (
+                    <span className="profile-chip">profile loaded</span>
+                  ) : traceSet ? (
                     <button
                       className="action-button"
                       type="button"
@@ -390,7 +515,7 @@ export function App() {
                     />
                     {traceSet ? (
                       <div className="timeline-actions">
-                        <span>Drag across the timeline, then query the visible instruction/branch rows.</span>
+                        <span>Drag across the timeline, then query the stack for that time window.</span>
                         <button
                           className="action-button"
                           disabled={!selectedRange || detailLoading}
@@ -398,20 +523,33 @@ export function App() {
                           type="button"
                         >
                           <Rows3 size={16} />
-                          Query rows
+                          Query stack
                         </button>
                       </div>
                     ) : null}
                   </section>
 
-                  <section className="panel detail-panel">
-                    <PanelTitle icon={<Rows3 size={16} />} title="Instruction / Branch Rows" />
-                    <TraceRowsTable rows={detailRows} loading={detailLoading} />
+                  <section className="panel stack-panel">
+                    <PanelTitle icon={<Layers size={16} />} title="Stack Trace Over Time" />
+                    <StackTracePanel
+                      rows={detailRows}
+                      slices={stackSlices}
+                      loading={detailLoading && Boolean(traceSet?.stackIndex)}
+                      selectedRange={null}
+                      timeRange={fullTimeRange}
+                      originTime={originTime}
+                      onViewportChange={traceSet?.stackIndex ? handleStackViewportChange : undefined}
+                      profileBins={captureProfile.stackTimeline}
+                    />
                   </section>
 
-                  <section className="panel stack-panel">
-                    <PanelTitle icon={<Layers size={16} />} title="Stack Trace" />
-                    <StackTracePanel rows={detailRows} />
+                  <section className="panel detail-panel">
+                    <PanelTitle icon={<Rows3 size={16} />} title="Instruction / Branch Rows" />
+                    <TraceRowsTable
+                      rows={detailRows}
+                      loading={detailLoading && !traceSet?.stackIndex}
+                      originTime={originTime}
+                    />
                   </section>
 
                   <section className="panel">
@@ -434,16 +572,6 @@ export function App() {
                     <AddressMap addresses={captureProfile.addresses} />
                   </section>
 
-                  {captureProfile.notes.length ? (
-                    <section className="panel notes-panel">
-                      <PanelTitle icon={<FileJson size={16} />} title="Query Notes" />
-                      <ul>
-                        {captureProfile.notes.map((note) => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    </section>
-                  ) : null}
                 </div>
               ) : (
                 <section className="profile-empty">

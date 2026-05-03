@@ -1,12 +1,13 @@
 import type { TraceRow } from "../data/types";
-import { dsoLabel, formatHex, formatInteger } from "../format";
+import { dsoLabel, formatHex, formatInteger, formatTimeOffsetNs } from "../format";
 
 interface TraceRowsTableProps {
   rows: TraceRow[];
   loading: boolean;
+  originTime: number;
 }
 
-export function TraceRowsTable({ rows, loading }: TraceRowsTableProps) {
+export function TraceRowsTable({ rows, loading, originTime }: TraceRowsTableProps) {
   if (loading) {
     return <div className="empty-state">Querying detail rows with DuckDB...</div>;
   }
@@ -35,7 +36,7 @@ export function TraceRowsTable({ rows, loading }: TraceRowsTableProps) {
             <tr key={`${row.id}:${row.time}:${row.ip}`}>
               <td>{formatInteger(row.id)}</td>
               <td>{row.cpu}</td>
-              <td>{formatInteger(row.time)}</td>
+              <td>{formatTimeOffsetNs(row.time, originTime)}</td>
               <td>
                 <code>{formatHex(row.relativeAddress ?? row.ip)}</code>
               </td>

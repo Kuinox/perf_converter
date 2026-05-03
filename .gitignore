@@ -11,7 +11,11 @@ src/artifacts
 /viewer/venv/share/
 /viewer/node_modules/
 /viewer/dist/
+/viewer/.tmp/
+/viewer/tools/__pycache__/
 /viewer/public/trace-summary.json
+/viewer/public/trace-manifest.json
+/viewer/public/web-trace/
 *.tsbuildinfo
 dotnet-sdk-*.tar.gz
 /venv/

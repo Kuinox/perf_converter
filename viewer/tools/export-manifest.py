@@ -35,11 +35,14 @@ def main() -> None:
 
     files = []
     source_locations = None
+    stack_index = None
     for path in sorted(root.rglob("*.parquet")):
         relative = path.relative_to(root).as_posix()
         entry = {"path": relative, "size": path.stat().st_size}
         if relative == "source_locations.parquet":
             source_locations = entry
+        elif relative == "stack_index.parquet":
+            stack_index = entry
         elif "/pid=" in f"/{relative}" and "/tid=" in f"/{relative}":
             files.append(entry)
 
@@ -49,6 +52,7 @@ def main() -> None:
         "rootLabel": args.label or root.name,
         "baseUrl": ensure_trailing_slash(args.base_url),
         "sourceLocations": source_locations,
+        "stackIndex": stack_index,
         "files": files,
     }
 

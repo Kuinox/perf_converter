@@ -1,7 +1,9 @@
 import type {
   LoadedTraceSet,
   LocalTraceFile,
+  StackIndexFile,
   SourceLocationFile,
+  TraceManifestShard,
   TraceManifest,
   TraceSnapshot
 } from "./types";
@@ -13,9 +15,25 @@ interface PickedFile {
 
 const tracePathPattern = /(?:^|\/)pid=(\d+)\/tid=(\d+)\/([^/]+)\.parquet$/i;
 
-export function parsePickedFiles(files: PickedFile[], rootLabel = "local trace"): LoadedTraceSet {
+export async function parsePickedFiles(
+  files: PickedFile[],
+  rootLabel = "local trace"
+): Promise<LoadedTraceSet> {
+  const manifestEntry = files.find(
+    (entry) => normalizePath(entry.relativePath).toLowerCase().endsWith("trace-manifest.json")
+  );
+  if (manifestEntry) {
+    const fileMap = buildLocalFileMap(files, normalizePath(manifestEntry.relativePath));
+    return manifestToTraceSet(
+      JSON.parse(await manifestEntry.file.text()) as TraceManifest,
+      manifestEntry.relativePath,
+      fileMap
+    );
+  }
+
   const traces: LocalTraceFile[] = [];
   let sourceLocations: SourceLocationFile | undefined;
+  let stackIndex: StackIndexFile | undefined;
 
   for (const picked of files) {
     const relativePath = normalizePath(picked.relativePath || picked.file.name);
@@ -28,6 +46,16 @@ export function parsePickedFiles(files: PickedFile[], rootLabel = "local trace")
         kind: "local",
         file: picked.file,
         relativePath
+      };
+      continue;
+    }
+
+    if (relativePath.toLowerCase().endsWith("stack_index.parquet")) {
+      stackIndex = {
+        kind: "local",
+        file: picked.file,
+        relativePath,
+        size: picked.file.size
       };
       continue;
     }
@@ -66,11 +94,12 @@ export function parsePickedFiles(files: PickedFile[], rootLabel = "local trace")
     mode: "live",
     rootLabel,
     files: traces,
-    sourceLocations
+    sourceLocations,
+    stackIndex
   };
 }
 
-export function parseFileList(fileList: FileList): LoadedTraceSet {
+export function parseFileList(fileList: FileList): Promise<LoadedTraceSet> {
   const files = Array.from(fileList).map((file) => ({
     file,
     relativePath: getBrowserRelativePath(file)
@@ -158,7 +187,11 @@ export async function loadBundledManifest(): Promise<LoadedTraceSet | null> {
   }
 }
 
-export function manifestToTraceSet(manifest: TraceManifest, manifestPath: string): LoadedTraceSet {
+export function manifestToTraceSet(
+  manifest: TraceManifest,
+  manifestPath: string,
+  localFiles?: Map<string, File>
+): LoadedTraceSet {
   if (manifest.kind !== "perfconverter.trace-manifest" || manifest.version !== 1) {
     throw new Error("This is not a PerfConverter trace-manifest v1 file.");
   }
@@ -166,7 +199,26 @@ export function manifestToTraceSet(manifest: TraceManifest, manifestPath: string
   const baseUrl = new URL(manifest.baseUrl ?? ".", window.location.href).toString();
   const files: LocalTraceFile[] = [];
 
-  for (const entry of manifest.files) {
+  for (const stream of manifest.streams ?? []) {
+    const relativePath = normalizePath(stream.path);
+    files.push({
+      id: `${stream.pid}:${stream.tid}:${stream.event}:${relativePath}`,
+      kind: localFiles ? "local" : "remote",
+      relativePath,
+      size: stream.shards.reduce((sum, shard) => sum + (shard.size ?? 0), 0),
+      pid: stream.pid,
+      tid: stream.tid,
+      event: stream.event,
+      rows: stream.rows,
+      minTime: stream.minTime,
+      maxTime: stream.maxTime,
+      minCpu: stream.minCpu ?? null,
+      maxCpu: stream.maxCpu ?? null,
+      shards: stream.shards.map((shard) => manifestShardToRef(shard, baseUrl, localFiles))
+    });
+  }
+
+  for (const entry of manifest.files ?? []) {
     const relativePath = normalizePath(entry.path);
     const match = relativePath.match(tracePathPattern);
     if (!match) {
@@ -178,8 +230,9 @@ export function manifestToTraceSet(manifest: TraceManifest, manifestPath: string
     const tid = Number(tidText);
     files.push({
       id: `${pid}:${tid}:${event}:${relativePath}`,
-      kind: "remote",
-      url: resolveManifestUrl(entry, baseUrl),
+      kind: localFiles ? "local" : "remote",
+      file: localFiles?.get(relativePath),
+      url: localFiles ? undefined : resolveManifestUrl(entry, baseUrl),
       relativePath,
       size: entry.size ?? 0,
       pid,
@@ -190,18 +243,94 @@ export function manifestToTraceSet(manifest: TraceManifest, manifestPath: string
 
   const sourceLocations: SourceLocationFile | undefined = manifest.sourceLocations
     ? {
-        kind: "remote",
-        url: resolveManifestUrl(manifest.sourceLocations, baseUrl),
+        kind: localFiles ? "local" : "remote",
+        file: localFiles?.get(normalizePath(manifest.sourceLocations.path)),
+        url: localFiles ? undefined : resolveManifestUrl(manifest.sourceLocations, baseUrl),
         relativePath: normalizePath(manifest.sourceLocations.path),
         size: manifest.sourceLocations.size
       }
     : undefined;
 
+  const stackIndex: StackIndexFile | undefined = manifest.stackIndex
+    ? {
+        kind: localFiles ? "local" : "remote",
+        file: localFiles?.get(normalizePath(manifest.stackIndex.path)),
+        url: localFiles ? undefined : resolveManifestUrl(manifest.stackIndex, baseUrl),
+        relativePath: normalizePath(manifest.stackIndex.path),
+        size: manifest.stackIndex.size,
+        shards: manifest.stackIndex.shards?.map((shard) =>
+          manifestStackShardToRef(shard, baseUrl, localFiles)
+        ),
+        levels: manifest.stackIndex.levels?.map((level) => ({
+          minDurationNs: level.minDurationNs,
+          shards: level.shards.map((shard) => manifestStackShardToRef(shard, baseUrl, localFiles))
+        }))
+      }
+    : undefined;
+
   return {
-    mode: "remote",
+    mode: localFiles ? "live" : "remote",
     rootLabel: manifest.rootLabel ?? manifestPath,
     files,
-    sourceLocations
+    sourceLocations,
+    stackIndex,
+    overview: manifest.overview,
+    profiles: manifest.profiles
+  };
+}
+
+function buildLocalFileMap(files: PickedFile[], manifestPath: string): Map<string, File> {
+  const fileMap = new Map<string, File>();
+  const prefix = manifestPath.toLowerCase().endsWith("/trace-manifest.json")
+    ? manifestPath.slice(0, -"trace-manifest.json".length)
+    : "";
+
+  for (const entry of files) {
+    const relativePath = normalizePath(entry.relativePath);
+    fileMap.set(relativePath, entry.file);
+    if (prefix && relativePath.startsWith(prefix)) {
+      fileMap.set(relativePath.slice(prefix.length), entry.file);
+    }
+  }
+
+  return fileMap;
+}
+
+function manifestShardToRef(
+  shard: TraceManifestShard,
+  baseUrl: string,
+  localFiles?: Map<string, File>
+) {
+  const relativePath = normalizePath(shard.path);
+  return {
+    kind: localFiles ? "local" as const : "remote" as const,
+    file: localFiles?.get(relativePath),
+    url: localFiles ? undefined : resolveManifestUrl(shard, baseUrl),
+    relativePath,
+    size: shard.size ?? 0,
+    rows: shard.rows,
+    minTime: shard.minTime,
+    maxTime: shard.maxTime,
+    minCpu: shard.minCpu ?? null,
+    maxCpu: shard.maxCpu ?? null
+  };
+}
+
+function manifestStackShardToRef(
+  shard: TraceManifestShard,
+  baseUrl: string,
+  localFiles?: Map<string, File>
+) {
+  const relativePath = normalizePath(shard.path);
+  return {
+    kind: localFiles ? "local" as const : "remote" as const,
+    file: localFiles?.get(relativePath),
+    url: localFiles ? undefined : resolveManifestUrl(shard, baseUrl),
+    relativePath,
+    size: shard.size,
+    rows: shard.rows,
+    minTime: shard.minTime,
+    maxTime: shard.maxTime
   };
 }
 

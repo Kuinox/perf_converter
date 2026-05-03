@@ -7,7 +7,11 @@ import type {
   LoadProgress,
   LocalTraceFile,
   ModuleHotspot,
+  StackIndexFile,
+  StackIndexShardRef,
+  StackSlice,
   SourceLocationFile,
+  TraceShardRef,
   TimelineBin,
   TraceRow,
   TraceFileSummary,
@@ -18,6 +22,7 @@ import type {
 const timelineBins = 160;
 const heatmapBins = 120;
 const eagerMetadataLimitBytes = 256 * 1024 * 1024;
+const maxInteractiveShards = 24;
 const largeStreamIndexNote =
   "Some large streams need a prepared web index before exact timeline zoom can include them.";
 
@@ -28,7 +33,7 @@ export async function summarizeTraceSet(
   traceSet: LoadedTraceSet,
   onProgress: ProgressSink
 ): Promise<{ overview: TraceOverview; summaries: TraceFileSummary[] }> {
-  const summaries: TraceFileSummary[] = [];
+  const summaries = traceSet.files.map(createSummaryFromTraceFile);
 
   for (let index = 0; index < traceSet.files.length; index++) {
     const file = traceSet.files[index];
@@ -39,27 +44,9 @@ export async function summarizeTraceSet(
       detail: file.relativePath
     });
 
-    const summary: TraceFileSummary = {
-      id: file.id,
-      relativePath: file.relativePath,
-      size: file.size,
-      pid: file.pid,
-      tid: file.tid,
-      event: file.event,
-      rows: 0,
-      minTime: 0,
-      maxTime: 0,
-      minCpu: null,
-      maxCpu: null,
-      addressedRows: 0,
-      totalPeriod: 0,
-      totalInsn: 0,
-      totalCycles: 0,
-      rowsKnown: false,
-      timeKnown: false
-    };
+    const summary = summaries[index];
 
-    if (file.size > 0 && file.size <= eagerMetadataLimitBytes) {
+    if (!summary.timeKnown && file.size > 0 && file.size <= eagerMetadataLimitBytes) {
       try {
         await hydrateSummary(client, file, summary, onProgress);
       } catch {
@@ -67,7 +54,6 @@ export async function summarizeTraceSet(
       }
     }
 
-    summaries.push(summary);
   }
 
   onProgress({
@@ -76,6 +62,16 @@ export async function summarizeTraceSet(
     total: traceSet.files.length
   });
 
+  return {
+    overview: buildOverview(summaries, Boolean(traceSet.sourceLocations)),
+    summaries
+  };
+}
+
+export function summarizeTraceMetadata(
+  traceSet: LoadedTraceSet
+): { overview: TraceOverview; summaries: TraceFileSummary[] } {
+  const summaries = traceSet.files.map(createSummaryFromTraceFile);
   return {
     overview: buildOverview(summaries, Boolean(traceSet.sourceLocations)),
     summaries
@@ -99,9 +95,7 @@ export async function profileTraceFile(
     await hydrateSummary(client, file, summary, onProgress);
   }
 
-  const registeredName =
-    file.registeredName ?? (await registerTraceFile(client, file));
-  file.registeredName = registeredName;
+  const registeredNames = await registerTraceSources(client, file);
 
   if (sourceLocations && !sourceLocations.registeredName) {
     sourceLocations.registeredName = await registerSourceLocationFile(client, sourceLocations);
@@ -115,7 +109,7 @@ export async function profileTraceFile(
     );
   }
 
-  const traceSource = sampledTraceSource(client.parquet(registeredName), sampleStride);
+  const traceSource = sampledTraceSource(client.parquetMany(registeredNames), sampleStride);
 
   onProgress({ phase: "Building timeline", completed: 0, total: 5, detail: summary.relativePath });
   const timeline = await queryTimeline(client, traceSource, summary, sampleStride);
@@ -189,8 +183,7 @@ export async function profileTraceCapture(
       await hydrateSummary(client, file, summary, onProgress);
     }
 
-    const registeredName = file.registeredName ?? (await registerTraceFile(client, file));
-    file.registeredName = registeredName;
+    const registeredNames = await registerTraceSources(client, file);
     const sampleStride = getSampleStride(summary.rows);
     if (sampleStride > 1) {
       pushUnique(notes, `Large capture mode samples every ${sampleStride} rows for overview charts.`);
@@ -199,7 +192,7 @@ export async function profileTraceCapture(
     profileInputs.push({
       file,
       summary,
-      traceSource: sampledTraceSource(client.parquet(registeredName), sampleStride),
+      traceSource: sampledTraceSource(client.parquetMany(registeredNames), sampleStride),
       sampleStride
     });
   }
@@ -291,8 +284,10 @@ export async function queryTraceRows(
   sourceLocations: SourceLocationFile | undefined,
   limit: number
 ): Promise<TraceRow[]> {
-  const registeredName = file.registeredName ?? (await registerTraceFile(client, file));
-  file.registeredName = registeredName;
+  const registeredNames = await registerTraceSources(client, file, range);
+  if (!registeredNames.length) {
+    return [];
+  }
 
   if (sourceLocations && !sourceLocations.registeredName) {
     sourceLocations.registeredName = await registerSourceLocationFile(client, sourceLocations);
@@ -302,7 +297,7 @@ export async function queryTraceRows(
   const endTime = Math.max(range.startTime, range.endTime);
   const baseTrace = `
     SELECT id, time, cpu, ip, addr, ipLocationId, addressLocationId, insnCnt, cycCnt
-    FROM ${client.parquet(registeredName)}
+    FROM ${client.parquetMany(registeredNames)}
     WHERE time >= ${startTime} AND time <= ${endTime}
     ORDER BY time, id
     LIMIT ${Math.max(1, Math.min(10_000, Math.trunc(limit)))}
@@ -400,6 +395,90 @@ export async function queryCaptureRows(
   return rows.sort((left, right) => left.time - right.time || left.id - right.id).slice(0, limit);
 }
 
+export async function queryStackSlices(
+  client: DuckDbClient,
+  stackIndex: StackIndexFile,
+  range: { startTime: number; endTime: number },
+  sourceLocations: SourceLocationFile | undefined,
+  limit = 12_000,
+  minDurationNs = 0
+): Promise<StackSlice[]> {
+  if (sourceLocations && !sourceLocations.registeredName) {
+    sourceLocations.registeredName = await registerSourceLocationFile(client, sourceLocations);
+  }
+
+  const startTime = Math.min(range.startTime, range.endTime);
+  const endTime = Math.max(range.startTime, range.endTime);
+  const boundedLimit = Math.max(100, Math.min(50_000, Math.trunc(limit)));
+  const minimumDuration = Math.max(0, Math.trunc(minDurationNs));
+  const stackNames = await registerStackIndexSources(client, stackIndex, {
+    startTime,
+    endTime,
+    minDurationNs: minimumDuration
+  });
+  if (!stackNames.length) {
+    return [];
+  }
+  const stackSource = `
+    SELECT pid, tid, cpu, depth, startTime, endTime, startTrace, endTrace, locationId
+    FROM ${client.parquetMany(stackNames)}
+    WHERE startTime <= ${endTime} AND endTime >= ${startTime}
+      AND endTime - startTime >= ${minimumDuration}
+    ORDER BY startTime, depth
+    LIMIT ${boundedLimit}
+  `;
+
+  if (!sourceLocations?.registeredName) {
+    return client.query<StackSlice>(`
+      WITH stack AS (${stackSource})
+      SELECT
+        CAST(pid AS INTEGER) AS pid,
+        CAST(tid AS INTEGER) AS tid,
+        CAST(cpu AS INTEGER) AS cpu,
+        CAST(depth AS INTEGER) AS depth,
+        CAST(startTime AS DOUBLE) AS startTime,
+        CAST(endTime AS DOUBLE) AS endTime,
+        CAST(startTrace AS DOUBLE) AS startTrace,
+        CAST(endTrace AS DOUBLE) AS endTrace,
+        CAST(locationId AS DOUBLE) AS locationId,
+        '[unresolved]' AS dso,
+        NULL AS symbol,
+        0 AS relativeAddress,
+        0 AS symbolOffset,
+        false AS isKernel
+      FROM stack
+    `);
+  }
+
+  return client.query<StackSlice>(`
+    WITH
+      stack AS (${stackSource}),
+      loc AS (
+        SELECT *
+        FROM (${sourceLocationSource(client, sourceLocations.registeredName)})
+        WHERE id IN (SELECT DISTINCT locationId FROM stack)
+      )
+    SELECT
+      CAST(stack.pid AS INTEGER) AS pid,
+      CAST(stack.tid AS INTEGER) AS tid,
+      CAST(stack.cpu AS INTEGER) AS cpu,
+      CAST(stack.depth AS INTEGER) AS depth,
+      CAST(stack.startTime AS DOUBLE) AS startTime,
+      CAST(stack.endTime AS DOUBLE) AS endTime,
+      CAST(stack.startTrace AS DOUBLE) AS startTrace,
+      CAST(stack.endTrace AS DOUBLE) AS endTrace,
+      CAST(stack.locationId AS DOUBLE) AS locationId,
+      coalesce(nullif(loc.dso, ''), '[address only]') AS dso,
+      nullif(loc.symbol, '') AS symbol,
+      CAST(coalesce(loc.relativeAddress, 0) AS DOUBLE) AS relativeAddress,
+      CAST(coalesce(loc.symbolOffset, 0) AS DOUBLE) AS symbolOffset,
+      CAST(coalesce(loc.isKernelIp, 0) <> 0 AS BOOLEAN) AS isKernel
+    FROM stack
+    LEFT JOIN loc ON stack.locationId = loc.id
+    ORDER BY stack.startTime, stack.depth
+  `);
+}
+
 export function buildOverview(
   summaries: TraceFileSummary[],
   hasSourceLocations: boolean
@@ -430,12 +509,39 @@ export function buildOverview(
   };
 }
 
+function createSummaryFromTraceFile(file: LocalTraceFile): TraceFileSummary {
+  return {
+    id: file.id,
+    relativePath: file.relativePath,
+    size: file.size,
+    pid: file.pid,
+    tid: file.tid,
+    event: file.event,
+    rows: file.rows ?? 0,
+    minTime: file.minTime ?? 0,
+    maxTime: file.maxTime ?? 0,
+    minCpu: file.minCpu ?? null,
+    maxCpu: file.maxCpu ?? null,
+    addressedRows: 0,
+    totalPeriod: 0,
+    totalInsn: 0,
+    totalCycles: 0,
+    rowsKnown: file.rows !== undefined,
+    timeKnown: file.minTime !== undefined && file.maxTime !== undefined
+  };
+}
+
 async function hydrateSummary(
   client: DuckDbClient,
   file: LocalTraceFile,
   summary: TraceFileSummary,
   onProgress: ProgressSink
 ): Promise<void> {
+  if (file.shards?.length) {
+    hydrateSummaryFromShards(file, summary);
+    return;
+  }
+
   onProgress({
     phase: "Preparing stream",
     completed: 0,
@@ -480,6 +586,11 @@ async function hydrateFooterSummary(
     return;
   }
 
+  if (file.shards?.length) {
+    hydrateSummaryFromShards(file, summary);
+    return;
+  }
+
   const registeredName = file.registeredName ?? (await registerTraceFile(client, file));
   file.registeredName = registeredName;
 
@@ -493,6 +604,23 @@ async function hydrateFooterSummary(
   } catch {
     // Footer metadata is an optimization only.
   }
+}
+
+function hydrateSummaryFromShards(file: LocalTraceFile, summary: TraceFileSummary): void {
+  const shards = file.shards ?? [];
+  summary.rows = file.rows ?? shards.reduce((sum, shard) => sum + shard.rows, 0);
+  summary.minTime = file.minTime ?? Math.min(...shards.map((shard) => shard.minTime));
+  summary.maxTime = file.maxTime ?? Math.max(...shards.map((shard) => shard.maxTime));
+  const cpuMins = shards
+    .map((shard) => shard.minCpu)
+    .filter((value): value is number => value !== null);
+  const cpuMaxes = shards
+    .map((shard) => shard.maxCpu)
+    .filter((value): value is number => value !== null);
+  summary.minCpu = file.minCpu ?? (cpuMins.length ? Math.min(...cpuMins) : null);
+  summary.maxCpu = file.maxCpu ?? (cpuMaxes.length ? Math.max(...cpuMaxes) : null);
+  summary.rowsKnown = true;
+  summary.timeKnown = true;
 }
 
 async function queryTimeline(
@@ -675,7 +803,9 @@ function sourceLocationSource(client: DuckDbClient, registeredName: string): str
     SELECT
       id,
       decode(dso) AS dso,
+      decode(symbol) AS symbol,
       relativeAddress,
+      symbolOffset,
       isKernelIp
     FROM ${client.parquet(registeredName)}
   `;
@@ -820,6 +950,61 @@ async function registerTraceFile(client: DuckDbClient, file: LocalTraceFile): Pr
   return client.registerFile(file.file, file.relativePath);
 }
 
+async function registerTraceSources(
+  client: DuckDbClient,
+  file: LocalTraceFile,
+  range?: { startTime: number; endTime: number }
+): Promise<string[]> {
+  if (!file.shards?.length) {
+    return [await registerTraceFile(client, file)];
+  }
+
+  const shards = range ? intersectingShards(file.shards, range) : file.shards;
+  if (range && shards.length > maxInteractiveShards) {
+    throw new Error("Zoom closer before querying exact rows for this capture range.");
+  }
+
+  const registeredNames: string[] = [];
+  for (const shard of shards) {
+    registeredNames.push(await registerTraceShard(client, shard));
+  }
+
+  return registeredNames;
+}
+
+async function registerTraceShard(client: DuckDbClient, shard: TraceShardRef): Promise<string> {
+  if (shard.registeredName) {
+    return shard.registeredName;
+  }
+
+  if (shard.kind === "remote") {
+    if (!shard.url) {
+      throw new Error(`Remote trace shard is missing a URL: ${shard.relativePath}`);
+    }
+
+    shard.registeredName = await client.registerUrl(shard.url, shard.relativePath);
+    return shard.registeredName;
+  }
+
+  if (!shard.file) {
+    throw new Error(`Local trace shard is missing a File handle: ${shard.relativePath}`);
+  }
+
+  shard.registeredName = await client.registerFile(shard.file, shard.relativePath);
+  return shard.registeredName;
+}
+
+function intersectingShards(
+  shards: TraceShardRef[],
+  range: { startTime: number; endTime: number }
+): TraceShardRef[] {
+  const startTime = Math.min(range.startTime, range.endTime);
+  const endTime = Math.max(range.startTime, range.endTime);
+  return shards.filter(
+    (shard) => Math.max(shard.minTime, startTime) <= Math.min(shard.maxTime, endTime)
+  );
+}
+
 async function registerSourceLocationFile(
   client: DuckDbClient,
   file: SourceLocationFile
@@ -841,6 +1026,74 @@ async function registerSourceLocationFile(
   }
 
   return client.registerFile(file.file, file.relativePath);
+}
+
+async function registerStackIndexFile(client: DuckDbClient, file: StackIndexFile): Promise<string> {
+  if (file.registeredName) {
+    return file.registeredName;
+  }
+
+  if (file.kind === "remote") {
+    if (!file.url) {
+      throw new Error(`Remote stack index is missing a URL: ${file.relativePath}`);
+    }
+
+    file.registeredName = await client.registerUrl(file.url, file.relativePath);
+    return file.registeredName;
+  }
+
+  if (!file.file) {
+    throw new Error(`Local stack index is missing a File handle: ${file.relativePath}`);
+  }
+
+  file.registeredName = await client.registerFile(file.file, file.relativePath);
+  return file.registeredName;
+}
+
+async function registerStackIndexSources(
+  client: DuckDbClient,
+  file: StackIndexFile,
+  range: { startTime: number; endTime: number; minDurationNs?: number }
+): Promise<string[]> {
+  if (!file.shards?.length) {
+    return [await registerStackIndexFile(client, file)];
+  }
+
+  const startTime = Math.min(range.startTime, range.endTime);
+  const endTime = Math.max(range.startTime, range.endTime);
+  const level = file.levels
+    ?.filter((candidate) => candidate.minDurationNs <= Math.max(0, range.minDurationNs ?? 0))
+    .sort((left, right) => right.minDurationNs - left.minDurationNs)[0];
+  const shardPool = level?.shards.length ? level.shards : file.shards;
+  const names: string[] = [];
+  for (const shard of shardPool) {
+    if (Math.max(shard.minTime, startTime) <= Math.min(shard.maxTime, endTime)) {
+      names.push(await registerStackIndexShard(client, shard));
+    }
+  }
+  return names;
+}
+
+async function registerStackIndexShard(client: DuckDbClient, shard: StackIndexShardRef): Promise<string> {
+  if (shard.registeredName) {
+    return shard.registeredName;
+  }
+
+  if (shard.kind === "remote") {
+    if (!shard.url) {
+      throw new Error(`Remote stack index shard is missing a URL: ${shard.relativePath}`);
+    }
+
+    shard.registeredName = await client.registerUrl(shard.url, shard.relativePath);
+    return shard.registeredName;
+  }
+
+  if (!shard.file) {
+    throw new Error(`Local stack index shard is missing a File handle: ${shard.relativePath}`);
+  }
+
+  shard.registeredName = await client.registerFile(shard.file, shard.relativePath);
+  return shard.registeredName;
 }
 
 function uniqueSorted(values: number[]): number[] {

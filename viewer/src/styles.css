@@ -222,7 +222,7 @@ button {
 .overview-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 14px;
 }
 
@@ -426,114 +426,6 @@ button {
   min-width: 0;
 }
 
-.lanes-panel {
-  border-bottom: 0;
-}
-
-.capture-lanes {
-  display: grid;
-  gap: 8px;
-  max-height: 360px;
-  overflow: auto;
-  padding: 12px;
-}
-
-.capture-thread {
-  border: 1px solid var(--line);
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 150px minmax(0, 1fr);
-  min-width: 0;
-  padding: 10px;
-}
-
-.capture-thread-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  justify-content: center;
-  min-width: 0;
-}
-
-.capture-thread-label strong {
-  color: var(--soft);
-  font-size: 13px;
-}
-
-.capture-thread-label span,
-.capture-stream-heading strong,
-.capture-stream-time {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.capture-thread-streams {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.capture-stream {
-  align-items: center;
-  background: #141512;
-  border: 1px solid var(--line);
-  display: grid;
-  gap: 10px;
-  grid-template-columns: 28px minmax(0, 1fr) minmax(66px, auto);
-  min-height: 48px;
-  padding: 8px 10px;
-}
-
-.capture-stream-icon {
-  color: var(--teal);
-  display: grid;
-  place-items: center;
-}
-
-.capture-stream-main {
-  min-width: 0;
-}
-
-.capture-stream-heading {
-  align-items: baseline;
-  display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  min-width: 0;
-}
-
-.capture-stream-heading span {
-  color: var(--soft);
-  font-size: 13px;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.capture-stream-meter {
-  background: rgba(255, 255, 255, 0.06);
-  height: 5px;
-  margin-top: 7px;
-  overflow: hidden;
-}
-
-.capture-stream-meter div {
-  height: 100%;
-}
-
-.capture-stream-meter .branch {
-  background: linear-gradient(90deg, var(--amber), var(--rose));
-}
-
-.capture-stream-meter .instruction {
-  background: linear-gradient(90deg, var(--teal), var(--sky));
-}
-
-.capture-stream-time {
-  text-align: right;
-}
-
 .profile-header {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -596,8 +488,7 @@ button {
 .timeline-panel,
 .address-panel,
 .detail-panel,
-.stack-panel,
-.notes-panel {
+.stack-panel {
   grid-column: 1 / -1;
 }
 
@@ -833,7 +724,7 @@ button {
 
 .address-map {
   min-height: 280px;
-  overflow: hidden;
+  overflow: auto hidden;
   padding: 8px;
 }
 
@@ -849,25 +740,19 @@ button {
   font-weight: 700;
 }
 
-.address-axis {
-  stroke: rgba(245, 241, 232, 0.15);
-  stroke-width: 1;
-}
-
 .address-range {
   fill: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 10px;
 }
 
-.notes-panel ul {
-  color: var(--muted);
-  margin: 0;
-  padding: 14px 32px;
+.address-heat-cell {
+  shape-rendering: crispEdges;
 }
 
-.notes-panel li {
-  margin: 6px 0;
+.address-heat-cell:hover {
+  stroke: rgba(245, 241, 232, 0.7);
+  stroke-width: 1;
 }
 
 .trace-row-table {
@@ -925,7 +810,9 @@ button {
 }
 
 .stack-trace {
-  max-height: 430px;
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
   overflow: auto;
 }
 
@@ -939,61 +826,102 @@ button {
   padding: 0 12px;
 }
 
-.stack-trace ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.perfetto-stack {
+  background: #111110;
 }
 
-.stack-trace li {
+.stack-time-axis {
   border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 38px minmax(0, 1fr) minmax(180px, auto);
-  padding: 12px;
+  display: flex;
+  min-width: 760px;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
-.stack-frame-depth {
-  align-items: center;
-  background: #231f19;
-  color: var(--amber);
-  display: grid;
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-  height: 28px;
-  place-items: center;
-  width: 28px;
+.stack-time-axis > span {
+  border-right: 1px solid var(--line);
+  flex: 0 0 var(--label-width);
 }
 
-.stack-frame-main {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.stack-frame-main strong,
-.stack-frame-main span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stack-frame-main code {
-  color: #c7fff5;
-}
-
-.stack-frame-main span,
-.stack-frame-meta {
+.stack-time-axis > div {
+  background:
+    repeating-linear-gradient(90deg, rgba(245, 241, 232, 0.08), rgba(245, 241, 232, 0.08) 1px, transparent 1px, transparent 10%),
+    #141512;
   color: var(--muted);
+  display: flex;
+  flex: 1 1 auto;
+  font-size: 11px;
+  justify-content: space-between;
+  min-height: 30px;
+  padding: 7px 8px;
+}
+
+.stack-lane-list {
+  min-width: 760px;
+}
+
+.thread-lane {
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  width: 100%;
+}
+
+.thread-label {
+  background: #151612;
+  border-right: 1px solid var(--line);
+  flex: 0 0 178px;
+  padding: 8px 10px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
+.thread-label strong {
+  color: var(--soft);
+  display: block;
   font-size: 12px;
 }
 
-.stack-frame-meta {
-  align-items: end;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: right;
+.thread-label span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.thread-track {
+  background:
+    repeating-linear-gradient(90deg, rgba(245, 241, 232, 0.05), rgba(245, 241, 232, 0.05) 1px, transparent 1px, transparent 10%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.035) 1px, transparent 1px, transparent 24px);
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.stack-slice {
+  background: color-mix(in srgb, var(--slice-color) 82%, #111110);
+  border: 1px solid rgba(17, 17, 16, 0.78);
+  color: #071310;
+  height: 20px;
+  min-width: 2px;
+  overflow: hidden;
+  padding: 2px 5px;
+  position: absolute;
+  white-space: nowrap;
+}
+
+.stack-slice span {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stack-slice:hover {
+  filter: brightness(1.18);
+  z-index: 5;
 }
 
 .profile-empty {
@@ -1080,18 +1008,8 @@ button {
     text-align: left;
   }
 
-  .capture-thread,
-  .capture-stream,
-  .stack-trace li {
-    grid-template-columns: 1fr;
-  }
-
-  .capture-stream-time,
-  .stack-frame-meta {
-    text-align: left;
-  }
-
-  .stack-frame-meta {
-    align-items: start;
+  .stack-time-axis,
+  .stack-lane-list {
+    min-width: 680px;
   }
 }

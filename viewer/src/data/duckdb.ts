@@ -87,6 +87,14 @@ export class DuckDbClient {
     return `read_parquet('${escapeSql(name)}', hive_partitioning=false)`;
   }
 
+  parquetMany(names: string[]): string {
+    if (names.length === 1) {
+      return this.parquet(names[0]);
+    }
+
+    return `read_parquet([${names.map((name) => `'${escapeSql(name)}'`).join(", ")}], hive_partitioning=false)`;
+  }
+
   close(): void {
     void this.conn.close();
   }

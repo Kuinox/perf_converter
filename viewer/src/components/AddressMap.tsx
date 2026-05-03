@@ -1,4 +1,5 @@
-import { max, scaleLinear, scaleOrdinal } from "d3";
+import { max, scaleSequentialSqrt } from "d3";
+import { interpolateTurbo } from "d3-scale-chromatic";
 import type { AddressHotspot } from "../data/types";
 import { dsoLabel, formatCompact, formatHex } from "../format";
 import { useElementSize } from "../useResizeObserver";
@@ -7,7 +8,23 @@ interface AddressMapProps {
   addresses: AddressHotspot[];
 }
 
-const palette = ["#14b8a6", "#f59e0b", "#f43f5e", "#84cc16", "#38bdf8", "#f97316", "#eab308"];
+interface HeatRow {
+  dso: string;
+  total: number;
+  minAddress: number;
+  maxAddress: number;
+  bins: HeatBin[];
+}
+
+interface HeatBin {
+  index: number;
+  start: number;
+  end: number;
+  samples: number;
+  kernelSamples: number;
+}
+
+const binCount = 80;
 
 export function AddressMap({ addresses }: AddressMapProps) {
   const { ref, size } = useElementSize<HTMLDivElement>();
@@ -16,56 +33,57 @@ export function AddressMap({ addresses }: AddressMapProps) {
     return <div className="empty-state">No resolved hot addresses for this selection.</div>;
   }
 
-  const grouped = Array.from(groupBy(addresses, (entry) => entry.dso).entries())
-    .map(([dso, values]) => ({
-      dso,
-      values: values.sort((left, right) => left.relativeAddress - right.relativeAddress),
-      total: values.reduce((sum, entry) => sum + entry.samples, 0)
-    }))
-    .sort((left, right) => right.total - left.total)
-    .slice(0, 8);
-
-  const width = Math.max(420, size.width || 720);
-  const rowHeight = 54;
-  const height = grouped.length * rowHeight + 24;
-  const maxSamples = Math.max(1, max(addresses, (entry) => entry.samples) ?? 1);
-  const radius = scaleLinear([0, Math.sqrt(maxSamples)], [3, 15]);
-  const color = scaleOrdinal<string, string>().domain(grouped.map((group) => group.dso)).range(palette);
+  const rows = buildRows(addresses).slice(0, 12);
+  const width = Math.max(520, size.width || 860);
+  const labelWidth = width < 720 ? 136 : 190;
+  const heatLeft = labelWidth + 12;
+  const heatRight = width - 20;
+  const heatWidth = Math.max(220, heatRight - heatLeft);
+  const cellGap = 1;
+  const cellWidth = Math.max(2, heatWidth / binCount - cellGap);
+  const rowHeight = 34;
+  const height = rows.length * rowHeight + 38;
+  const maxSamples = Math.max(1, max(rows.flatMap((row) => row.bins), (bin) => bin.samples) ?? 1);
+  const color = scaleSequentialSqrt(interpolateTurbo).domain([0, maxSamples]);
 
   return (
-    <div className="address-map" ref={ref}>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Hot address map">
-        {grouped.map((group, rowIndex) => {
-          const y = 22 + rowIndex * rowHeight;
-          const minAddress = Math.min(...group.values.map((entry) => entry.relativeAddress));
-          const maxAddress = Math.max(...group.values.map((entry) => entry.relativeAddress));
-          const x = scaleLinear([minAddress, maxAddress || minAddress + 1], [170, width - 28]);
-
+    <div className="address-map address-heatmap" ref={ref}>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Hot address heatmap">
+        {rows.map((row, rowIndex) => {
+          const y = 18 + rowIndex * rowHeight;
           return (
-            <g key={group.dso}>
-              <text x="12" y={y + 5} className="address-label">
-                {dsoLabel(group.dso)}
+            <g key={row.dso}>
+              <text x="12" y={y + 13} className="address-label">
+                {dsoLabel(row.dso)}
               </text>
-              <line x1="170" x2={width - 28} y1={y} y2={y} className="address-axis" />
-              {group.values.slice(0, 24).map((entry) => (
-                <circle
-                  key={`${group.dso}:${entry.relativeAddress}`}
-                  cx={x(entry.relativeAddress)}
-                  cy={y}
-                  r={radius(Math.sqrt(entry.samples))}
-                  fill={entry.isKernel ? "#f43f5e" : color(group.dso)}
-                  opacity="0.78"
-                >
-                  <title>
-                    {dsoLabel(entry.dso)} {formatHex(entry.relativeAddress)}: {formatCompact(entry.samples)} samples
-                  </title>
-                </circle>
-              ))}
-              <text x="170" y={y + 24} className="address-range">
-                {formatHex(minAddress)}
+              <text x={labelWidth} y={y + 13} textAnchor="end" className="address-range">
+                {formatCompact(row.total)}
               </text>
-              <text x={width - 28} y={y + 24} textAnchor="end" className="address-range">
-                {formatHex(maxAddress)}
+              {row.bins.map((bin) => {
+                const x = heatLeft + bin.index * (cellWidth + cellGap);
+                return (
+                  <rect
+                    className="address-heat-cell"
+                    key={`${row.dso}:${bin.index}`}
+                    x={x}
+                    y={y}
+                    width={cellWidth}
+                    height={20}
+                    fill={bin.samples > 0 ? color(bin.samples) : "rgba(255,255,255,0.035)"}
+                    opacity={bin.kernelSamples ? 1 : 0.86}
+                  >
+                    <title>
+                      {dsoLabel(row.dso)} {formatHex(bin.start)} - {formatHex(bin.end)}:{" "}
+                      {formatCompact(bin.samples)} samples
+                    </title>
+                  </rect>
+                );
+              })}
+              <text x={heatLeft} y={y + 31} className="address-range">
+                {formatHex(row.minAddress)}
+              </text>
+              <text x={heatRight} y={y + 31} textAnchor="end" className="address-range">
+                {formatHex(row.maxAddress)}
               </text>
             </g>
           );
@@ -73,6 +91,42 @@ export function AddressMap({ addresses }: AddressMapProps) {
       </svg>
     </div>
   );
+}
+
+function buildRows(addresses: AddressHotspot[]): HeatRow[] {
+  return Array.from(groupBy(addresses, (entry) => entry.dso).entries())
+    .map(([dso, values]) => {
+      const minAddress = Math.min(...values.map((entry) => entry.relativeAddress));
+      const maxAddress = Math.max(...values.map((entry) => entry.relativeAddress));
+      const span = Math.max(1, maxAddress - minAddress + 1);
+      const bins: HeatBin[] = Array.from({ length: binCount }, (_, index) => ({
+        index,
+        start: minAddress + Math.floor((span * index) / binCount),
+        end: minAddress + Math.floor((span * (index + 1)) / binCount),
+        samples: 0,
+        kernelSamples: 0
+      }));
+
+      for (const entry of values) {
+        const index = Math.min(
+          binCount - 1,
+          Math.max(0, Math.floor(((entry.relativeAddress - minAddress) / span) * binCount))
+        );
+        bins[index].samples += entry.samples;
+        if (entry.isKernel) {
+          bins[index].kernelSamples += entry.samples;
+        }
+      }
+
+      return {
+        dso,
+        total: values.reduce((sum, entry) => sum + entry.samples, 0),
+        minAddress,
+        maxAddress,
+        bins
+      };
+    })
+    .sort((left, right) => right.total - left.total);
 }
 
 function groupBy<T, TKey>(values: T[], keySelector: (value: T) => TKey): Map<TKey, T[]> {
