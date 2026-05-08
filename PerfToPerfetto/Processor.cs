@@ -3,6 +3,7 @@ using Google.Protobuf;
 using Perfetto.Protos;
 using Plank.Reading;
 using Plank.Schema;
+using Temp.Schema;
 using Temp.Schema.Schema;
 
 namespace PerfToPerfetto;
@@ -67,12 +68,7 @@ public sealed class Processor : IDisposable
 
     void WriteStackFrames(ulong trackUuid, IEnumerable<StackFrameRow> frames)
     {
-        var endpoints = new List<StackFrameEndpoint>();
-        foreach (var frame in frames)
-        {
-            endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
-            endpoints.Add(new StackFrameEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, IsBegin: false, frame));
-        }
+        var endpoints = CreateStackFrameEndpoints(frames);
 
         endpoints.Sort(StackFrameEndpointComparer.Instance);
 
@@ -83,6 +79,22 @@ public sealed class Processor : IDisposable
                 trackUuid,
                 endpoint.IsBegin ? TrackEvent.Types.Type.SliceBegin : TrackEvent.Types.Type.SliceEnd);
         }
+    }
+
+    public static List<StackFrameEndpoint> CreateStackFrameEndpoints(IEnumerable<StackFrameRow> frames)
+    {
+        var endpoints = new List<StackFrameEndpoint>();
+        foreach (var frame in frames)
+        {
+            if (frame.StartReason != StackFrameBoundaryReason.TraceResume)
+                endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
+
+            if (frame.EndReason == StackFrameBoundaryReason.Return)
+                endpoints.Add(new StackFrameEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, IsBegin: false, frame));
+        }
+
+        endpoints.Sort(StackFrameEndpointComparer.Instance);
+        return endpoints;
     }
 
     void WriteProcessTrack(uint pid)
@@ -316,7 +328,7 @@ public sealed class Processor : IDisposable
 
     readonly record struct ThreadInfo(uint Pid, uint Tid, IReadOnlyList<string> BranchFiles, ulong TrackUuid, string ThreadName);
 
-    readonly record struct StackFrameRow(
+    public readonly record struct StackFrameRow(
         ulong FrameId,
         uint Tid,
         uint Depth,
@@ -324,11 +336,13 @@ public sealed class Processor : IDisposable
         ulong EndTime,
         ulong StartTrace,
         ulong EndTrace,
-        ulong LocationId);
+        ulong LocationId,
+        StackFrameBoundaryReason StartReason,
+        StackFrameBoundaryReason EndReason);
 
     public readonly record struct SliceEndpoint(ulong Time, ulong Trace, uint Depth, ulong FrameId, bool IsBegin);
 
-    readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame)
+    public readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame)
     {
         public SliceEndpoint ToSliceEndpoint()
             => new(Time, Trace, Depth, Frame.FrameId, IsBegin);
@@ -371,7 +385,7 @@ public sealed class Processor : IDisposable
         }
     }
 
-    sealed class StackFrameEndpointComparer : IComparer<StackFrameEndpoint>
+    public sealed class StackFrameEndpointComparer : IComparer<StackFrameEndpoint>
     {
         public static StackFrameEndpointComparer Instance { get; } = new();
 
@@ -436,8 +450,10 @@ public sealed class Processor : IDisposable
                 var startTraces = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[5]);
                 var endTraces = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[6]);
                 var locationIds = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[7]);
+                var startReasons = ReadColumn<byte>(rowGroup, StackFrameRowSchema.Schema.Columns[10]);
+                var endReasons = ReadColumn<byte>(rowGroup, StackFrameRowSchema.Schema.Columns[11]);
 
-                ValidateRowGroupLengths(path, frameIds.Length, tids, depths, startTimes, endTimes, startTraces, endTraces, locationIds);
+                ValidateRowGroupLengths(path, frameIds.Length, tids, depths, startTimes, endTimes, startTraces, endTraces, locationIds, startReasons, endReasons);
 
                 for (var i = 0; i < frameIds.Length; i++)
                 {
@@ -449,7 +465,9 @@ public sealed class Processor : IDisposable
                         EndTime: endTimes[i],
                         StartTrace: startTraces[i],
                         EndTrace: endTraces[i],
-                        LocationId: locationIds[i]);
+                        LocationId: locationIds[i],
+                        StartReason: (StackFrameBoundaryReason)startReasons[i],
+                        EndReason: (StackFrameBoundaryReason)endReasons[i]);
                 }
             }
         }

@@ -1,4 +1,5 @@
 using PerfToPerfetto;
+using Temp.Schema;
 
 namespace Temp.Schema.Tests;
 
@@ -80,5 +81,69 @@ public sealed class PerfettoSliceOrderingTests
         }
 
         Assert.That(stack, Is.Empty);
+    }
+
+    [Test]
+    public void SyntheticFrameEndIsLeftOpenForPerfetto()
+    {
+        var frame = new Processor.StackFrameRow(
+            FrameId: 1,
+            Tid: 42,
+            Depth: 0,
+            StartTime: 10,
+            EndTime: 20,
+            StartTrace: 1,
+            EndTrace: 2,
+            LocationId: 100,
+            StartReason: StackFrameBoundaryReason.Call,
+            EndReason: StackFrameBoundaryReason.TraceEnd);
+
+        var endpoints = Processor.CreateStackFrameEndpoints([frame]);
+
+        Assert.That(endpoints, Has.Count.EqualTo(1));
+        Assert.That(endpoints[0].IsBegin, Is.True);
+    }
+
+    [Test]
+    public void TraceResumeFrameDoesNotEmitDuplicateBegin()
+    {
+        var frame = new Processor.StackFrameRow(
+            FrameId: 2,
+            Tid: 42,
+            Depth: 0,
+            StartTime: 30,
+            EndTime: 40,
+            StartTrace: 3,
+            EndTrace: 4,
+            LocationId: 100,
+            StartReason: StackFrameBoundaryReason.TraceResume,
+            EndReason: StackFrameBoundaryReason.Return);
+
+        var endpoints = Processor.CreateStackFrameEndpoints([frame]);
+
+        Assert.That(endpoints, Has.Count.EqualTo(1));
+        Assert.That(endpoints[0].IsBegin, Is.False);
+    }
+
+    [Test]
+    public void RealReturnEmitsBeginAndEnd()
+    {
+        var frame = new Processor.StackFrameRow(
+            FrameId: 3,
+            Tid: 42,
+            Depth: 0,
+            StartTime: 10,
+            EndTime: 20,
+            StartTrace: 1,
+            EndTrace: 2,
+            LocationId: 100,
+            StartReason: StackFrameBoundaryReason.Call,
+            EndReason: StackFrameBoundaryReason.Return);
+
+        var endpoints = Processor.CreateStackFrameEndpoints([frame]);
+
+        Assert.That(endpoints, Has.Count.EqualTo(2));
+        Assert.That(endpoints[0].IsBegin, Is.True);
+        Assert.That(endpoints[1].IsBegin, Is.False);
     }
 }
