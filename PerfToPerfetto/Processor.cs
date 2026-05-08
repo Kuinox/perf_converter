@@ -344,6 +344,10 @@ public sealed class Processor : IDisposable
             if (compare != 0)
                 return compare;
 
+            compare = left.Trace.CompareTo(right.Trace);
+            if (compare != 0)
+                return compare;
+
             if (left.FrameId == right.FrameId && left.IsBegin != right.IsBegin)
                 return left.IsBegin ? -1 : 1;
 
@@ -362,10 +366,6 @@ public sealed class Processor : IDisposable
                 if (compare != 0)
                     return compare;
             }
-
-            compare = left.Trace.CompareTo(right.Trace);
-            if (compare != 0)
-                return compare;
 
             return left.FrameId.CompareTo(right.FrameId);
         }
