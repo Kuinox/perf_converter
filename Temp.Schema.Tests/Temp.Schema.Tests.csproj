@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PerfToPerfetto\PerfToPerfetto.csproj" />
     <ProjectReference Include="..\Temp.Schema\Temp.Schema.csproj" />
   </ItemGroup>
 

@@ -15,7 +15,6 @@ public sealed class Processor : IDisposable
     readonly CodedOutputStream _output;
     readonly Dictionary<ulong, SourceLocationInfo> _sourceLocations = [];
     readonly HashSet<ulong> _writtenProcessTracks = [];
-    readonly HashSet<ulong> _writtenDepthTracks = [];
     bool _disposed;
 
     public Processor(Stream output)
@@ -49,7 +48,7 @@ public sealed class Processor : IDisposable
             }
 
             Console.WriteLine($"Writing Perfetto stack slices for tid={group.Key}...");
-            WriteStackFrames(info, group);
+            WriteStackFrames(info.TrackUuid, group);
         }
 
         _output.Flush();
@@ -66,45 +65,22 @@ public sealed class Processor : IDisposable
         _disposed = true;
     }
 
-    void WriteStackFrames(ThreadInfo info, IEnumerable<StackFrameRow> frames)
+    void WriteStackFrames(ulong trackUuid, IEnumerable<StackFrameRow> frames)
     {
         var endpoints = new List<StackFrameEndpoint>();
         foreach (var frame in frames)
         {
-            var trackUuid = DepthTrackUuid(info.Tid, frame.Depth);
-            WriteDepthTrack(info, frame.Depth, trackUuid);
             endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
             endpoints.Add(new StackFrameEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, IsBegin: false, frame));
         }
 
-        endpoints.Sort(static (left, right) =>
-        {
-            var compare = left.Time.CompareTo(right.Time);
-            if (compare != 0)
-                return compare;
-
-            compare = left.Trace.CompareTo(right.Trace);
-            if (compare != 0)
-                return compare;
-
-            if (left.Frame.FrameId == right.Frame.FrameId && left.IsBegin != right.IsBegin)
-                return left.IsBegin ? -1 : 1;
-
-            if (left.IsBegin != right.IsBegin)
-                return left.IsBegin ? 1 : -1;
-
-            compare = left.Depth.CompareTo(right.Depth);
-            if (compare != 0)
-                return compare;
-
-            return left.Frame.FrameId.CompareTo(right.Frame.FrameId);
-        });
+        endpoints.Sort(StackFrameEndpointComparer.Instance);
 
         foreach (var endpoint in endpoints)
         {
             WriteTrackEvent(
                 endpoint.Frame,
-                DepthTrackUuid(info.Tid, endpoint.Frame.Depth),
+                trackUuid,
                 endpoint.IsBegin ? TrackEvent.Types.Type.SliceBegin : TrackEvent.Types.Type.SliceEnd);
         }
     }
@@ -144,22 +120,6 @@ public sealed class Processor : IDisposable
                     Tid = (int)tid,
                     ThreadName = threadName
                 }
-            }
-        });
-    }
-
-    void WriteDepthTrack(ThreadInfo info, uint depth, ulong trackUuid)
-    {
-        if (!_writtenDepthTracks.Add(trackUuid))
-            return;
-
-        WritePacket(new TracePacket
-        {
-            TrackDescriptor = new TrackDescriptor
-            {
-                Uuid = trackUuid,
-                ParentUuid = info.TrackUuid,
-                Name = $"depth {depth}"
             }
         });
     }
@@ -321,9 +281,6 @@ public sealed class Processor : IDisposable
     static ulong ThreadTrackUuid(uint pid, uint tid)
         => 0x2000_0000_0000_0000UL | ((ulong)pid << 32) | tid;
 
-    static ulong DepthTrackUuid(uint tid, uint depth)
-        => 0x3000_0000_0000_0000UL | ((ulong)tid << 24) | (depth & 0x00ff_ffff);
-
     static string? BytesToString(byte[]? bytes)
     {
         if (bytes is not { Length: > 0 })
@@ -369,7 +326,58 @@ public sealed class Processor : IDisposable
         ulong EndTrace,
         ulong LocationId);
 
-    readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame);
+    public readonly record struct SliceEndpoint(ulong Time, ulong Trace, uint Depth, ulong FrameId, bool IsBegin);
+
+    readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame)
+    {
+        public SliceEndpoint ToSliceEndpoint()
+            => new(Time, Trace, Depth, Frame.FrameId, IsBegin);
+    }
+
+    public sealed class SliceEndpointComparer : IComparer<SliceEndpoint>
+    {
+        public static SliceEndpointComparer Instance { get; } = new();
+
+        public int Compare(SliceEndpoint left, SliceEndpoint right)
+        {
+            var compare = left.Time.CompareTo(right.Time);
+            if (compare != 0)
+                return compare;
+
+            if (left.FrameId == right.FrameId && left.IsBegin != right.IsBegin)
+                return left.IsBegin ? -1 : 1;
+
+            if (left.IsBegin != right.IsBegin)
+                return left.IsBegin ? 1 : -1;
+
+            if (left.IsBegin)
+            {
+                compare = left.Depth.CompareTo(right.Depth);
+                if (compare != 0)
+                    return compare;
+            }
+            else
+            {
+                compare = right.Depth.CompareTo(left.Depth);
+                if (compare != 0)
+                    return compare;
+            }
+
+            compare = left.Trace.CompareTo(right.Trace);
+            if (compare != 0)
+                return compare;
+
+            return left.FrameId.CompareTo(right.FrameId);
+        }
+    }
+
+    sealed class StackFrameEndpointComparer : IComparer<StackFrameEndpoint>
+    {
+        public static StackFrameEndpointComparer Instance { get; } = new();
+
+        public int Compare(StackFrameEndpoint left, StackFrameEndpoint right)
+            => SliceEndpointComparer.Instance.Compare(left.ToSliceEndpoint(), right.ToSliceEndpoint());
+    }
 
     sealed record SourceLocationInfo(
         ulong Id,
