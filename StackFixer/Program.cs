@@ -127,7 +127,7 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         var flags = (DLFilterFlag)row.Flags;
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN) != 0)
-            ResumeTrace(state, row);
+            ResumeTrace(state);
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0)
         {
@@ -140,8 +140,7 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
                 ActiveStartTime: row.Time,
                 ActiveStartTrace: row.Id,
                 ActiveStartCpu: row.Cpu,
-                StartReason: StackFrameBoundaryReason.Call,
-                IsActive: state.TraceActive);
+                StartReason: StackFrameBoundaryReason.Call);
             state.OpenFrames.Add(frame);
         }
 
@@ -157,8 +156,7 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
                 var index = state.OpenFrames.Count - 1;
                 var frame = state.OpenFrames[index];
                 state.OpenFrames.RemoveAt(index);
-                if (frame.IsActive)
-                    WriteFrame(frame, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
+                WriteFrame(frame, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
             }
         }
 
@@ -166,27 +164,12 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
             SuspendTrace(state, row);
     }
 
-    void ResumeTrace(ThreadStackState state, TraceRow row)
+    void ResumeTrace(ThreadStackState state)
     {
         if (state.TraceActive)
             return;
 
         state.TraceActive = true;
-        for (var i = 0; i < state.OpenFrames.Count; i++)
-        {
-            var frame = state.OpenFrames[i];
-            if (frame.IsActive)
-                continue;
-
-            state.OpenFrames[i] = frame with
-            {
-                ActiveStartTime = row.Time,
-                ActiveStartTrace = row.Id,
-                ActiveStartCpu = row.Cpu,
-                StartReason = StackFrameBoundaryReason.TraceResume,
-                IsActive = true
-            };
-        }
     }
 
     void SuspendTrace(ThreadStackState state, TraceRow row)
@@ -194,7 +177,7 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         if (!state.TraceActive)
             return;
 
-        CloseActiveIntervals(state, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.TraceEnd);
+        TraceClips++;
         state.TraceActive = false;
     }
 
@@ -208,15 +191,8 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         for (var i = state.OpenFrames.Count - 1; i >= 0; i--)
         {
             var frame = state.OpenFrames[i];
-            if (!frame.IsActive)
-                continue;
-
             WriteFrame(frame, endTime, endTrace, endCpu, endReason);
-            state.OpenFrames[i] = frame with { IsActive = false };
         }
-
-        if (endReason == StackFrameBoundaryReason.TraceEnd)
-            TraceClips++;
     }
 
     void WriteFrame(OpenStackFrame frame, ulong endTime, ulong endTrace, uint endCpu, StackFrameBoundaryReason endReason)
@@ -316,8 +292,7 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         ulong ActiveStartTime,
         ulong ActiveStartTrace,
         uint ActiveStartCpu,
-        StackFrameBoundaryReason StartReason,
-        bool IsActive);
+        StackFrameBoundaryReason StartReason);
 
     sealed class ThreadStackState(uint tid)
     {
