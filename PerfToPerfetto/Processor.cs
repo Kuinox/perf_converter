@@ -12,6 +12,7 @@ public sealed class Processor : IDisposable
 {
     const byte TracePacketFieldTag = 10;
     const int MaxThreadNameParts = 16;
+    const ulong AuxLossTrackUuid = 0x4000_0000_0000_0000UL;
 
     readonly CodedOutputStream _output;
     readonly Dictionary<ulong, SourceLocationInfo> _sourceLocations = [];
@@ -38,6 +39,8 @@ public sealed class Processor : IDisposable
             WriteProcessTrack(info.Pid);
             WriteThreadTrack(info.Pid, info.Tid, info.TrackUuid, info.ThreadName);
         }
+
+        WriteAuxLossMarkers(inputDirectory);
 
         foreach (var group in StackFrameParquetReader.ReadRows(stackFrameFile).GroupBy(static row => row.Tid).OrderBy(static group => group.Key))
         {
@@ -96,6 +99,56 @@ public sealed class Processor : IDisposable
         endpoints.Sort(StackFrameEndpointComparer.Instance);
         return endpoints;
     }
+
+    void WriteAuxLossMarkers(string inputDirectory)
+    {
+        var auxLossFile = FindAuxLossFile(inputDirectory);
+        if (auxLossFile is null)
+            return;
+
+        var markerCount = 0;
+        foreach (var row in AuxLossParquetReader.ReadRows(auxLossFile))
+        {
+            if (markerCount == 0)
+                WriteAuxLossTrack();
+
+            WriteAuxLossMarker(row);
+            markerCount++;
+        }
+
+        if (markerCount != 0)
+            Console.WriteLine($"Writing {markerCount} AUX loss markers...");
+    }
+
+    void WriteAuxLossTrack()
+    {
+        WritePacket(new TracePacket
+        {
+            TrackDescriptor = new TrackDescriptor
+            {
+                Uuid = AuxLossTrackUuid,
+                Name = "AUX loss"
+            }
+        });
+    }
+
+    void WriteAuxLossMarker(AuxLossRow row)
+    {
+        WritePacket(new TracePacket
+        {
+            Timestamp = row.Time,
+            TrackEvent = new TrackEvent
+            {
+                Type = TrackEvent.Types.Type.Instant,
+                TrackUuid = AuxLossTrackUuid,
+                Name = GetAuxLossMarkerName(row)
+            },
+            TrustedPacketSequenceId = checked((uint)(AuxLossTrackUuid & uint.MaxValue))
+        });
+    }
+
+    public static string GetAuxLossMarkerName(AuxLossRow row)
+        => $"AUX loss tid={row.Tid} cpu={row.Cpu} flags=0x{row.Flags:x}";
 
     void WriteProcessTrack(uint pid)
     {
@@ -231,6 +284,24 @@ public sealed class Processor : IDisposable
         return null;
     }
 
+    static string? FindAuxLossFile(string inputDirectory)
+    {
+        var path = Path.Combine(inputDirectory, "aux_loss.parquet");
+        if (File.Exists(path))
+            return path;
+
+        var directory = new DirectoryInfo(inputDirectory);
+        while (directory.Parent is not null)
+        {
+            path = Path.Combine(directory.Parent.FullName, "aux_loss.parquet");
+            if (File.Exists(path))
+                return path;
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
     Dictionary<uint, ThreadInfo> DiscoverThreadInfos(string inputDirectory)
     {
         var result = new Dictionary<uint, ThreadInfo>();
@@ -342,6 +413,8 @@ public sealed class Processor : IDisposable
 
     public readonly record struct SliceEndpoint(ulong Time, ulong Trace, uint Depth, ulong FrameId, bool IsBegin);
 
+    public readonly record struct AuxLossRow(ulong Id, ulong Time, uint Pid, uint Tid, uint Cpu, ulong Flags);
+
     public readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame)
     {
         public SliceEndpoint ToSliceEndpoint()
@@ -429,6 +502,39 @@ public sealed class Processor : IDisposable
                 return $"{Path.GetFileName(Dso)}+0x{RelativeAddress:x}";
 
             return RelativeAddress == 0 ? string.Empty : $"0x{RelativeAddress:x}";
+        }
+    }
+
+    static class AuxLossParquetReader
+    {
+        public static IEnumerable<AuxLossRow> ReadRows(string path)
+        {
+            using var stream = File.OpenRead(path);
+            using var reader = AuxDataLossRowSchema.Schema.CreateReader(stream);
+
+            foreach (var token in reader.EnumerateRowGroups())
+            {
+                using var rowGroup = reader.OpenRowGroup(stream, token);
+                var ids = ReadColumn<ulong>(rowGroup, AuxDataLossRowSchema.Schema.Columns[0]);
+                var times = ReadColumn<ulong>(rowGroup, AuxDataLossRowSchema.Schema.Columns[1]);
+                var pids = ReadColumn<uint>(rowGroup, AuxDataLossRowSchema.Schema.Columns[2]);
+                var tids = ReadColumn<uint>(rowGroup, AuxDataLossRowSchema.Schema.Columns[3]);
+                var cpus = ReadColumn<uint>(rowGroup, AuxDataLossRowSchema.Schema.Columns[4]);
+                var flags = ReadColumn<ulong>(rowGroup, AuxDataLossRowSchema.Schema.Columns[5]);
+
+                ValidateRowGroupLengths(path, ids.Length, times, pids, tids, cpus, flags);
+
+                for (var i = 0; i < ids.Length; i++)
+                {
+                    yield return new AuxLossRow(
+                        Id: ids[i],
+                        Time: times[i],
+                        Pid: pids[i],
+                        Tid: tids[i],
+                        Cpu: cpus[i],
+                        Flags: flags[i]);
+                }
+            }
         }
     }
 

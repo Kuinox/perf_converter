@@ -146,4 +146,20 @@ public sealed class PerfettoSliceOrderingTests
         Assert.That(endpoints[0].IsBegin, Is.True);
         Assert.That(endpoints[1].IsBegin, Is.False);
     }
+
+    [Test]
+    public void AuxLossMarkerNameIncludesThreadCpuAndFlags()
+    {
+        var row = new Processor.AuxLossRow(
+            Id: 1,
+            Time: 100,
+            Pid: 200,
+            Tid: 300,
+            Cpu: 4,
+            Flags: 0x20);
+
+        var name = Processor.GetAuxLossMarkerName(row);
+
+        Assert.That(name, Is.EqualTo("AUX loss tid=300 cpu=4 flags=0x20"));
+    }
 }
