@@ -1,8 +1,6 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text.Json;
-using System.Linq;
 using Temp.Schema;
 using CLI.Display;
 
@@ -83,20 +81,25 @@ internal class Program
             return 1;
         }
 
-        if (!outputDir.Exists)
-            outputDir.Create();
-
-        Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
-
         var perfCommand = $"perf script {perfArgs} -i {QuoteArgument(fullInputPath)} --dlfilter {QuoteArgument(dlFilterPath)}";
+        var auxLossPath = Path.Combine(outputDir.FullName, "aux_loss.parquet");
 
         if (dryRun)
         {
             Console.WriteLine("Would execute:");
+            Console.WriteLine($"write AUX losses to {QuoteArgument(auxLossPath)}");
             Console.WriteLine($"export OUTPUT_DIRECTORY=\"{outputDir.FullName}\"");
             Console.WriteLine(perfCommand);
             return 0;
         }
+
+        if (!outputDir.Exists)
+            outputDir.Create();
+
+        Console.Error.WriteLine("Extracting auxiliary data loss events...");
+        AuxDataLossWriter.Write(fullInputPath, auxLossPath);
+
+        Environment.SetEnvironmentVariable("OUTPUT_DIRECTORY", outputDir.FullName);
 
         var processInfo = new ProcessStartInfo
         {

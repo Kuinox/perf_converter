@@ -1,6 +1,5 @@
 using System.Text;
 using Google.Protobuf;
-using PerfConverter.PerfStructs;
 using Perfetto.Protos;
 using Plank.Reading;
 using Plank.Schema;
@@ -16,6 +15,7 @@ public sealed class Processor : IDisposable
     readonly CodedOutputStream _output;
     readonly Dictionary<ulong, SourceLocationInfo> _sourceLocations = [];
     readonly HashSet<ulong> _writtenProcessTracks = [];
+    readonly HashSet<ulong> _writtenDepthTracks = [];
     bool _disposed;
 
     public Processor(Stream output)
@@ -23,15 +23,37 @@ public sealed class Processor : IDisposable
         _output = new CodedOutputStream(output, leaveOpen: true);
     }
 
-    public async Task ProcessAsync(string inputDirectory)
+    public Task ProcessAsync(string inputDirectory)
     {
         LoadSourceLocations(inputDirectory);
 
-        var pidDirectories = GetPidDirectories(inputDirectory);
-        foreach (var pidDirectory in pidDirectories)
-            await ProcessPidDirectoryAsync(pidDirectory).ConfigureAwait(false);
+        var stackFrameFile = FindStackFrameFile(inputDirectory)
+            ?? throw new FileNotFoundException(
+                "Could not find stack_frames.parquet. Run StackFixer before PerfToPerfetto.",
+                Path.Combine(inputDirectory, "stack_frames.parquet"));
+
+        var threadInfos = DiscoverThreadInfos(inputDirectory);
+        foreach (var info in threadInfos.Values.OrderBy(static info => info.Pid).ThenBy(static info => info.Tid))
+        {
+            WriteProcessTrack(info.Pid);
+            WriteThreadTrack(info.Pid, info.Tid, info.TrackUuid, info.ThreadName);
+        }
+
+        foreach (var group in StackFrameParquetReader.ReadRows(stackFrameFile).GroupBy(static row => row.Tid).OrderBy(static group => group.Key))
+        {
+            if (!threadInfos.TryGetValue(group.Key, out var info))
+            {
+                info = new ThreadInfo(0, group.Key, [], ThreadTrackUuid(0, group.Key), $"Thread {group.Key}");
+                WriteProcessTrack(info.Pid);
+                WriteThreadTrack(info.Pid, info.Tid, info.TrackUuid, info.ThreadName);
+            }
+
+            Console.WriteLine($"Writing Perfetto stack slices for tid={group.Key}...");
+            WriteStackFrames(info, group);
+        }
 
         _output.Flush();
+        return Task.CompletedTask;
     }
 
     public void Dispose()
@@ -44,73 +66,47 @@ public sealed class Processor : IDisposable
         _disposed = true;
     }
 
-    async Task ProcessPidDirectoryAsync(string pidDirectory)
+    void WriteStackFrames(ThreadInfo info, IEnumerable<StackFrameRow> frames)
     {
-        var pid = ParsePrefixedUInt(Path.GetFileName(pidDirectory), "pid=");
-        WriteProcessTrack(pid);
-
-        var threadDirectories = Directory.EnumerateDirectories(pidDirectory, "tid=*")
-            .OrderBy(static path => ParsePrefixedUInt(Path.GetFileName(path), "tid="))
-            .ToArray();
-
-        foreach (var threadDirectory in threadDirectories)
-            await ProcessThreadDirectoryAsync(pid, threadDirectory).ConfigureAwait(false);
-    }
-
-    async Task ProcessThreadDirectoryAsync(uint pid, string threadDirectory)
-    {
-        var tid = ParsePrefixedUInt(Path.GetFileName(threadDirectory), "tid=");
-        var branchesFiles = Directory.EnumerateFiles(threadDirectory, "branches.parquet")
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        if (branchesFiles.Length == 0)
-            return;
-
-        var trackUuid = ThreadTrackUuid(pid, tid);
-        var threadName = BuildThreadName(tid, branchesFiles);
-        WriteThreadTrack(pid, tid, trackUuid, threadName);
-
-        var state = new ThreadEventState(trackUuid);
-        foreach (var branchesFile in branchesFiles)
+        var endpoints = new List<StackFrameEndpoint>();
+        foreach (var frame in frames)
         {
-            Console.WriteLine($"Processing {branchesFile}...");
-            await ProcessBranchesFileAsync(state, branchesFile).ConfigureAwait(false);
+            var trackUuid = DepthTrackUuid(info.Tid, frame.Depth);
+            WriteDepthTrack(info, frame.Depth, trackUuid);
+            endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
+            endpoints.Add(new StackFrameEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, IsBegin: false, frame));
         }
 
-        state.CloseOpenSlices(this);
-        Console.WriteLine($"Done tid={tid}. Calls: {state.Calls}, Returns: {state.Returns}, Skipped returns: {state.SkippedReturns}");
-    }
-
-    Task ProcessBranchesFileAsync(ThreadEventState state, string traceFile)
-    {
-        foreach (var row in TraceParquetReader.ReadRows(traceFile))
+        endpoints.Sort(static (left, right) =>
         {
-            state.LastTimestamp = row.Time;
+            var compare = left.Time.CompareTo(right.Time);
+            if (compare != 0)
+                return compare;
 
-            var flags = row.Flags;
-            if ((flags & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0)
-            {
-                state.Calls++;
-                state.OpenDepth++;
-                WriteTrackEvent(row, state.TrackUuid, TrackEvent.Types.Type.SliceBegin);
-            }
+            compare = left.Trace.CompareTo(right.Trace);
+            if (compare != 0)
+                return compare;
 
-            if ((flags & (uint)DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0)
-            {
-                state.Returns++;
-                if (state.OpenDepth == 0)
-                {
-                    state.SkippedReturns++;
-                    continue;
-                }
+            if (left.Frame.FrameId == right.Frame.FrameId && left.IsBegin != right.IsBegin)
+                return left.IsBegin ? -1 : 1;
 
-                state.OpenDepth--;
-                WriteTrackEvent(row, state.TrackUuid, TrackEvent.Types.Type.SliceEnd);
-            }
+            if (left.IsBegin != right.IsBegin)
+                return left.IsBegin ? 1 : -1;
+
+            compare = left.Depth.CompareTo(right.Depth);
+            if (compare != 0)
+                return compare;
+
+            return left.Frame.FrameId.CompareTo(right.Frame.FrameId);
+        });
+
+        foreach (var endpoint in endpoints)
+        {
+            WriteTrackEvent(
+                endpoint.Frame,
+                DepthTrackUuid(info.Tid, endpoint.Frame.Depth),
+                endpoint.IsBegin ? TrackEvent.Types.Type.SliceBegin : TrackEvent.Types.Type.SliceEnd);
         }
-
-        return Task.CompletedTask;
     }
 
     void WriteProcessTrack(uint pid)
@@ -127,7 +123,7 @@ public sealed class Processor : IDisposable
                 Process = new ProcessDescriptor
                 {
                     Pid = (int)pid,
-                    ProcessName = $"Process {pid}"
+                    ProcessName = pid == 0 ? "Unknown process" : $"Process {pid}"
                 }
             }
         });
@@ -152,7 +148,23 @@ public sealed class Processor : IDisposable
         });
     }
 
-    void WriteTrackEvent(TraceRow row, ulong trackUuid, TrackEvent.Types.Type type)
+    void WriteDepthTrack(ThreadInfo info, uint depth, ulong trackUuid)
+    {
+        if (!_writtenDepthTracks.Add(trackUuid))
+            return;
+
+        WritePacket(new TracePacket
+        {
+            TrackDescriptor = new TrackDescriptor
+            {
+                Uuid = trackUuid,
+                ParentUuid = info.TrackUuid,
+                Name = $"depth {depth}"
+            }
+        });
+    }
+
+    void WriteTrackEvent(StackFrameRow row, ulong trackUuid, TrackEvent.Types.Type type)
     {
         var trackEvent = new TrackEvent
         {
@@ -162,14 +174,14 @@ public sealed class Processor : IDisposable
 
         if (type == TrackEvent.Types.Type.SliceBegin)
         {
-            trackEvent.Name = GetEventName(row);
-            if (GetBestSourceLocation(row) is { } sourceLocation)
+            trackEvent.Name = GetEventName(row.LocationId);
+            if (GetSourceLocation(row.LocationId) is { } sourceLocation)
                 trackEvent.SourceLocation = sourceLocation;
         }
 
         WritePacket(new TracePacket
         {
-            Timestamp = row.Time,
+            Timestamp = type == TrackEvent.Types.Type.SliceBegin ? row.StartTime : row.EndTime,
             TrackEvent = trackEvent,
             TrustedPacketSequenceId = checked((uint)(trackUuid & uint.MaxValue))
         });
@@ -181,72 +193,24 @@ public sealed class Processor : IDisposable
         _output.WriteMessage(packet);
     }
 
-    SourceLocation? GetBestSourceLocation(TraceRow row)
+    SourceLocation? GetSourceLocation(ulong locationId)
     {
-        if (row.AddressLocationId != 0 && _sourceLocations.TryGetValue(row.AddressLocationId, out var addressLocation))
-            return addressLocation.ToPerfettoSourceLocation();
-
-        if (row.IpLocationId != 0 && _sourceLocations.TryGetValue(row.IpLocationId, out var ipLocation))
-            return ipLocation.ToPerfettoSourceLocation();
+        if (locationId != 0 && _sourceLocations.TryGetValue(locationId, out var location))
+            return location.ToPerfettoSourceLocation();
 
         return null;
     }
 
-    string GetEventName(TraceRow row)
-    {
-        if (TryGetLocationName(row.AddressLocationId, out var addressLocationName))
-            return addressLocationName;
-
-        var addressSymbol = BytesToString(row.AddressSym);
-        if (!string.IsNullOrEmpty(addressSymbol))
-            return addressSymbol;
-
-        if (row.Addr != 0)
-            return $"target@0x{row.Addr:x}";
-
-        if (TryGetLocationName(row.IpLocationId, out var ipLocationName))
-            return ipLocationName;
-
-        var ipSymbol = BytesToString(row.IpSym);
-        if (!string.IsNullOrEmpty(ipSymbol))
-            return ipSymbol;
-
-        if (row.Ip != 0)
-            return $"ip@0x{row.Ip:x}";
-
-        return BytesToString(row.Event) ?? "Unknown";
-    }
-
-    bool TryGetLocationName(ulong locationId, out string name)
+    string GetEventName(ulong locationId)
     {
         if (locationId != 0 && _sourceLocations.TryGetValue(locationId, out var location))
         {
-            name = location.GetDisplayName();
-            return !string.IsNullOrEmpty(name);
+            var name = location.GetDisplayName();
+            if (!string.IsNullOrEmpty(name))
+                return name;
         }
 
-        name = string.Empty;
-        return false;
-    }
-
-    string BuildThreadName(uint tid, IReadOnlyList<string> traceFiles)
-    {
-        var comms = new List<string>();
-        foreach (var traceFile in traceFiles)
-        {
-            foreach (var (ipComm, addressComm) in TraceParquetReader.ReadComms(traceFile))
-            {
-                var comm = BytesToString(ipComm) ?? BytesToString(addressComm);
-                if (string.IsNullOrEmpty(comm) || comms.LastOrDefault() == comm)
-                    continue;
-
-                comms.Add(comm);
-                if (comms.Count == MaxThreadNameParts)
-                    return string.Join(" -> ", comms);
-            }
-        }
-
-        return comms.Count == 0 ? $"Thread {tid}" : string.Join(" -> ", comms);
+        return locationId == 0 ? "Unknown" : $"location:{locationId}";
     }
 
     void LoadSourceLocations(string inputDirectory)
@@ -266,33 +230,86 @@ public sealed class Processor : IDisposable
             return path;
 
         var directory = new DirectoryInfo(inputDirectory);
-        if (directory.Name.StartsWith("pid=", StringComparison.Ordinal) && directory.Parent is not null)
+        while (directory.Parent is not null)
         {
             path = Path.Combine(directory.Parent.FullName, "source_locations.parquet");
             if (File.Exists(path))
                 return path;
+            directory = directory.Parent;
         }
 
         return null;
     }
 
-    static string[] GetPidDirectories(string inputDirectory)
+    static string? FindStackFrameFile(string inputDirectory)
     {
-        var directory = new DirectoryInfo(inputDirectory);
-        if (directory.Name.StartsWith("pid=", StringComparison.Ordinal))
-            return [directory.FullName];
+        var path = Path.Combine(inputDirectory, "stack_frames.parquet");
+        if (File.Exists(path))
+            return path;
 
-        return Directory.EnumerateDirectories(inputDirectory, "pid=*")
-            .OrderBy(static path => ParsePrefixedUInt(Path.GetFileName(path), "pid="))
-            .ToArray();
+        var directory = new DirectoryInfo(inputDirectory);
+        while (directory.Parent is not null)
+        {
+            path = Path.Combine(directory.Parent.FullName, "stack_frames.parquet");
+            if (File.Exists(path))
+                return path;
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
-    static uint ParsePrefixedUInt(string? value, string prefix)
+    Dictionary<uint, ThreadInfo> DiscoverThreadInfos(string inputDirectory)
+    {
+        var result = new Dictionary<uint, ThreadInfo>();
+
+        foreach (var group in Directory.EnumerateFiles(inputDirectory, "branches.parquet", SearchOption.AllDirectories)
+                     .Select(path => new
+                     {
+                         Path = path,
+                         Tid = TryParsePrefixedUInt(new DirectoryInfo(Path.GetDirectoryName(path)!).Name, "tid="),
+                         Pid = TryParsePrefixedUInt(new DirectoryInfo(Path.GetDirectoryName(path)!).Parent?.Name, "pid=")
+                     })
+                     .Where(static item => item.Tid.HasValue)
+                     .GroupBy(static item => item.Tid!.Value)
+                     .OrderBy(static group => group.Key))
+        {
+            var branchFiles = group.Select(static item => item.Path).Order(StringComparer.Ordinal).ToArray();
+            var pid = group.Select(static item => item.Pid).FirstOrDefault(static pid => pid.HasValue) ?? 0;
+            var tid = group.Key;
+            var threadName = BuildThreadName(tid, branchFiles);
+            result[tid] = new ThreadInfo(pid, tid, branchFiles, ThreadTrackUuid(pid, tid), threadName);
+        }
+
+        return result;
+    }
+
+    string BuildThreadName(uint tid, IReadOnlyList<string> traceFiles)
+    {
+        var comms = new List<string>();
+        foreach (var traceFile in traceFiles)
+        {
+            foreach (var (ipComm, addressComm) in TraceParquetReader.TryReadComms(traceFile))
+            {
+                var comm = BytesToString(ipComm) ?? BytesToString(addressComm);
+                if (string.IsNullOrEmpty(comm) || comms.LastOrDefault() == comm)
+                    continue;
+
+                comms.Add(comm);
+                if (comms.Count == MaxThreadNameParts)
+                    return string.Join(" -> ", comms);
+            }
+        }
+
+        return comms.Count == 0 ? $"Thread {tid}" : string.Join(" -> ", comms);
+    }
+
+    static uint? TryParsePrefixedUInt(string? value, string prefix)
     {
         if (value is null || !value.StartsWith(prefix, StringComparison.Ordinal) ||
             !uint.TryParse(value[prefix.Length..], out var parsed))
         {
-            throw new InvalidDataException($"Expected directory name '{prefix}<number>', got '{value}'.");
+            return null;
         }
 
         return parsed;
@@ -303,6 +320,9 @@ public sealed class Processor : IDisposable
 
     static ulong ThreadTrackUuid(uint pid, uint tid)
         => 0x2000_0000_0000_0000UL | ((ulong)pid << 32) | tid;
+
+    static ulong DepthTrackUuid(uint tid, uint depth)
+        => 0x3000_0000_0000_0000UL | ((ulong)tid << 24) | (depth & 0x00ff_ffff);
 
     static string? BytesToString(byte[]? bytes)
     {
@@ -325,21 +345,31 @@ public sealed class Processor : IDisposable
         return [.. values];
     }
 
-    readonly record struct TraceRow(
-        ulong Id,
-        uint Pid,
+    static void ValidateRowGroupLengths(string path, int expected, params Array[] values)
+    {
+        foreach (var value in values)
+            ValidateLength(path, expected, value.Length);
+    }
+
+    static void ValidateLength(string path, int expected, int actual)
+    {
+        if (actual != expected)
+            throw new InvalidDataException($"Parquet column length mismatch in '{path}'. Expected {expected}, got {actual}.");
+    }
+
+    readonly record struct ThreadInfo(uint Pid, uint Tid, IReadOnlyList<string> BranchFiles, ulong TrackUuid, string ThreadName);
+
+    readonly record struct StackFrameRow(
+        ulong FrameId,
         uint Tid,
-        ulong Time,
-        uint Flags,
-        ulong Ip,
-        ulong IpLocationId,
-        ulong Addr,
-        ulong AddressLocationId,
-        byte[] Event,
-        byte[]? IpSym,
-        byte[]? IpComm,
-        byte[]? AddressSym,
-        byte[]? AddressComm);
+        uint Depth,
+        ulong StartTime,
+        ulong EndTime,
+        ulong StartTrace,
+        ulong EndTrace,
+        ulong LocationId);
+
+    readonly record struct StackFrameEndpoint(ulong Time, ulong Trace, uint Depth, bool IsBegin, StackFrameRow Frame);
 
     sealed record SourceLocationInfo(
         ulong Id,
@@ -380,55 +410,46 @@ public sealed class Processor : IDisposable
         }
     }
 
-    sealed class ThreadEventState(ulong trackUuid)
+    static class StackFrameParquetReader
     {
-        public ulong TrackUuid { get; } = trackUuid;
-        public int OpenDepth { get; set; }
-        public int Calls { get; set; }
-        public int Returns { get; set; }
-        public int SkippedReturns { get; set; }
-        public ulong LastTimestamp { get; set; }
-
-        public void CloseOpenSlices(Processor processor)
+        public static IEnumerable<StackFrameRow> ReadRows(string path)
         {
-            while (OpenDepth > 0)
+            using var stream = File.OpenRead(path);
+            using var reader = StackFrameRowSchema.Schema.CreateReader(stream);
+
+            foreach (var token in reader.EnumerateRowGroups())
             {
-                OpenDepth--;
-                processor.WritePacket(new TracePacket
+                using var rowGroup = reader.OpenRowGroup(stream, token);
+                var frameIds = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[0]);
+                var tids = ReadColumn<uint>(rowGroup, StackFrameRowSchema.Schema.Columns[1]);
+                var depths = ReadColumn<uint>(rowGroup, StackFrameRowSchema.Schema.Columns[2]);
+                var startTimes = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[3]);
+                var endTimes = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[4]);
+                var startTraces = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[5]);
+                var endTraces = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[6]);
+                var locationIds = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[7]);
+
+                ValidateRowGroupLengths(path, frameIds.Length, tids, depths, startTimes, endTimes, startTraces, endTraces, locationIds);
+
+                for (var i = 0; i < frameIds.Length; i++)
                 {
-                    Timestamp = LastTimestamp,
-                    TrackEvent = new TrackEvent
-                    {
-                        Type = TrackEvent.Types.Type.SliceEnd,
-                        TrackUuid = TrackUuid
-                    },
-                    TrustedPacketSequenceId = checked((uint)(TrackUuid & uint.MaxValue))
-                });
+                    yield return new StackFrameRow(
+                        FrameId: frameIds[i],
+                        Tid: tids[i],
+                        Depth: depths[i],
+                        StartTime: startTimes[i],
+                        EndTime: endTimes[i],
+                        StartTrace: startTraces[i],
+                        EndTrace: endTraces[i],
+                        LocationId: locationIds[i]);
+                }
             }
         }
     }
 
     static class TraceParquetReader
     {
-        public static IEnumerable<(byte[]? IpComm, byte[]? AddressComm)> ReadComms(string path)
-        {
-            using var stream = File.OpenRead(path);
-            using var reader = TraceSampleRowSchema.Schema.CreateReader(stream);
-
-            foreach (var token in reader.EnumerateRowGroups())
-            {
-                using var rowGroup = reader.OpenRowGroup(stream, token);
-                var ipComms = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[32]);
-                var addressComms = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[44]);
-
-                ValidateRowGroupLengths(path, ipComms.Length, addressComms);
-
-                for (var i = 0; i < ipComms.Length; i++)
-                    yield return (ipComms[i], addressComms[i]);
-            }
-        }
-
-        public static IEnumerable<TraceRow> ReadRows(string path)
+        public static IEnumerable<(byte[]? IpComm, byte[]? AddressComm)> TryReadComms(string path)
         {
             using var stream = File.OpenRead(path);
             using var reader = TraceSampleRowSchema.Schema.CreateReader(stream);
@@ -437,42 +458,25 @@ public sealed class Processor : IDisposable
             {
                 using var rowGroup = reader.OpenRowGroup(stream, token);
                 var ids = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[0]);
-                var pids = ReadColumn<uint>(rowGroup, TraceSampleRowSchema.Schema.Columns[2]);
-                var tids = ReadColumn<uint>(rowGroup, TraceSampleRowSchema.Schema.Columns[3]);
-                var times = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[4]);
-                var flags = ReadColumn<uint>(rowGroup, TraceSampleRowSchema.Schema.Columns[6]);
-                var ips = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[7]);
-                var ipLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[8]);
-                var addrs = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[9]);
-                var addressLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[10]);
-                var events = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[17]);
-                var ipSymbols = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[23]);
-                var ipComms = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[32]);
-                var addressSymbols = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[35]);
-                var addressComms = ReadColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[44]);
-
-                ValidateRowGroupLengths(path, ids.Length, pids, tids, times, flags, ips, ipLocationIds, addrs,
-                    addressLocationIds, events, ipSymbols, ipComms, addressSymbols, addressComms);
+                var ipComms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[32], ids.Length);
+                var addressComms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[44], ids.Length);
 
                 for (var i = 0; i < ids.Length; i++)
-                {
-                    yield return new TraceRow(
-                        Id: ids[i],
-                        Pid: pids[i],
-                        Tid: tids[i],
-                        Time: times[i],
-                        Flags: flags[i],
-                        Ip: ips[i],
-                        IpLocationId: ipLocationIds[i],
-                        Addr: addrs[i],
-                        AddressLocationId: addressLocationIds[i],
-                        Event: events[i],
-                        IpSym: ipSymbols[i],
-                        IpComm: ipComms[i],
-                        AddressSym: addressSymbols[i],
-                        AddressComm: addressComms[i]);
-                }
+                    yield return (ipComms[i], addressComms[i]);
             }
+        }
+
+        static T?[] ReadOptionalColumn<T>(RowGroupReader rowGroup, Column column, int expected)
+            where T : class
+        {
+            var values = ReadColumn<T>(rowGroup, column);
+            if (values.Length == expected)
+                return values;
+
+            if (values.Length == 0)
+                return new T?[expected];
+
+            return new T?[expected];
         }
     }
 
@@ -507,69 +511,5 @@ public sealed class Processor : IDisposable
                 }
             }
         }
-    }
-
-    static void ValidateRowGroupLengths<T1>(string path, int expected, T1[] values)
-        => ValidateLength(path, expected, values.Length);
-
-    static void ValidateRowGroupLengths<T1, T2, T3>(string path, int expected, T1[] v1, T2[] v2, T3[] v3)
-    {
-        ValidateLength(path, expected, v1.Length);
-        ValidateLength(path, expected, v2.Length);
-        ValidateLength(path, expected, v3.Length);
-    }
-
-    static void ValidateRowGroupLengths<T1, T2, T3, T4, T5>(
-        string path,
-        int expected,
-        T1[] v1,
-        T2[] v2,
-        T3[] v3,
-        T4[] v4,
-        T5[] v5)
-    {
-        ValidateLength(path, expected, v1.Length);
-        ValidateLength(path, expected, v2.Length);
-        ValidateLength(path, expected, v3.Length);
-        ValidateLength(path, expected, v4.Length);
-        ValidateLength(path, expected, v5.Length);
-    }
-
-    static void ValidateRowGroupLengths<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13>(
-        string path,
-        int expected,
-        T1[] v1,
-        T2[] v2,
-        T3[] v3,
-        T4[] v4,
-        T5[] v5,
-        T6[] v6,
-        T7[] v7,
-        T8[] v8,
-        T9[] v9,
-        T10[] v10,
-        T11[] v11,
-        T12[] v12,
-        T13[] v13)
-    {
-        ValidateLength(path, expected, v1.Length);
-        ValidateLength(path, expected, v2.Length);
-        ValidateLength(path, expected, v3.Length);
-        ValidateLength(path, expected, v4.Length);
-        ValidateLength(path, expected, v5.Length);
-        ValidateLength(path, expected, v6.Length);
-        ValidateLength(path, expected, v7.Length);
-        ValidateLength(path, expected, v8.Length);
-        ValidateLength(path, expected, v9.Length);
-        ValidateLength(path, expected, v10.Length);
-        ValidateLength(path, expected, v11.Length);
-        ValidateLength(path, expected, v12.Length);
-        ValidateLength(path, expected, v13.Length);
-    }
-
-    static void ValidateLength(string path, int expected, int actual)
-    {
-        if (actual != expected)
-            throw new InvalidDataException($"Parquet column length mismatch in '{path}'. Expected {expected}, got {actual}.");
     }
 }
