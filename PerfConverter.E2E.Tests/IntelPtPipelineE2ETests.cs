@@ -109,6 +109,7 @@ public sealed class IntelPtPipelineE2ETests
         var sampledStacks = ParseSampledStacks(sampledScript.StandardOutput, target.ExpectedSymbols);
         var sampledReportPath = WriteSampledStackReport(target, sampledStacks, stackFrames, sourceLocations);
         TestContext.AddTestAttachment(sampledReportPath, $"{target.Name} sampled stack comparison");
+        CopyInspectionArtifacts(repoRoot, target, sampledReportPath, tracePath);
 
         Assert.That(stackFrames, Is.Not.Empty);
         Assert.That(new FileInfo(tracePath).Length, Is.GreaterThan(0));
@@ -322,6 +323,14 @@ public sealed class IntelPtPipelineE2ETests
         }
 
         return path;
+    }
+
+    static void CopyInspectionArtifacts(string repoRoot, IntelPtTarget target, string sampledReportPath, string tracePath)
+    {
+        var outputDirectory = Path.Combine(repoRoot, "artifacts", "perfconverter-e2e-reports", target.Name);
+        Directory.CreateDirectory(outputDirectory);
+        File.Copy(sampledReportPath, Path.Combine(outputDirectory, Path.GetFileName(sampledReportPath)), overwrite: true);
+        File.Copy(tracePath, Path.Combine(outputDirectory, "trace.perfetto-trace"), overwrite: true);
     }
 
     static IReadOnlyList<StackFrame?> FindRepresentativeReconstructedStack(

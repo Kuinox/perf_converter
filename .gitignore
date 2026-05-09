@@ -22,3 +22,4 @@ dotnet-sdk-*.tar.gz
 /parquet_output/
 /.nuget
 /.dotnet
+artifacts
