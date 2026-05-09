@@ -179,6 +179,19 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
 
         TraceClips++;
         state.TraceActive = false;
+        CloseActiveIntervals(state, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.TraceEnd);
+
+        for (var i = 0; i < state.OpenFrames.Count; i++)
+        {
+            var frame = state.OpenFrames[i];
+            state.OpenFrames[i] = frame with
+            {
+                ActiveStartTime = row.Time,
+                ActiveStartTrace = row.Id,
+                ActiveStartCpu = row.Cpu,
+                StartReason = StackFrameBoundaryReason.TraceResume
+            };
+        }
     }
 
     void CloseActiveIntervals(

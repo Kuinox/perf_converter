@@ -84,6 +84,99 @@ public sealed class PerfettoSliceOrderingTests
     }
 
     [Test]
+    public void SortedEndpointsFollowStackDepths()
+    {
+        var frames = new[]
+        {
+            new Processor.StackFrameRow(
+                FrameId: 1,
+                Tid: 42,
+                Depth: 0,
+                StartTime: 10,
+                EndTime: 30,
+                StartTrace: 1,
+                EndTrace: 6,
+                LocationId: 100,
+                StartReason: StackFrameBoundaryReason.Call,
+                EndReason: StackFrameBoundaryReason.Return),
+            new Processor.StackFrameRow(
+                FrameId: 2,
+                Tid: 42,
+                Depth: 1,
+                StartTime: 11,
+                EndTime: 20,
+                StartTrace: 2,
+                EndTrace: 3,
+                LocationId: 101,
+                StartReason: StackFrameBoundaryReason.Call,
+                EndReason: StackFrameBoundaryReason.Return),
+            new Processor.StackFrameRow(
+                FrameId: 3,
+                Tid: 42,
+                Depth: 1,
+                StartTime: 21,
+                EndTime: 29,
+                StartTrace: 4,
+                EndTrace: 5,
+                LocationId: 102,
+                StartReason: StackFrameBoundaryReason.Call,
+                EndReason: StackFrameBoundaryReason.Return),
+        };
+
+        AssertPerfettoStackDepths(Processor.CreateStackFrameEndpoints(frames));
+    }
+
+    [Test]
+    public void DetectsFrameBeginningAtImpossibleDepth()
+    {
+        var frames = new[]
+        {
+            new Processor.StackFrameRow(
+                FrameId: 1,
+                Tid: 42,
+                Depth: 2,
+                StartTime: 10,
+                EndTime: 30,
+                StartTrace: 1,
+                EndTrace: 4,
+                LocationId: 100,
+                StartReason: StackFrameBoundaryReason.Call,
+                EndReason: StackFrameBoundaryReason.Return),
+            new Processor.StackFrameRow(
+                FrameId: 2,
+                Tid: 42,
+                Depth: 4,
+                StartTime: 11,
+                EndTime: 20,
+                StartTrace: 2,
+                EndTrace: 3,
+                LocationId: 101,
+                StartReason: StackFrameBoundaryReason.Call,
+                EndReason: StackFrameBoundaryReason.Return),
+        };
+
+        Assert.Throws<AssertionException>(() => AssertPerfettoStackDepths(Processor.CreateStackFrameEndpoints(frames)));
+    }
+
+    [Test]
+    public void AllowsVisibleSegmentToStartAtNonZeroRawDepth()
+    {
+        var frame = new Processor.StackFrameRow(
+            FrameId: 1,
+            Tid: 42,
+            Depth: 2,
+            StartTime: 10,
+            EndTime: 20,
+            StartTrace: 1,
+            EndTrace: 2,
+            LocationId: 100,
+            StartReason: StackFrameBoundaryReason.Call,
+            EndReason: StackFrameBoundaryReason.Return);
+
+        AssertPerfettoStackDepths(Processor.CreateStackFrameEndpoints([frame]));
+    }
+
+    [Test]
     public void SyntheticFrameEndIsLeftOpenForPerfetto()
     {
         var frame = new Processor.StackFrameRow(
@@ -161,5 +254,35 @@ public sealed class PerfettoSliceOrderingTests
         var name = Processor.GetAuxLossMarkerName(row);
 
         Assert.That(name, Is.EqualTo("AUX loss tid=300 cpu=4 flags=0x20"));
+    }
+
+    static void AssertPerfettoStackDepths(IReadOnlyList<Processor.StackFrameEndpoint> endpoints)
+    {
+        var stack = new Stack<ulong>();
+        uint? visibleDepthBase = null;
+        foreach (var endpoint in endpoints)
+        {
+            if (stack.Count == 0 && endpoint.IsBegin)
+                visibleDepthBase = endpoint.Depth;
+
+            var visibleDepth = visibleDepthBase.HasValue && endpoint.Depth >= visibleDepthBase.Value
+                ? endpoint.Depth - visibleDepthBase.Value
+                : endpoint.Depth;
+
+            if (endpoint.IsBegin)
+            {
+                Assert.That(visibleDepth, Is.EqualTo((uint)stack.Count));
+                stack.Push(endpoint.Frame.FrameId);
+                continue;
+            }
+
+            Assert.That(stack, Is.Not.Empty);
+            Assert.That(visibleDepth, Is.EqualTo((uint)(stack.Count - 1)));
+            Assert.That(stack.Pop(), Is.EqualTo(endpoint.Frame.FrameId));
+            if (stack.Count == 0)
+                visibleDepthBase = null;
+        }
+
+        Assert.That(stack, Is.Empty);
     }
 }
