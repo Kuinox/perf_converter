@@ -6,11 +6,24 @@ static class AuxDataExtractor
 {
     public static void Process(string inputPath, Action<AuxDataEntry?> onEntry)
     {
+        var perfDataPath = ResolvePerfDataFile(inputPath);
         using var reader = new PerfDataFileReader();
-        if (!reader.OpenFile(inputPath, PerfDataFileEventOrder.File))
-            throw new InvalidDataException($"Failed to open perf data file: {inputPath}");
+        if (!reader.OpenFile(perfDataPath, PerfDataFileEventOrder.File))
+            throw new InvalidDataException($"Failed to open perf data file: {perfDataPath}");
 
         ProcessEvents(reader, onEntry);
+    }
+
+    static string ResolvePerfDataFile(string inputPath)
+    {
+        if (File.Exists(inputPath))
+            return inputPath;
+
+        if (!Directory.Exists(inputPath))
+            return inputPath;
+
+        var dataPath = Path.Combine(inputPath, "data");
+        return File.Exists(dataPath) ? dataPath : inputPath;
     }
 
     static void ProcessEvents(PerfDataFileReader reader, Action<AuxDataEntry?> onEntry)
