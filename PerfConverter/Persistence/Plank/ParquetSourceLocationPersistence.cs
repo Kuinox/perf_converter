@@ -19,6 +19,8 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
     readonly Dictionary<LocationKey, SourceLocationEntry> _entriesByKey = [];
     readonly List<SourceLocationEntry> _entries = [];
     readonly LlvmSourceLineResolver _sourceLineResolver = new();
+    readonly SymbolNameResolver _symbolNameResolver = new();
+    readonly object _gate = new();
     ulong _nextId = 1;
     bool _disposed;
 
@@ -34,39 +36,41 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         if (location == null)
             return 0;
 
-        var buildId = location.BuildId;
-        var dso = location.Dso;
-        ReadOnlyMemory<byte>? symbol = location.Symbol.IsEmpty ? null : location.Symbol;
-        var key = new LocationKey(
-            ToKeyString(buildId),
-            ToKeyString(dso),
-            location.Address,
-            ToKeyString(symbol.GetValueOrDefault()));
+        lock (_gate)
+        {
+            var buildId = location.BuildId;
+            var dso = location.Dso;
+            var key = new LocationKey(
+                ToKeyString(buildId),
+                ToKeyString(dso),
+                location.Address);
 
-        if (_entriesByKey.TryGetValue(key, out var existing))
-            return existing.Id;
+            if (_entriesByKey.TryGetValue(key, out var existing))
+                return existing.Id;
 
-        var sourceLine = _sourceLineResolver.Resolve(dso, location.Address);
-        var entry = new SourceLocationEntry(
-            Id: _nextId++,
-            BuildId: buildId,
-            Dso: dso,
-            RelativeAddress: location.Address,
-            Symbol: symbol,
-            SymbolOffset: location.Symoff,
-            SymbolStart: location.SymbolStart,
-            SymbolEnd: location.SymbolEnd,
-            SourceFileName: GetNullableUtf8(sourceLine.FileName),
-            SourceLineNumber: sourceLine.LineNumber,
-            SourceColumnNumber: sourceLine.ColumnNumber,
-            InlineDepth: sourceLine.InlineDepth,
-            KeyStrength: GetKeyStrength(buildId, dso),
-            IsKernelIp: location.IsKernelIp);
+            var sourceLine = _sourceLineResolver.Resolve(dso, location.Address);
+            var symbol = GetSymbol(dso, location);
+            var entry = new SourceLocationEntry(
+                Id: _nextId++,
+                BuildId: buildId,
+                Dso: dso,
+                RelativeAddress: location.Address,
+                Symbol: symbol,
+                SymbolOffset: location.Symoff,
+                SymbolStart: location.SymbolStart,
+                SymbolEnd: location.SymbolEnd,
+                SourceFileName: GetNullableUtf8(sourceLine.FileName),
+                SourceLineNumber: sourceLine.LineNumber,
+                SourceColumnNumber: sourceLine.ColumnNumber,
+                InlineDepth: sourceLine.InlineDepth,
+                KeyStrength: GetKeyStrength(buildId, dso),
+                IsKernelIp: location.IsKernelIp);
 
-        _entriesByKey.Add(key, entry);
-        _entries.Add(entry);
-        _onBuffered?.Invoke(1);
-        return entry.Id;
+            _entriesByKey.Add(key, entry);
+            _entries.Add(entry);
+            _onBuffered?.Invoke(1);
+            return entry.Id;
+        }
     }
 
     public void Dispose()
@@ -75,7 +79,6 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
             return;
 
         _sourceLineResolver.Dispose();
-        _entries.Sort(SourceLocationEntryComparer.Instance);
 
         using var fileStream = new FileStream(_filePath, FileMode.Create, FileAccess.ReadWrite);
         var writer = SourceLocationRowSchema.CreateRowWriter(fileStream, _onFlush, ParquetPersistenceOptions.WriterOptions);
@@ -118,6 +121,15 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         return EntryContentPool.Shared.GetByteMemory(Encoding.UTF8.GetBytes(value));
     }
 
+    ReadOnlyMemory<byte>? GetSymbol(ReadOnlyMemory<byte> dso, ResolvedLocation location)
+    {
+        var symbolName = _symbolNameResolver.Resolve(dso, location.Address);
+        if (!string.IsNullOrEmpty(symbolName))
+            return GetNullableUtf8(symbolName);
+
+        return location.Symbol.IsEmpty ? null : location.Symbol;
+    }
+
     static byte GetKeyStrength(ReadOnlyMemory<byte> buildId, ReadOnlyMemory<byte> dso)
     {
         if (!buildId.IsEmpty)
@@ -132,8 +144,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
     readonly record struct LocationKey(
         string BuildId,
         string Dso,
-        ulong RelativeAddress,
-        string Symbol);
+        ulong RelativeAddress);
 
     sealed record SourceLocationEntry(
         ulong Id,
@@ -151,36 +162,161 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         byte KeyStrength,
         byte IsKernelIp);
 
-    sealed class SourceLocationEntryComparer : IComparer<SourceLocationEntry>
+    readonly record struct SourceLine(string? FileName, uint LineNumber, uint ColumnNumber, uint InlineDepth);
+
+    sealed class SymbolNameResolver
     {
-        public static SourceLocationEntryComparer Instance { get; } = new();
+        readonly string[] _toolPaths = GetToolPaths();
+        readonly Dictionary<string, SymbolTable?> _tables = new(StringComparer.Ordinal);
+        bool _toolUnavailable;
 
-        public int Compare(SourceLocationEntry? x, SourceLocationEntry? y)
+        public string? Resolve(ReadOnlyMemory<byte> dso, ulong relativeAddress)
         {
-            if (ReferenceEquals(x, y))
-                return 0;
-            if (x is null)
-                return -1;
-            if (y is null)
-                return 1;
+            if (_toolUnavailable || dso.IsEmpty)
+                return null;
 
-            var buildIdComparison = x.BuildId.Span.SequenceCompareTo(y.BuildId.Span);
-            if (buildIdComparison != 0)
-                return buildIdComparison;
+            var dsoPath = Encoding.UTF8.GetString(dso.Span);
+            if (dsoPath.Length == 0 || dsoPath[0] == '[' || !File.Exists(dsoPath))
+                return null;
 
-            var addressComparison = x.RelativeAddress.CompareTo(y.RelativeAddress);
-            if (addressComparison != 0)
-                return addressComparison;
+            if (!_tables.TryGetValue(dsoPath, out var table))
+            {
+                table = LoadTable(dsoPath);
+                _tables.Add(dsoPath, table);
+            }
 
-            var dsoComparison = x.Dso.Span.SequenceCompareTo(y.Dso.Span);
-            if (dsoComparison != 0)
-                return dsoComparison;
+            return table?.Resolve(relativeAddress);
+        }
 
-            return x.Id.CompareTo(y.Id);
+        SymbolTable? LoadTable(string dsoPath)
+        {
+            foreach (var toolPath in _toolPaths)
+            {
+                try
+                {
+                    return SymbolTable.Load(toolPath, dsoPath);
+                }
+                catch (Win32Exception)
+                {
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"SOURCE_LOCATION_SYMBOL_TABLE_FAILED|Tool={toolPath}|Dso={dsoPath}|Error={ex.Message}");
+                    return null;
+                }
+            }
+
+            _toolUnavailable = true;
+            return null;
+        }
+
+        static string[] GetToolPaths()
+        {
+            var configuredTool =
+                Environment.GetEnvironmentVariable("PERFCONVERTER_NM") ??
+                Environment.GetEnvironmentVariable("LLVM_NM") ??
+                Environment.GetEnvironmentVariable("NM");
+
+            return string.IsNullOrWhiteSpace(configuredTool)
+                ? ["llvm-nm", "nm"]
+                : [configuredTool];
         }
     }
 
-    readonly record struct SourceLine(string? FileName, uint LineNumber, uint ColumnNumber, uint InlineDepth);
+    sealed class SymbolTable
+    {
+        readonly SymbolEntry[] _entries;
+
+        SymbolTable(SymbolEntry[] entries)
+            => _entries = entries;
+
+        public string? Resolve(ulong relativeAddress)
+        {
+            var low = 0;
+            var high = _entries.Length - 1;
+            var best = -1;
+
+            while (low <= high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (_entries[middle].Address <= relativeAddress)
+                {
+                    best = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+
+            return best < 0 ? null : _entries[best].Name;
+        }
+
+        public static SymbolTable? Load(string toolPath, string dsoPath)
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = toolPath,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                }
+            };
+
+            process.StartInfo.ArgumentList.Add("-n");
+            process.StartInfo.ArgumentList.Add("--defined-only");
+            process.StartInfo.ArgumentList.Add(dsoPath);
+            process.Start();
+
+            var entries = new List<SymbolEntry>();
+            while (process.StandardOutput.ReadLine() is { } line)
+            {
+                if (TryParseSymbol(line, out var entry))
+                    entries.Add(entry);
+            }
+
+            process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(5000))
+            {
+                process.Kill(entireProcessTree: true);
+                return null;
+            }
+
+            if (process.ExitCode != 0)
+                return null;
+
+            var ordered = entries
+                .GroupBy(static entry => entry.Address)
+                .Select(static group => group.First())
+                .OrderBy(static entry => entry.Address)
+                .ToArray();
+
+            return ordered.Length == 0 ? null : new SymbolTable(ordered);
+        }
+
+        static bool TryParseSymbol(string line, out SymbolEntry entry)
+        {
+            entry = default;
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 3 ||
+                !ulong.TryParse(parts[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var address) ||
+                !IsCodeSymbol(parts[1]))
+            {
+                return false;
+            }
+
+            entry = new SymbolEntry(address, parts[2]);
+            return true;
+        }
+
+        static bool IsCodeSymbol(string type)
+            => type.Length == 1 && type[0] is 'T' or 't' or 'W' or 'w';
+    }
+
+    readonly record struct SymbolEntry(ulong Address, string Name);
 
     sealed class LlvmSourceLineResolver : IDisposable
     {

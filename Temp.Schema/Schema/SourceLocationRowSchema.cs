@@ -17,7 +17,7 @@ public sealed partial class SourceLocationRowSchema
     [ParquetColumn("relativeAddress", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public ulong RelativeAddress { get; set; }
 
-    [ParquetColumn("symbol", Encodings = [EncodingKind.RleDictionary])]
+    [ParquetColumn("symbol", Encodings = [EncodingKind.Plain])]
     public ReadOnlyMemory<byte>? Symbol { get; set; }
 
     [ParquetColumn("symbolOffset", Encodings = [EncodingKind.DeltaBinaryPacked])]
