@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text;
-using PerfToPerfetto;
 using Plank.Reading;
 using Plank.Schema;
 using Temp.Schema;
@@ -9,54 +8,148 @@ using Temp.Schema.Schema;
 namespace PerfConverter.E2E.Tests;
 
 [Category("E2E")]
-public sealed class RemoteIntelPtPipelineE2ETests
+public sealed class IntelPtPipelineE2ETests
 {
     [Test]
     public async Task IntelPtPipeline_ReconstructsKnownCStack()
     {
-        var settings = RemoteSettings.FromEnvironment();
-        if (!settings.Enabled)
-            Assert.Ignore("Set PERFCONVERTER_E2E_ENABLE_REMOTE=1 to run the remote Intel PT E2E test.");
+        await RequireLinuxToolingAsync();
 
-        using var local = new LocalTempDirectory("perfconverter-e2e-");
-        var localOutputPath = Path.Combine(local.Path, "parquet_output");
-        var localTracePath = Path.Combine(local.Path, "trace.perfetto-trace");
+        var repoRoot = FindRepoRoot();
+        using var work = new LocalTempDirectory("perfconverter-e2e-");
+        var targetSource = Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", "e2e_stack_target.c");
+        var targetBinary = Path.Combine(work.Path, "e2e_stack_target");
+        var perfData = Path.Combine(work.Path, "perf.data");
+        var outputPath = Path.Combine(work.Path, "parquet_output");
+        var tracePath = Path.Combine(work.Path, "trace.perfetto-trace");
 
-        await using var remote = await RemoteWorkspace.CreateAsync(settings);
-        await remote.CopyToAsync(Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", "e2e_stack_target.c"), "e2e_stack_target.c");
+        var dlfilterPublish = Path.Combine(work.Path, "tools", "dlfilter");
+        var cliPublish = Path.Combine(work.Path, "tools", "cli");
+        var stackFixerPublish = Path.Combine(work.Path, "tools", "stackfixer");
+        var perfettoPublish = Path.Combine(work.Path, "tools", "perfetto");
 
-        await remote.RunAsync($"""
-            set -euo pipefail
-            repo={QuoteShell(settings.RemoteRepoPath)}
-            work=$(pwd)
-            cd "$repo"
-            dotnet publish PerfConverter/PerfConverter.csproj -c Release -r linux-x64 -p:NativeLib=Shared -p:PublishDir=artifacts/e2e-dlfilter/
-            dlfilter="$(pwd)/PerfConverter/artifacts/e2e-dlfilter/PerfConverter.so"
-            test -s "$dlfilter"
-            dotnet publish CLI/CLI.csproj -c Release -r linux-x64 --self-contained false /p:UseAppHost=false /p:PerfConverterSourcePath="$dlfilter"
-            dotnet publish StackFixer/StackFixer.csproj -c Release -r linux-x64 --self-contained false /p:UseAppHost=false
-            dotnet publish PerfToPerfetto/PerfToPerfetto.csproj -c Release -r linux-x64 --self-contained false /p:UseAppHost=false
-            cd "$work"
-            gcc -O0 -g -fno-omit-frame-pointer -fno-inline -no-pie e2e_stack_target.c -o e2e_stack_target
-            perf record -m 64M -e intel_pt//u -o perf.data -- ./e2e_stack_target
-            dotnet "$repo/CLI/bin/Release/net10.0/linux-x64/publish/CLI.dll" perf.data --output parquet_output --perf-args "-f --itrace=bei0ns --no-inline"
-            dotnet "$repo/StackFixer/bin/Release/net10.0/linux-x64/publish/StackFixer.dll" parquet_output
-            dotnet "$repo/PerfToPerfetto/bin/Release/net10.0/linux-x64/publish/PerfToPerfetto.dll" parquet_output trace.perfetto-trace
-            test -s parquet_output/stack_frames.parquet
-            test -s parquet_output/source_locations.parquet
-            test -s trace.perfetto-trace
-            """, timeout: TimeSpan.FromMinutes(8));
+        await RunAsync("dotnet",
+            [
+                "publish",
+                Path.Combine(repoRoot, "PerfConverter", "PerfConverter.csproj"),
+                "-c", "Release",
+                "-r", "linux-x64",
+                "-p:NativeLib=Shared",
+                $"-p:PublishDir={dlfilterPublish}{Path.DirectorySeparatorChar}"
+            ],
+            repoRoot,
+            TimeSpan.FromMinutes(4));
 
-        await remote.CopyFromAsync("parquet_output", localOutputPath, recursive: true);
-        await remote.CopyFromAsync("trace.perfetto-trace", localTracePath);
+        var dlfilterPath = Path.Combine(dlfilterPublish, "PerfConverter.so");
+        Assert.That(File.Exists(dlfilterPath), Is.True, $"Missing published dlfilter: {dlfilterPath}");
 
-        var stackFrames = StackFrameReader.Read(Path.Combine(localOutputPath, "stack_frames.parquet"));
-        var sourceLocations = SourceLocationReader.Read(Path.Combine(localOutputPath, "source_locations.parquet"));
+        await RunAsync("dotnet",
+            [
+                "publish",
+                Path.Combine(repoRoot, "CLI", "CLI.csproj"),
+                "-c", "Release",
+                "-r", "linux-x64",
+                "--self-contained", "false",
+                "/p:UseAppHost=false",
+                $"/p:PublishDir={cliPublish}{Path.DirectorySeparatorChar}",
+                $"/p:PerfConverterSourcePath={dlfilterPath}"
+            ],
+            repoRoot,
+            TimeSpan.FromMinutes(4));
+
+        await RunAsync("dotnet",
+            [
+                "publish",
+                Path.Combine(repoRoot, "StackFixer", "StackFixer.csproj"),
+                "-c", "Release",
+                "-r", "linux-x64",
+                "--self-contained", "false",
+                "/p:UseAppHost=false",
+                $"/p:PublishDir={stackFixerPublish}{Path.DirectorySeparatorChar}"
+            ],
+            repoRoot,
+            TimeSpan.FromMinutes(4));
+
+        await RunAsync("dotnet",
+            [
+                "publish",
+                Path.Combine(repoRoot, "PerfToPerfetto", "PerfToPerfetto.csproj"),
+                "-c", "Release",
+                "-r", "linux-x64",
+                "--self-contained", "false",
+                "/p:UseAppHost=false",
+                $"/p:PublishDir={perfettoPublish}{Path.DirectorySeparatorChar}"
+            ],
+            repoRoot,
+            TimeSpan.FromMinutes(4));
+
+        await RunAsync(
+            "gcc",
+            ["-O0", "-g", "-fno-omit-frame-pointer", "-fno-inline", "-no-pie", targetSource, "-o", targetBinary],
+            work.Path);
+
+        var perfRecord = await RunAsync(
+            "perf",
+            ["record", "-m", "64M", "-e", "intel_pt//u", "-o", perfData, "--", targetBinary],
+            work.Path,
+            TimeSpan.FromMinutes(2),
+            assertSuccess: false);
+
+        if (perfRecord.ExitCode != 0 && IsPermissionFailure(perfRecord))
+            Assert.Ignore(perfRecord.StandardError);
+        Assert.That(perfRecord.ExitCode, Is.EqualTo(0), perfRecord.StandardError);
+
+        await RunAsync(
+            "dotnet",
+            [
+                Path.Combine(cliPublish, "CLI.dll"),
+                perfData,
+                "--output", outputPath,
+                "--perf-args", "-f --itrace=bei0ns --no-inline"
+            ],
+            work.Path,
+            TimeSpan.FromMinutes(5));
+
+        await RunAsync(
+            "dotnet",
+            [Path.Combine(stackFixerPublish, "StackFixer.dll"), outputPath],
+            work.Path,
+            TimeSpan.FromMinutes(3));
+
+        await RunAsync(
+            "dotnet",
+            [Path.Combine(perfettoPublish, "PerfToPerfetto.dll"), outputPath, tracePath],
+            work.Path,
+            TimeSpan.FromMinutes(3));
+
+        var stackFrames = StackFrameReader.Read(Path.Combine(outputPath, "stack_frames.parquet"));
+        var sourceLocations = SourceLocationReader.Read(Path.Combine(outputPath, "source_locations.parquet"));
 
         Assert.That(stackFrames, Is.Not.Empty);
-        Assert.That(new FileInfo(localTracePath).Length, Is.GreaterThan(0));
+        Assert.That(new FileInfo(tracePath).Length, Is.GreaterThan(0));
         AssertStackEventsAreWellNested(stackFrames);
         AssertKnownCallChainIsNested(stackFrames, sourceLocations);
+    }
+
+    static async Task RequireLinuxToolingAsync()
+    {
+        if (!OperatingSystem.IsLinux())
+            Assert.Ignore("Intel PT E2E tests must run on the Linux perf machine.");
+
+        await RequireCommandAsync("dotnet", ["--info"]);
+        await RequireCommandAsync("gcc", ["--version"]);
+        await RequireCommandAsync("perf", ["--version"]);
+
+        var intelPt = await RunAsync("perf", ["list", "intel_pt"], assertSuccess: false);
+        if (intelPt.ExitCode != 0 || !CombinedOutput(intelPt).Contains("intel_pt", StringComparison.Ordinal))
+            Assert.Ignore("intel_pt is not available on this machine.");
+    }
+
+    static async Task RequireCommandAsync(string fileName, IReadOnlyList<string> arguments)
+    {
+        var result = await RunAsync(fileName, arguments, assertSuccess: false);
+        if (result.ExitCode != 0)
+            Assert.Ignore($"{fileName} is unavailable: {CombinedOutput(result)}");
     }
 
     static void AssertStackEventsAreWellNested(IReadOnlyList<StackFrame> frames)
@@ -170,11 +263,26 @@ public sealed class RemoteIntelPtPipelineE2ETests
         => child.StartTime >= parent.StartTime &&
            child.EndTime <= parent.EndTime;
 
+    static string FindRepoRoot()
+    {
+        var directory = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "PerfConverter.sln")))
+                return directory.FullName;
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate PerfConverter.sln from the test output directory.");
+    }
+
     static async Task<CommandResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         string? workingDirectory = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        bool assertSuccess = true)
     {
         using var process = new Process
         {
@@ -227,7 +335,7 @@ public sealed class RemoteIntelPtPipelineE2ETests
         }
 
         var result = new CommandResult(process.ExitCode, stdout.ToString(), stderr.ToString());
-        if (result.ExitCode != 0)
+        if (assertSuccess && result.ExitCode != 0)
         {
             Assert.Fail($"""
                 Command failed with exit code {result.ExitCode}: {fileName} {string.Join(' ', arguments)}
@@ -256,108 +364,17 @@ public sealed class RemoteIntelPtPipelineE2ETests
         return [.. values];
     }
 
-    readonly record struct RemoteSettings(string Remote, string KeyPath, string RemoteRepoPath, bool Enabled)
+    static bool IsPermissionFailure(CommandResult result)
     {
-        public static RemoteSettings FromEnvironment()
-        {
-            var enabled = Environment.GetEnvironmentVariable("PERFCONVERTER_E2E_ENABLE_REMOTE") == "1";
-            var remote = Environment.GetEnvironmentVariable("PERFCONVERTER_E2E_REMOTE");
-            var keyPath = Environment.GetEnvironmentVariable("PERFCONVERTER_E2E_KEY");
-            var remoteRepoPath = Environment.GetEnvironmentVariable("PERFCONVERTER_E2E_REMOTE_REPO");
-
-            if (!enabled)
-                return new RemoteSettings(string.Empty, string.Empty, string.Empty, Enabled: false);
-
-            if (string.IsNullOrWhiteSpace(remote))
-                Assert.Ignore("Set PERFCONVERTER_E2E_REMOTE to run the remote Intel PT E2E test.");
-            if (string.IsNullOrWhiteSpace(keyPath))
-                Assert.Ignore("Set PERFCONVERTER_E2E_KEY to run the remote Intel PT E2E test.");
-            if (string.IsNullOrWhiteSpace(remoteRepoPath))
-                Assert.Ignore("Set PERFCONVERTER_E2E_REMOTE_REPO to the already-cloned remote repository path.");
-
-            return new RemoteSettings(remote, keyPath, remoteRepoPath, Enabled: true);
-        }
+        var output = CombinedOutput(result);
+        return output.Contains("No permission", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("Operation not permitted", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("perf_event_paranoid", StringComparison.OrdinalIgnoreCase);
     }
 
-    sealed class RemoteWorkspace : IAsyncDisposable
-    {
-        readonly RemoteSettings _settings;
-        bool _disposed;
-
-        RemoteWorkspace(RemoteSettings settings, string path)
-        {
-            _settings = settings;
-            Path = path;
-        }
-
-        public string Path { get; }
-
-        public static async Task<RemoteWorkspace> CreateAsync(RemoteSettings settings)
-        {
-            var result = await RunSshAsync(settings, "mktemp -d /tmp/perfconverter-e2e.XXXXXX");
-            return new RemoteWorkspace(settings, result.StandardOutput.Trim());
-        }
-
-        public Task RunAsync(string script, TimeSpan? timeout = null)
-            => RunSshAsync(_settings, $"cd {QuoteShell(Path)} && {script}", timeout);
-
-        public Task CopyToAsync(string localPath, string remoteRelativePath)
-            => RemoteIntelPtPipelineE2ETests.RunAsync(
-                "scp",
-                ScpArguments(_settings, localPath, $"{_settings.Remote}:{QuoteScp(Path + "/" + remoteRelativePath)}"));
-
-        public Task CopyFromAsync(string remoteRelativePath, string localPath, bool recursive = false)
-        {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(localPath))!);
-            var arguments = ScpArguments(_settings, $"{_settings.Remote}:{QuoteScp(Path + "/" + remoteRelativePath)}", localPath, recursive);
-            return RemoteIntelPtPipelineE2ETests.RunAsync("scp", arguments, timeout: TimeSpan.FromMinutes(2));
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (_disposed)
-                return;
-
-            _disposed = true;
-            await RunSshAsync(_settings, $"rm -rf {QuoteShell(Path)}");
-        }
-
-        static Task<CommandResult> RunSshAsync(RemoteSettings settings, string command, TimeSpan? timeout = null)
-            => RemoteIntelPtPipelineE2ETests.RunAsync("ssh", SshArguments(settings, command), timeout: timeout);
-
-        static IReadOnlyList<string> SshArguments(RemoteSettings settings, string command)
-            =>
-            [
-                "-i",
-                settings.KeyPath,
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
-                settings.Remote,
-                command
-            ];
-
-        static IReadOnlyList<string> ScpArguments(RemoteSettings settings, string from, string to, bool recursive = false)
-        {
-            var arguments = new List<string>
-            {
-                "-i",
-                settings.KeyPath,
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10"
-            };
-
-            if (recursive)
-                arguments.Add("-r");
-
-            arguments.Add(from);
-            arguments.Add(to);
-            return arguments;
-        }
-    }
+    static string CombinedOutput(CommandResult result)
+        => result.StandardOutput + result.StandardError;
 
     sealed class LocalTempDirectory : IDisposable
     {
@@ -472,12 +489,6 @@ public sealed class RemoteIntelPtPipelineE2ETests
             return left.FrameId.CompareTo(right.FrameId);
         }
     }
-
-    static string QuoteShell(string value)
-        => "'" + value.Replace("'", "'\"'\"'") + "'";
-
-    static string QuoteScp(string value)
-        => value.Replace(" ", "\\ ");
 
     readonly record struct CommandResult(int ExitCode, string StandardOutput, string StandardError);
 
