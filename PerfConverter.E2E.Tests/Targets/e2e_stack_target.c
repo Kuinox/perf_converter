@@ -7,13 +7,14 @@ __attribute__((noinline, used))
 uint64_t e2e_leaf(uint64_t value)
 {
     asm volatile("" ::: "memory");
-    return (value * 1664525u) + 1013904223u;
+    e2e_sink += value;
+    return value + 1;
 }
 
 __attribute__((noinline, used))
 uint64_t e2e_mid(uint64_t value)
 {
-    return e2e_leaf(value) ^ 0x9e3779b97f4a7c15ull;
+    return e2e_leaf(value) + 1;
 }
 
 __attribute__((noinline, used))
