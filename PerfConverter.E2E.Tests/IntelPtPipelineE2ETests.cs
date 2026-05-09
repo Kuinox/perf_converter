@@ -30,7 +30,9 @@ public sealed class IntelPtPipelineE2ETests
         Log($"work={work.Path}");
         var targetSource = Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", target.SourceFile);
         var targetBinary = Path.Combine(work.Path, Path.GetFileNameWithoutExtension(target.SourceFile));
+        var sampledTargetBinary = Path.Combine(work.Path, Path.GetFileNameWithoutExtension(target.SourceFile) + "-sampled");
         var perfData = Path.Combine(work.Path, "perf.data");
+        var sampledPerfData = Path.Combine(work.Path, "sampled-perf.data");
         var outputPath = Path.Combine(work.Path, "parquet_output");
         var tracePath = Path.Combine(work.Path, "trace.perfetto-trace");
 
@@ -45,6 +47,16 @@ public sealed class IntelPtPipelineE2ETests
             ["-O0", "-g", "-fno-omit-frame-pointer", "-fno-inline", targetSource, "-o", targetBinary],
             work.Path);
 
+        Log("compiling sampled C target");
+        await RunAsync(
+            "gcc",
+            [
+                "-O0", "-g", "-fno-omit-frame-pointer", "-fno-inline",
+                "-DE2E_SPIN_SCALE=1000", "-DE2E_WARMUP_ROUNDS=1",
+                targetSource, "-o", sampledTargetBinary
+            ],
+            work.Path);
+
         Log("recording Intel PT data");
         var perfRecord = await RunAsync(
             "perf",
@@ -56,6 +68,24 @@ public sealed class IntelPtPipelineE2ETests
         if (perfRecord.ExitCode != 0 && IsPermissionFailure(perfRecord))
             Assert.Ignore(perfRecord.StandardError);
         Assert.That(perfRecord.ExitCode, Is.EqualTo(0), perfRecord.StandardError);
+
+        Log("recording sampled callgraph truth");
+        var sampledRecord = await RunAsync(
+            "perf",
+            ["record", "-F", "2000", "-e", "cpu-clock:u", "-g", "--call-graph", "fp", "-o", sampledPerfData, "--", sampledTargetBinary],
+            work.Path,
+            TimeSpan.FromMinutes(2),
+            assertSuccess: false);
+
+        if (sampledRecord.ExitCode != 0 && IsPermissionFailure(sampledRecord))
+            Assert.Ignore(sampledRecord.StandardError);
+        Assert.That(sampledRecord.ExitCode, Is.EqualTo(0), sampledRecord.StandardError);
+
+        var sampledScript = await RunAsync(
+            "perf",
+            ["script", "-i", sampledPerfData],
+            work.Path,
+            TimeSpan.FromMinutes(2));
 
         Log("converting perf data to parquet");
         await RunAsync(
@@ -90,6 +120,7 @@ public sealed class IntelPtPipelineE2ETests
         Assert.That(new FileInfo(tracePath).Length, Is.GreaterThan(0));
         AssertStackEventsAreWellNested(stackFrames);
         AssertExpectedSymbols(target, stackFrames, sourceLocations);
+        AssertSampledStacksMatchReconstruction(target, stackFrames, sourceLocations, sampledScript.StandardOutput);
     }
 
     static void Log(string message)
@@ -178,6 +209,124 @@ public sealed class IntelPtPipelineE2ETests
             Assert.That(maxDepth, Is.LessThan(32), $"{target.Name}: reconstructed stack depth drifted for {expectedSymbol}.\n{DescribeFrames(frames, locationIds)}");
         }
     }
+
+    static void AssertSampledStacksMatchReconstruction(
+        IntelPtTarget target,
+        IReadOnlyList<StackFrame> frames,
+        IReadOnlyDictionary<ulong, SourceLocation> sourceLocations,
+        string perfScript)
+    {
+        var samples = ParseSampledStacks(perfScript, target.ExpectedSymbols);
+        Assert.That(samples, Is.Not.Empty, $"{target.Name}: perf sampling did not capture any expected target stack.");
+
+        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
+        foreach (var symbol in samples.SelectMany(static sample => sample).Distinct(StringComparer.Ordinal))
+        {
+            Assert.That(
+                framesBySymbol.GetValueOrDefault(symbol),
+                Is.Not.Null.And.Not.Empty,
+                $"{target.Name}: sampled stack included {symbol}, but Intel PT reconstruction emitted no matching frame.");
+        }
+
+        var observedPairs = samples
+            .SelectMany(static sample => sample.Zip(sample.Skip(1), static (parent, child) => (Parent: parent, Child: child)))
+            .Distinct()
+            .ToArray();
+
+        if (target.ExpectedSymbols.Length < 2)
+            return;
+
+        Assert.That(observedPairs, Is.Not.Empty, $"{target.Name}: sampled stacks did not include an expected parent/child pair.");
+        foreach (var pair in observedPairs)
+        {
+            Assert.That(
+                HasOverlappingOrderedFrames(framesBySymbol[pair.Parent], framesBySymbol[pair.Child]),
+                Is.True,
+                $"{target.Name}: sampled stack contained {pair.Parent} -> {pair.Child}, but reconstructed frames did not overlap in that order.");
+        }
+    }
+
+    static IReadOnlyList<string[]> ParseSampledStacks(string perfScript, IReadOnlyCollection<string> expectedSymbols)
+    {
+        var expected = expectedSymbols.ToHashSet(StringComparer.Ordinal);
+        var samples = new List<string[]>();
+        var current = new List<string>();
+
+        foreach (var line in perfScript.Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                AddCurrentSample();
+                continue;
+            }
+
+            if (!char.IsWhiteSpace(line[0]))
+            {
+                AddCurrentSample();
+                continue;
+            }
+
+            var symbol = TryParsePerfScriptSymbol(line);
+            if (symbol is not null && expected.Contains(symbol) && current.LastOrDefault() != symbol)
+                current.Add(symbol);
+        }
+
+        AddCurrentSample();
+        return samples;
+
+        void AddCurrentSample()
+        {
+            if (current.Count != 0)
+                samples.Add(current.AsEnumerable().Reverse().ToArray());
+            current.Clear();
+        }
+    }
+
+    static string? TryParsePerfScriptSymbol(string line)
+    {
+        var parts = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || !parts[0].All(Uri.IsHexDigit))
+            return null;
+
+        var symbol = parts[1];
+        var offset = symbol.IndexOf('+', StringComparison.Ordinal);
+        if (offset >= 0)
+            symbol = symbol[..offset];
+
+        return symbol.Length == 0 ? null : symbol;
+    }
+
+    static Dictionary<string, List<StackFrame>> BuildFramesBySymbol(
+        IReadOnlyList<StackFrame> frames,
+        IReadOnlyDictionary<ulong, SourceLocation> sourceLocations,
+        IEnumerable<string> symbols)
+    {
+        var result = symbols.Distinct(StringComparer.Ordinal).ToDictionary(
+            static symbol => symbol,
+            static _ => new List<StackFrame>(),
+            StringComparer.Ordinal);
+
+        foreach (var frame in frames)
+        {
+            if (!sourceLocations.TryGetValue(frame.LocationId, out var location) || location.Symbol is null)
+                continue;
+
+            if (result.TryGetValue(location.Symbol, out var matches))
+                matches.Add(frame);
+        }
+
+        return result;
+    }
+
+    static bool HasOverlappingOrderedFrames(IReadOnlyList<StackFrame> parents, IReadOnlyList<StackFrame> children)
+        => parents.Any(parent => children.Any(child => parent.Depth < child.Depth && Overlaps(parent, child)));
+
+    static bool Overlaps(StackFrame parent, StackFrame child)
+        => IsBeforeOrEqual(parent.StartTime, parent.StartTrace, child.StartTime, child.StartTrace) &&
+           IsBeforeOrEqual(child.EndTime, child.EndTrace, parent.EndTime, parent.EndTrace);
+
+    static bool IsBeforeOrEqual(ulong leftTime, ulong leftTrace, ulong rightTime, ulong rightTrace)
+        => leftTime < rightTime || (leftTime == rightTime && leftTrace <= rightTrace);
 
     static string DescribeFrames(IReadOnlyList<StackFrame> frames, IReadOnlySet<ulong> locationIds)
     {

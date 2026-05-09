@@ -2,9 +2,21 @@
 
 volatile uint64_t e2e_sink;
 
+#ifndef E2E_SPIN_SCALE
+#define E2E_SPIN_SCALE 1
+#endif
+
+#ifndef E2E_WARMUP_ROUNDS
+#define E2E_WARMUP_ROUNDS 100000
+#endif
+
+#ifndef E2E_ITERATIONS
+#define E2E_ITERATIONS 1000
+#endif
+
 #define E2E_SPIN(seed, rounds) \
     do { \
-        for (volatile uint64_t spin = 0; spin < (rounds); spin++) { \
+        for (volatile uint64_t spin = 0; spin < ((rounds) * E2E_SPIN_SCALE); spin++) { \
             e2e_sink += ((seed) + spin) & 1; \
             asm volatile("" ::: "memory"); \
         } \
@@ -39,7 +51,7 @@ uint64_t e2e_root(uint64_t iterations)
 
 int main(void)
 {
-    E2E_SPIN(1, 100000);
-    e2e_sink = e2e_root(1000);
+    E2E_SPIN(1, E2E_WARMUP_ROUNDS);
+    e2e_sink = e2e_root(E2E_ITERATIONS);
     return e2e_sink == 0;
 }
