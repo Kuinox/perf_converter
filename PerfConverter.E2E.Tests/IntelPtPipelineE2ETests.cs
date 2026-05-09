@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using PerfCapture;
 using System.Text;
 using Plank.Reading;
 using Plank.Schema;
@@ -10,6 +11,8 @@ namespace PerfConverter.E2E.Tests;
 [Category("E2E")]
 public sealed class IntelPtPipelineE2ETests
 {
+    const ulong SampleMatchToleranceNs = 5_000_000;
+
     static readonly IntelPtTarget[] Targets =
     [
         new("01_leaf", "e2e_01_leaf.c", ["e2e_leaf"]),
@@ -30,9 +33,7 @@ public sealed class IntelPtPipelineE2ETests
         Log($"work={work.Path}");
         var targetSource = Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", target.SourceFile);
         var targetBinary = Path.Combine(work.Path, Path.GetFileNameWithoutExtension(target.SourceFile));
-        var sampledTargetBinary = Path.Combine(work.Path, Path.GetFileNameWithoutExtension(target.SourceFile) + "-sampled");
         var perfData = Path.Combine(work.Path, "perf.data");
-        var sampledPerfData = Path.Combine(work.Path, "sampled-perf.data");
         var outputPath = Path.Combine(work.Path, "parquet_output");
         var tracePath = Path.Combine(work.Path, "trace.perfetto-trace");
 
@@ -44,46 +45,36 @@ public sealed class IntelPtPipelineE2ETests
         Log("compiling C target");
         await RunAsync(
             "gcc",
-            ["-O0", "-g", "-fno-omit-frame-pointer", "-fno-inline", targetSource, "-o", targetBinary],
-            work.Path);
-
-        Log("compiling sampled C target");
-        await RunAsync(
-            "gcc",
             [
                 "-O0", "-g", "-fno-omit-frame-pointer", "-fno-inline",
-                "-DE2E_SPIN_SCALE=1000", "-DE2E_WARMUP_ROUNDS=1",
-                targetSource, "-o", sampledTargetBinary
+                "-DE2E_SPIN_SCALE=10", "-DE2E_WARMUP_ROUNDS=1",
+                targetSource, "-o", targetBinary
             ],
             work.Path);
 
-        Log("recording Intel PT data");
-        var perfRecord = await RunAsync(
-            "perf",
-            ["record", "-m", "64M", "-e", "intel_pt//u", "-o", perfData, "--", targetBinary],
-            work.Path,
-            TimeSpan.FromMinutes(2),
-            assertSuccess: false);
+        Log("recording mixed Intel PT and sampled callgraph data");
+        var captureSpec = new CommandCaptureSpec
+        {
+            OutputPath = perfData,
+            Event = IntelPtEventSpec.UserOnly(),
+            AdditionalEvents = [PerfEventSpec.Named("cpu-clock:u")],
+            SampleFrequency = 2000,
+            CallGraph = PerfCallGraphMode.FramePointer(),
+            Buffer = PerfCaptureBufferPolicy.Growing(auxBuffer: PerfBufferSize.Mebibytes(64)),
+            Target = new CommandTarget(targetBinary, [], work.Path)
+        };
 
-        if (perfRecord.ExitCode != 0 && IsPermissionFailure(perfRecord))
-            Assert.Ignore(perfRecord.StandardError);
-        Assert.That(perfRecord.ExitCode, Is.EqualTo(0), perfRecord.StandardError);
+        using (var captureCts = new CancellationTokenSource(TimeSpan.FromMinutes(2)))
+        {
+            var perfRecord = await new PerfCaptureRunner().RunAsync(captureSpec, captureCts.Token);
+            if (!perfRecord.Succeeded && IsPermissionFailure(perfRecord.RecordResult))
+                Assert.Ignore(perfRecord.RecordResult.StandardError);
 
-        Log("recording sampled callgraph truth");
-        var sampledRecord = await RunAsync(
-            "perf",
-            ["record", "-F", "2000", "-e", "cpu-clock:u", "-g", "--call-graph", "fp", "-o", sampledPerfData, "--", sampledTargetBinary],
-            work.Path,
-            TimeSpan.FromMinutes(2),
-            assertSuccess: false);
+            Assert.That(perfRecord.Succeeded, Is.True, perfRecord.RecordResult.StandardError);
+        }
 
-        if (sampledRecord.ExitCode != 0 && IsPermissionFailure(sampledRecord))
-            Assert.Ignore(sampledRecord.StandardError);
-        Assert.That(sampledRecord.ExitCode, Is.EqualTo(0), sampledRecord.StandardError);
-
-        var sampledScript = await RunAsync(
-            "perf",
-            ["script", "-i", sampledPerfData],
+        var sampledScript = await RunPerfCommandAsync(
+            ["script", "--ns", "-i", perfData],
             work.Path,
             TimeSpan.FromMinutes(2));
 
@@ -115,12 +106,15 @@ public sealed class IntelPtPipelineE2ETests
         Log("reading stack parquet");
         var stackFrames = StackFrameReader.Read(Path.Combine(outputPath, "stack_frames.parquet"));
         var sourceLocations = SourceLocationReader.Read(Path.Combine(outputPath, "source_locations.parquet"));
+        var sampledStacks = ParseSampledStacks(sampledScript.StandardOutput, target.ExpectedSymbols);
+        var sampledReportPath = WriteSampledStackReport(target, sampledStacks, stackFrames, sourceLocations);
+        TestContext.AddTestAttachment(sampledReportPath, $"{target.Name} sampled stack comparison");
 
         Assert.That(stackFrames, Is.Not.Empty);
         Assert.That(new FileInfo(tracePath).Length, Is.GreaterThan(0));
         AssertStackEventsAreWellNested(stackFrames);
         AssertExpectedSymbols(target, stackFrames, sourceLocations);
-        AssertSampledStacksMatchReconstruction(target, stackFrames, sourceLocations, sampledScript.StandardOutput);
+        AssertSampledStacksMatchReconstruction(target, stackFrames, sourceLocations, sampledStacks);
     }
 
     static void Log(string message)
@@ -133,10 +127,10 @@ public sealed class IntelPtPipelineE2ETests
 
         await RequireCommandAsync("dotnet", ["--info"]);
         await RequireCommandAsync("gcc", ["--version"]);
-        await RequireCommandAsync("perf", ["--version"]);
+        await RequirePerfCommandAsync(["--version"]);
 
-        var intelPt = await RunAsync("perf", ["list", "intel_pt"], assertSuccess: false);
-        if (intelPt.ExitCode != 0 || !CombinedOutput(intelPt).Contains("intel_pt", StringComparison.Ordinal))
+        var intelPt = await RequirePerfCommandAsync(["list", "intel_pt"]);
+        if (!CombinedOutput(intelPt).Contains("intel_pt", StringComparison.Ordinal))
             Assert.Ignore("intel_pt is not available on this machine.");
     }
 
@@ -145,6 +139,20 @@ public sealed class IntelPtPipelineE2ETests
         var result = await RunAsync(fileName, arguments, assertSuccess: false);
         if (result.ExitCode != 0)
             Assert.Ignore($"{fileName} is unavailable: {CombinedOutput(result)}");
+    }
+
+    static async Task<PerfCommandResult> RequirePerfCommandAsync(IReadOnlyList<string> arguments)
+    {
+        var result = await new PerfCommandRunner().RunAsync(new PerfCommandPlan
+        {
+            FileName = "perf",
+            Arguments = arguments
+        });
+
+        if (result.ExitCode != 0)
+            Assert.Ignore($"perf is unavailable: {result.StandardError}");
+
+        return result;
     }
 
     static void AssertStackEventsAreWellNested(IReadOnlyList<StackFrame> frames)
@@ -214,13 +222,21 @@ public sealed class IntelPtPipelineE2ETests
         IntelPtTarget target,
         IReadOnlyList<StackFrame> frames,
         IReadOnlyDictionary<ulong, SourceLocation> sourceLocations,
-        string perfScript)
+        IReadOnlyList<SampledStack> samples)
     {
-        var samples = ParseSampledStacks(perfScript, target.ExpectedSymbols);
         Assert.That(samples, Is.Not.Empty, $"{target.Name}: perf sampling did not capture any expected target stack.");
 
         var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
-        foreach (var symbol in samples.SelectMany(static sample => sample).Distinct(StringComparer.Ordinal))
+        foreach (var sample in samples)
+        {
+            var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
+            Assert.That(
+                reconstructed.All(static frame => frame is not null),
+                Is.True,
+                $"{target.Name}: sampled stack at time={sample.Time} ip={sample.Ip ?? "?"} was not reconstructed at the same timestamp. sampled={string.Join(" -> ", sample.Symbols)} reconstructed={FormatReconstructedStack(sample.Symbols, reconstructed)}");
+        }
+
+        foreach (var symbol in samples.SelectMany(static sample => sample.Symbols).Distinct(StringComparer.Ordinal))
         {
             Assert.That(
                 framesBySymbol.GetValueOrDefault(symbol),
@@ -229,7 +245,7 @@ public sealed class IntelPtPipelineE2ETests
         }
 
         var observedPairs = samples
-            .SelectMany(static sample => sample.Zip(sample.Skip(1), static (parent, child) => (Parent: parent, Child: child)))
+            .SelectMany(static sample => sample.Symbols.Zip(sample.Symbols.Skip(1), static (parent, child) => (Parent: parent, Child: child)))
             .Distinct()
             .ToArray();
 
@@ -246,11 +262,165 @@ public sealed class IntelPtPipelineE2ETests
         }
     }
 
-    static IReadOnlyList<string[]> ParseSampledStacks(string perfScript, IReadOnlyCollection<string> expectedSymbols)
+    static string WriteSampledStackReport(
+        IntelPtTarget target,
+        IReadOnlyList<SampledStack> samples,
+        IReadOnlyList<StackFrame> frames,
+        IReadOnlyDictionary<ulong, SourceLocation> sourceLocations)
+    {
+        var path = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"{target.Name}-sampled-stack-report.md");
+        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
+        var uniqueSamples = samples
+            .GroupBy(static sample => string.Join(" -> ", sample.Symbols), StringComparer.Ordinal)
+            .OrderByDescending(static group => group.Count())
+            .ThenBy(static group => group.Key, StringComparer.Ordinal)
+            .ToArray();
+
+        using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
+        writer.WriteLine($"# {target.Name} sampled stack comparison");
+        writer.WriteLine();
+        writer.WriteLine($"Sampled stack count: {samples.Count}");
+        writer.WriteLine($"Unique sampled stack count: {uniqueSamples.Length}");
+        writer.WriteLine();
+
+        if (uniqueSamples.Length == 0)
+        {
+            writer.WriteLine("No sampled stacks containing the expected target symbols were captured.");
+            return path;
+        }
+
+        writer.WriteLine("| Count | Sampled by profiler | Reconstructed by Intel PT |");
+        writer.WriteLine("| ---: | --- | --- |");
+
+        foreach (var group in uniqueSamples)
+        {
+            var sample = group.First();
+            var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
+            writer.WriteLine(
+                $"| {group.Count()} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.Symbols, reconstructed))} |");
+        }
+
+        writer.WriteLine();
+        writer.WriteLine("## Reconstructed frame counts");
+        writer.WriteLine();
+        writer.WriteLine("| Symbol | Frames |");
+        writer.WriteLine("| --- | ---: |");
+        foreach (var symbol in target.ExpectedSymbols)
+            writer.WriteLine($"| `{symbol}` | {framesBySymbol.GetValueOrDefault(symbol)?.Count ?? 0} |");
+
+        writer.WriteLine();
+        writer.WriteLine("## All sampled stacks");
+        writer.WriteLine();
+        writer.WriteLine("| Index | Sampled by profiler | Reconstructed by Intel PT |");
+        writer.WriteLine("| ---: | --- | --- |");
+        for (var index = 0; index < samples.Count; index++)
+        {
+            var sample = samples[index];
+            var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
+            writer.WriteLine(
+                $"| {index + 1} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.Symbols, reconstructed))} |");
+        }
+
+        return path;
+    }
+
+    static IReadOnlyList<StackFrame?> FindRepresentativeReconstructedStack(
+        SampledStack sample,
+        IReadOnlyDictionary<string, List<StackFrame>> framesBySymbol)
+    {
+        var symbols = sample.Symbols;
+        var chain = new StackFrame?[symbols.Count];
+        if (symbols.Count == 0)
+            return chain;
+
+        if (symbols.Count == 1)
+        {
+            chain[0] = FindFrameAtSampleTime(framesBySymbol.GetValueOrDefault(symbols[0]), sample.Time);
+            return chain;
+        }
+
+        var leafSymbol = symbols[^1];
+        if (!framesBySymbol.TryGetValue(leafSymbol, out var leafFrames))
+            return chain;
+
+        foreach (var leaf in leafFrames.Where(frame => ContainsSampleTime(frame, sample.Time)).OrderBy(static frame => frame.StartTime).ThenBy(static frame => frame.StartTrace))
+        {
+            chain[^1] = leaf;
+            var child = leaf;
+            var matched = true;
+
+            for (var index = symbols.Count - 2; index >= 0; index--)
+            {
+                if (!framesBySymbol.TryGetValue(symbols[index], out var parentFrames))
+                {
+                    matched = false;
+                    break;
+                }
+
+                var parent = parentFrames
+                    .Where(parentFrame => parentFrame.Depth < child.Depth && ContainsSampleTime(parentFrame, sample.Time) && Overlaps(parentFrame, child))
+                    .OrderByDescending(static parentFrame => parentFrame.Depth)
+                    .ThenBy(static parentFrame => parentFrame.StartTime)
+                    .Select(static parentFrame => (StackFrame?)parentFrame)
+                    .FirstOrDefault();
+
+                if (parent is null)
+                {
+                    matched = false;
+                    break;
+                }
+
+                chain[index] = parent;
+                child = parent.Value;
+            }
+
+            if (matched)
+                return chain;
+        }
+
+        for (var index = 0; index < symbols.Count; index++)
+            chain[index] = FindFrameAtSampleTime(framesBySymbol.GetValueOrDefault(symbols[index]), sample.Time);
+
+        return chain;
+    }
+
+    static StackFrame? FindFrameAtSampleTime(IReadOnlyList<StackFrame>? frames, ulong time)
+        => frames?
+            .Where(frame => ContainsSampleTime(frame, time))
+            .OrderBy(static frame => frame.Depth)
+            .ThenBy(static frame => frame.StartTime)
+            .Select(static frame => (StackFrame?)frame)
+            .FirstOrDefault();
+
+    static bool ContainsSampleTime(StackFrame frame, ulong time)
+    {
+        var start = frame.StartTime > SampleMatchToleranceNs
+            ? frame.StartTime - SampleMatchToleranceNs
+            : 0;
+        var end = frame.EndTime + SampleMatchToleranceNs;
+        return start <= time && time <= end;
+    }
+
+    static string FormatStack(SampledStack sample)
+        => $"time={sample.Time} ip={sample.Ip ?? "?"}<br>" +
+           string.Join("<br>", sample.Symbols.Select(static symbol => $"`{symbol}`"));
+
+    static string FormatReconstructedStack(IReadOnlyList<string> sample, IReadOnlyList<StackFrame?> frames)
+        => string.Join("<br>", sample.Zip(frames, static (symbol, frame) => frame is null
+            ? "`missing`"
+            : $"`{symbol}` depth={frame.Value.Depth} start={frame.Value.StartTime} end={frame.Value.EndTime} id={frame.Value.FrameId}"));
+
+    static string EscapeMarkdownCell(string value)
+        => value.Replace("|", "\\|", StringComparison.Ordinal);
+
+    static IReadOnlyList<SampledStack> ParseSampledStacks(string perfScript, IReadOnlyCollection<string> expectedSymbols)
     {
         var expected = expectedSymbols.ToHashSet(StringComparer.Ordinal);
-        var samples = new List<string[]>();
+        var samples = new List<SampledStack>();
         var current = new List<string>();
+        ulong currentTime = 0;
+        string? currentIp = null;
+        var acceptCurrentSample = false;
 
         foreach (var line in perfScript.Split('\n'))
         {
@@ -263,8 +433,20 @@ public sealed class IntelPtPipelineE2ETests
             if (!char.IsWhiteSpace(line[0]))
             {
                 AddCurrentSample();
+                var header = ParsePerfScriptHeader(line);
+                acceptCurrentSample = header.IsSampledEvent;
+                if (!acceptCurrentSample)
+                    continue;
+
+                currentTime = header.Time;
+                currentIp = header.Ip;
+                if (header.Symbol is not null && expected.Contains(header.Symbol))
+                    current.Add(header.Symbol);
                 continue;
             }
+
+            if (!acceptCurrentSample)
+                continue;
 
             var symbol = TryParsePerfScriptSymbol(line);
             if (symbol is not null && expected.Contains(symbol) && current.LastOrDefault() != symbol)
@@ -277,9 +459,74 @@ public sealed class IntelPtPipelineE2ETests
         void AddCurrentSample()
         {
             if (current.Count != 0)
-                samples.Add(current.AsEnumerable().Reverse().ToArray());
+                samples.Add(new SampledStack(currentTime, currentIp, current.AsEnumerable().Reverse().ToArray()));
             current.Clear();
+            currentTime = 0;
+            currentIp = null;
+            acceptCurrentSample = false;
         }
+    }
+
+    static (ulong Time, string? Ip, string? Symbol, bool IsSampledEvent) ParsePerfScriptHeader(string line)
+    {
+        var parts = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        ulong time = 0;
+        string? ip = null;
+        string? symbol = null;
+        var seenTime = false;
+        var seenEvent = false;
+
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].EndsWith(":", StringComparison.Ordinal) &&
+                TryParsePerfScriptTime(parts[i][..^1], out var parsedTime))
+            {
+                time = parsedTime;
+                seenTime = true;
+                continue;
+            }
+
+            if (seenTime && parts[i].EndsWith(":", StringComparison.Ordinal))
+            {
+                seenEvent = true;
+                continue;
+            }
+
+            if (!seenEvent || !line.Contains("cpu-clock", StringComparison.Ordinal) || !parts[i].All(Uri.IsHexDigit))
+                continue;
+
+            ip ??= parts[i];
+            if (i + 1 < parts.Length)
+                symbol ??= NormalizePerfScriptSymbol(parts[i + 1]);
+        }
+
+        return (time, ip, symbol, line.Contains("cpu-clock", StringComparison.Ordinal));
+    }
+
+    static bool TryParsePerfScriptTime(string value, out ulong nanoseconds)
+    {
+        nanoseconds = 0;
+        var dot = value.IndexOf('.', StringComparison.Ordinal);
+        if (dot < 0 ||
+            !ulong.TryParse(value[..dot], out var seconds) ||
+            !ulong.TryParse(value[(dot + 1)..], out var fraction))
+            return false;
+
+        var fractionDigits = value.Length - dot - 1;
+        while (fractionDigits < 9)
+        {
+            fraction *= 10;
+            fractionDigits++;
+        }
+
+        while (fractionDigits > 9)
+        {
+            fraction /= 10;
+            fractionDigits--;
+        }
+
+        nanoseconds = checked(seconds * 1_000_000_000UL + fraction);
+        return true;
     }
 
     static string? TryParsePerfScriptSymbol(string line)
@@ -289,6 +536,11 @@ public sealed class IntelPtPipelineE2ETests
             return null;
 
         var symbol = parts[1];
+        return NormalizePerfScriptSymbol(symbol);
+    }
+
+    static string? NormalizePerfScriptSymbol(string symbol)
+    {
         var offset = symbol.IndexOf('+', StringComparison.Ordinal);
         if (offset >= 0)
             symbol = symbol[..offset];
@@ -311,8 +563,11 @@ public sealed class IntelPtPipelineE2ETests
             if (!sourceLocations.TryGetValue(frame.LocationId, out var location) || location.Symbol is null)
                 continue;
 
-            if (result.TryGetValue(location.Symbol, out var matches))
-                matches.Add(frame);
+            foreach (var (expectedSymbol, matches) in result)
+            {
+                if (location.Symbol.Contains(expectedSymbol, StringComparison.Ordinal))
+                    matches.Add(frame);
+            }
         }
 
         return result;
@@ -471,6 +726,25 @@ public sealed class IntelPtPipelineE2ETests
         return result;
     }
 
+    static async Task<PerfCommandResult> RunPerfCommandAsync(
+        IReadOnlyList<string> arguments,
+        string? workingDirectory = null,
+        TimeSpan? timeout = null)
+    {
+        Log($"start: perf {string.Join(' ', arguments)}");
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromMinutes(2));
+        var result = await new PerfCommandRunner().RunAsync(new PerfCommandPlan
+        {
+            FileName = "perf",
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory
+        }, cts.Token);
+
+        Log($"exit {result.ExitCode}: perf {string.Join(' ', arguments)}");
+        Assert.That(result.ExitCode, Is.EqualTo(0), result.StandardError);
+        return result;
+    }
+
     static T[] ReadColumn<T>(RowGroupReader rowGroup, Column column)
     {
         var values = new List<T>();
@@ -493,7 +767,19 @@ public sealed class IntelPtPipelineE2ETests
                output.Contains("perf_event_paranoid", StringComparison.OrdinalIgnoreCase);
     }
 
+    static bool IsPermissionFailure(PerfCommandResult result)
+    {
+        var output = result.StandardOutput + result.StandardError;
+        return output.Contains("No permission", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("Operation not permitted", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
+               output.Contains("perf_event_paranoid", StringComparison.OrdinalIgnoreCase);
+    }
+
     static string CombinedOutput(CommandResult result)
+        => result.StandardOutput + result.StandardError;
+
+    static string CombinedOutput(PerfCommandResult result)
         => result.StandardOutput + result.StandardError;
 
     sealed class LocalTempDirectory : IDisposable
@@ -633,6 +919,11 @@ public sealed class IntelPtPipelineE2ETests
         StackFrameBoundaryReason EndReason);
 
     readonly record struct SourceLocation(string? Symbol);
+
+    readonly record struct SampledStack(
+        ulong Time,
+        string? Ip,
+        IReadOnlyList<string> Symbols);
 
     readonly record struct StackEndpoint(
         ulong Time,

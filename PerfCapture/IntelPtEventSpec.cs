@@ -1,6 +1,6 @@
 namespace PerfCapture;
 
-public sealed record IntelPtEventSpec
+public sealed record IntelPtEventSpec : PerfEventSpec
 {
     public IntelPtPrivilegeLevel PrivilegeLevel { get; init; } = IntelPtPrivilegeLevel.User;
 

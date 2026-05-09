@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plank.Snappy", "Plank\Plank
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plank.SourceGen", "Plank\Plank.SourceGen\Plank.SourceGen.csproj", "{A0C43EC0-0E39-4EB8-95C9-509565C86750}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfCapture.Tests", "PerfCapture.Tests\PerfCapture.Tests.csproj", "{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -193,6 +195,18 @@ Global
 		{A0C43EC0-0E39-4EB8-95C9-509565C86750}.Release|x64.Build.0 = Release|Any CPU
 		{A0C43EC0-0E39-4EB8-95C9-509565C86750}.Release|x86.ActiveCfg = Release|Any CPU
 		{A0C43EC0-0E39-4EB8-95C9-509565C86750}.Release|x86.Build.0 = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|x64.Build.0 = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Debug|x86.Build.0 = Debug|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|x64.ActiveCfg = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|x64.Build.0 = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|x86.ActiveCfg = Release|Any CPU
+		{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

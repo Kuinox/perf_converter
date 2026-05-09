@@ -4,13 +4,23 @@ public abstract record PerfCaptureSpec
 {
     public required PerfOutputPath OutputPath { get; init; }
 
-    public PerfPrivilegeMode Privilege { get; init; } = PerfPrivilegeMode.CurrentUser;
+    public PerfEventSpec Event { get; init; } = PerfEventSpec.CpuClock();
 
-    public IntelPtEventSpec Event { get; init; } = IntelPtEventSpec.UserOnly();
+    public IReadOnlyList<PerfEventSpec> AdditionalEvents { get; init; } = [];
+
+    public uint? SampleFrequency { get; init; }
+
+    public PerfCallGraphMode? CallGraph { get; init; }
 
     public PerfCaptureBufferPolicy Buffer { get; init; } = PerfCaptureBufferPolicy.Growing();
 
     public bool UseKernelCore { get; init; }
+
+    public bool StartDisabled { get; init; }
+
+    public PerfControlChannel? Control { get; init; }
+
+    public IReadOnlyList<PerfAddressFilter> AddressFilters { get; init; } = [];
 
     public bool OverwriteOutput { get; init; }
 
