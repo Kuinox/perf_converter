@@ -11,8 +11,8 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
     public unsafe void Persist(
         ulong entryId,
         PerfDlFilterSample* sample,
-        PerfDlfilterAl* ip,
-        PerfDlfilterAl* address,
+        ResolvedLocation ip,
+        ResolvedLocation? address,
         ulong ipLocationId,
         ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,
@@ -27,9 +27,9 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         row.Time = sample->time;
         row.Cpu = (uint)sample->cpu;
         row.Flags = sample->flags;
-        row.Ip = ip->addr;
+        row.Ip = ip.Address;
         row.IpLocationId = ipLocationId;
-        row.Addr = address == null ? 0UL : address->addr;
+        row.Addr = address?.Address ?? 0UL;
         row.AddressLocationId = addressLocationId;
         row.Period = sample->period;
         row.InsnCnt = sample->insn_cnt;
@@ -43,17 +43,17 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         row.SourceFileName = srcFilePath;
         row.SourceLineNumber = lineNumber;
 
-        row.IpSymoff = ip->symoff;
-        row.SetIpSym(EntryContentPool.Shared.RentByteMemoryOwnerFromNullTerminatedPtr((nint)ip->sym));
-        row.IpSymStart = ip->sym_start;
-        row.IpSymEnd = ip->sym_end;
-        row.IpDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->dso);
-        row.IpSymBinding = ip->sym_binding;
-        row.IpIs64Bit = ip->is_64_bit;
-        row.IpIsKernelIp = ip->is_kernel_ip;
-        row.IpBuildId = EntryContentPool.Shared.GetByteMemory(new ReadOnlySpan<byte>(ip->buildid, ip->buildid_size));
-        row.IpFiltered = ip->filtered;
-        row.IpComm = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)ip->comm);
+        row.IpSymoff = ip.Symoff;
+        row.IpSym = ip.Symbol.IsEmpty ? null : ip.Symbol;
+        row.IpSymStart = ip.SymbolStart;
+        row.IpSymEnd = ip.SymbolEnd;
+        row.IpDso = ip.Dso;
+        row.IpSymBinding = ip.SymbolBinding;
+        row.IpIs64Bit = ip.Is64Bit;
+        row.IpIsKernelIp = ip.IsKernelIp;
+        row.IpBuildId = ip.BuildId;
+        row.IpFiltered = ip.Filtered;
+        row.IpComm = ip.Comm.IsEmpty ? null : ip.Comm;
 
         if (address == null)
         {
@@ -73,17 +73,17 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
         else
         {
             row.HaveAddress = true;
-            row.AddressSymoff = address->symoff;
-            row.SetAddressSym(EntryContentPool.Shared.RentByteMemoryOwnerFromNullTerminatedPtr((nint)address->sym));
-            row.AddressSymStart = address->sym_start;
-            row.AddressSymEnd = address->sym_end;
-            row.AddressDso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->dso);
-            row.AddressSymBinding = address->sym_binding;
-            row.AddressIs64Bit = address->is_64_bit;
-            row.AddressIsKernelIp = address->is_kernel_ip;
-            row.AddressBuildId = EntryContentPool.Shared.GetByteMemory(new ReadOnlySpan<byte>(address->buildid, address->buildid_size));
-            row.AddressFiltered = address->filtered;
-            row.AddressComm = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)address->comm);
+            row.AddressSymoff = address.Symoff;
+            row.AddressSym = address.Symbol.IsEmpty ? null : address.Symbol;
+            row.AddressSymStart = address.SymbolStart;
+            row.AddressSymEnd = address.SymbolEnd;
+            row.AddressDso = address.Dso;
+            row.AddressSymBinding = address.SymbolBinding;
+            row.AddressIs64Bit = address.Is64Bit;
+            row.AddressIsKernelIp = address.IsKernelIp;
+            row.AddressBuildId = address.BuildId;
+            row.AddressFiltered = address.Filtered;
+            row.AddressComm = address.Comm.IsEmpty ? null : address.Comm;
         }
 
         writer.Next();

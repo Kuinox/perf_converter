@@ -11,8 +11,8 @@ public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenc
 
     public void ProcessData(
         PerfDlFilterSample* sample,
-        PerfDlfilterAl* ip,
-        PerfDlfilterAl* address,
+        ResolvedLocation ip,
+        ResolvedLocation? address,
         ulong ipLocationId,
         ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFileName,

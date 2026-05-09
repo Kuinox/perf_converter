@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using PerfConverter.PerfStructs;
 using Temp.Schema.Entry;
 using Temp.Schema.Schema;
 
@@ -30,34 +29,39 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         _onBuffered = onBuffered;
     }
 
-    public ulong GetOrAdd(PerfDlfilterAl* location)
+    public ulong GetOrAdd(ResolvedLocation? location)
     {
         if (location == null)
             return 0;
 
-        var buildId = GetBuildId(location);
-        var dso = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr(location->dso);
-        var key = new LocationKey(buildId, dso, location->addr);
+        var buildId = location.BuildId;
+        var dso = location.Dso;
+        ReadOnlyMemory<byte>? symbol = location.Symbol.IsEmpty ? null : location.Symbol;
+        var key = new LocationKey(
+            ToKeyString(buildId),
+            ToKeyString(dso),
+            location.Address,
+            ToKeyString(symbol.GetValueOrDefault()));
 
         if (_entriesByKey.TryGetValue(key, out var existing))
             return existing.Id;
 
-        var sourceLine = _sourceLineResolver.Resolve(dso, location->addr);
+        var sourceLine = _sourceLineResolver.Resolve(dso, location.Address);
         var entry = new SourceLocationEntry(
             Id: _nextId++,
             BuildId: buildId,
             Dso: dso,
-            RelativeAddress: location->addr,
-            Symbol: GetNullableBytesFromNullTerminatedPtr(location->sym),
-            SymbolOffset: location->symoff,
-            SymbolStart: location->sym_start,
-            SymbolEnd: location->sym_end,
+            RelativeAddress: location.Address,
+            Symbol: symbol,
+            SymbolOffset: location.Symoff,
+            SymbolStart: location.SymbolStart,
+            SymbolEnd: location.SymbolEnd,
             SourceFileName: GetNullableUtf8(sourceLine.FileName),
             SourceLineNumber: sourceLine.LineNumber,
             SourceColumnNumber: sourceLine.ColumnNumber,
             InlineDepth: sourceLine.InlineDepth,
             KeyStrength: GetKeyStrength(buildId, dso),
-            IsKernelIp: location->is_kernel_ip);
+            IsKernelIp: location.IsKernelIp);
 
         _entriesByKey.Add(key, entry);
         _entries.Add(entry);
@@ -106,20 +110,6 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         Action<int>? onBuffered)
         => new(filePath, onFlush, onBuffered);
 
-    static ReadOnlyMemory<byte> GetBuildId(PerfDlfilterAl* location)
-    {
-        if (location->buildid == null || location->buildid_size <= 0)
-            return ReadOnlyMemory<byte>.Empty;
-
-        return EntryContentPool.Shared.GetByteMemory(new ReadOnlySpan<byte>(location->buildid, location->buildid_size));
-    }
-
-    static ReadOnlyMemory<byte>? GetNullableBytesFromNullTerminatedPtr(nint ptr)
-    {
-        var value = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr(ptr);
-        return value.IsEmpty ? null : value;
-    }
-
     static ReadOnlyMemory<byte>? GetNullableUtf8(string? value)
     {
         if (string.IsNullOrEmpty(value))
@@ -136,7 +126,14 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         return dso.IsEmpty ? KeyStrengthAddressOnly : KeyStrengthDso;
     }
 
-    readonly record struct LocationKey(ReadOnlyMemory<byte> BuildId, ReadOnlyMemory<byte> Dso, ulong RelativeAddress);
+    static string ToKeyString(ReadOnlyMemory<byte> value)
+        => value.IsEmpty ? string.Empty : Convert.ToHexString(value.Span);
+
+    readonly record struct LocationKey(
+        string BuildId,
+        string Dso,
+        ulong RelativeAddress,
+        string Symbol);
 
     sealed record SourceLocationEntry(
         ulong Id,

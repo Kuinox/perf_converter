@@ -10,8 +10,8 @@ public unsafe interface ITracePersister : IDisposable
     void Persist(
         ulong entryId,
         PerfConverter.PerfStructs.PerfDlFilterSample* sample,
-        PerfConverter.PerfStructs.PerfDlfilterAl* ip,
-        PerfConverter.PerfStructs.PerfDlfilterAl* address,
+        PerfConverter.ResolvedLocation ip,
+        PerfConverter.ResolvedLocation? address,
         ulong ipLocationId,
         ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,

@@ -20,7 +20,7 @@ public class ParquetPersistenceLifetime(
         return persistence;
     }
 
-    public unsafe ulong GetOrAddSourceLocation(PerfStructs.PerfDlfilterAl* location)
+    public ulong GetOrAddSourceLocation(ResolvedLocation? location)
         => sourceLocationPersistence.GetOrAdd(location);
 
     public void Dispose()
@@ -71,8 +71,8 @@ public class ParquetPersistenceLifetime(
         public unsafe void Persist(
             ulong entryId,
             PerfStructs.PerfDlFilterSample* sample,
-            PerfStructs.PerfDlfilterAl* ip,
-            PerfStructs.PerfDlfilterAl* address,
+            ResolvedLocation ip,
+            ResolvedLocation? address,
             ulong ipLocationId,
             ulong addressLocationId,
             ReadOnlyMemory<byte>? srcFilePath,

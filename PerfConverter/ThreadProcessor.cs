@@ -15,8 +15,8 @@ class ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory) : I
 
     public unsafe void ProcessData(
         PerfDlFilterSample* sample,
-        PerfDlfilterAl* ip,
-        PerfDlfilterAl* address,
+        ResolvedLocation ip,
+        ResolvedLocation? address,
         ulong ipLocationId,
         ulong addressLocationId,
         ReadOnlyMemory<byte>? srcFilePath,
