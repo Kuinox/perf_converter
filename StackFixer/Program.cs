@@ -2,6 +2,7 @@ using PerfConverter.PerfStructs;
 using Plank.Reading;
 using Plank.Schema;
 using Plank.Writing;
+using System.Runtime.InteropServices;
 using Temp.Schema;
 using Temp.Schema.Schema;
 
@@ -37,12 +38,13 @@ class Program
             using var output = File.Create(outputFile);
             var writerOptions = new ParquetWriterOptions { Compression = CompressionKind.Snappy };
             var writer = StackFrameRowSchema.CreateRowWriter(output, writerOptions);
-            var processor = new StackReconstructionProcessor(writer);
+            var processor = new StackReconstructionProcessor();
             processor.Process(inputFolder);
+            processor.WriteRows(writer);
             writer.Complete();
 
             Console.WriteLine(
-                $"Wrote {outputFile}. Frames: {processor.Frames}, calls: {processor.Calls}, returns: {processor.Returns}, skipped returns: {processor.SkippedReturns}, trace clips: {processor.TraceClips}, aux losses: {processor.AuxLossesApplied}");
+                $"Wrote {outputFile}. Frames: {processor.Frames}, calls: {processor.Calls}, ignored calls: {processor.IgnoredCalls}, returns: {processor.Returns}, skipped returns: {processor.SkippedReturns}, ignored returns: {processor.IgnoredReturns}, resyncs: {processor.Resyncs}, dropped frames: {processor.DroppedFrames}, trace clips: {processor.TraceClips}, aux losses: {processor.AuxLossesApplied}");
             return 0;
         }
         catch (Exception ex)
@@ -53,7 +55,7 @@ class Program
     }
 }
 
-sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter writer)
+sealed class StackReconstructionProcessor
 {
     public ulong Frames { get; private set; }
     public ulong Calls { get; private set; }
@@ -61,16 +63,46 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
     public ulong SkippedReturns { get; private set; }
     public ulong TraceClips { get; private set; }
     public ulong AuxLossesApplied { get; private set; }
+    public ulong Resyncs { get; private set; }
+    public ulong DroppedFrames { get; private set; }
+    public ulong IgnoredReturns { get; private set; }
+    public ulong IgnoredCalls { get; private set; }
 
     ulong _nextFrameId = 1;
     IReadOnlyDictionary<uint, Queue<AuxLossRow>> _auxLosses = new Dictionary<uint, Queue<AuxLossRow>>();
+    IReadOnlyDictionary<ulong, SourceLocationKey> _sourceLocations = new Dictionary<ulong, SourceLocationKey>();
+    IReadOnlyDictionary<FunctionKey, ulong> _functionEntries = new Dictionary<FunctionKey, ulong>();
+    readonly List<StackFrameOutput> _frames = [];
 
     public void Process(string inputDirectory)
     {
         _auxLosses = AuxLossParquetReader.ReadByTid(inputDirectory);
+        _sourceLocations = SourceLocationParquetReader.Read(inputDirectory);
+        _functionEntries = SourceLocationParquetReader.GetFunctionEntries(_sourceLocations.Values);
 
         foreach (var group in DiscoverBranchFiles(inputDirectory))
             ProcessThread(group.Tid, group.Files);
+    }
+
+    public void WriteRows(StackFrameRowSchema.PipelineWriter writer)
+    {
+        foreach (var frame in NormalizeDepths(_frames))
+        {
+            var row = writer.GetRow();
+            row.FrameId = frame.FrameId;
+            row.Tid = frame.Tid;
+            row.Depth = frame.Depth;
+            row.StartTime = frame.StartTime;
+            row.EndTime = frame.EndTime;
+            row.StartTrace = frame.StartTrace;
+            row.EndTrace = frame.EndTrace;
+            row.LocationId = frame.LocationId;
+            row.StartCpu = frame.StartCpu;
+            row.EndCpu = frame.EndCpu;
+            row.StartReason = (byte)frame.StartReason;
+            row.EndReason = (byte)frame.EndReason;
+            writer.Next();
+        }
     }
 
     void ProcessThread(uint tid, IReadOnlyList<string> branchFiles)
@@ -129,13 +161,19 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN) != 0)
             ResumeTrace(state);
 
-        if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0)
+        if (IsCallBranch(row, flags))
         {
             Calls++;
+            if (!IsStackCall(row))
+            {
+                IgnoredCalls++;
+                return;
+            }
+
+            SynchronizeCaller(state, row);
             var locationId = row.AddressLocationId != 0 ? row.AddressLocationId : row.IpLocationId;
             var frame = new OpenStackFrame(
                 Tid: row.Tid,
-                Depth: checked((uint)state.OpenFrames.Count),
                 LocationId: locationId,
                 ActiveStartTime: row.Time,
                 ActiveStartTrace: row.Id,
@@ -144,25 +182,167 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
             state.OpenFrames.Add(frame);
         }
 
-        if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0)
+        if (IsReturnBranch(row, flags))
         {
             Returns++;
-            if (state.OpenFrames.Count == 0)
-            {
-                SkippedReturns++;
-            }
-            else
-            {
-                var index = state.OpenFrames.Count - 1;
-                var frame = state.OpenFrames[index];
-                state.OpenFrames.RemoveAt(index);
-                WriteFrame(frame, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
-            }
+            ProcessReturn(state, row);
         }
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_END) != 0)
             SuspendTrace(state, row);
     }
+
+    bool IsStackCall(TraceRow row)
+    {
+        var caller = GetLocation(row.IpLocationId);
+        var callee = GetLocation(row.AddressLocationId);
+        if (!caller.IsSameFunction(callee))
+            return true;
+
+        return IsFunctionEntry(callee);
+    }
+
+    bool IsCallBranch(TraceRow row, DLFilterFlag flags)
+    {
+        if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_CALL) != 0)
+            return true;
+
+        var caller = GetLocation(row.IpLocationId);
+        var callee = GetLocation(row.AddressLocationId);
+        return !caller.IsSameFunction(callee) && IsFunctionEntry(callee);
+    }
+
+    bool IsReturnBranch(TraceRow row, DLFilterFlag flags)
+    {
+        if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_RETURN) != 0)
+            return true;
+
+        var source = GetLocation(row.IpLocationId);
+        var target = GetLocation(row.AddressLocationId);
+        return !source.IsSameFunction(target) && !IsFunctionEntry(target);
+    }
+
+    bool IsFunctionEntry(SourceLocationKey location)
+        => _functionEntries.TryGetValue(location.Function, out var entryAddress) &&
+           location.RelativeAddress == entryAddress;
+
+    void ProcessReturn(ThreadStackState state, TraceRow row)
+    {
+        if (state.OpenFrames.Count == 0)
+        {
+            SkippedReturns++;
+            return;
+        }
+
+        var returnSource = GetLocation(row.IpLocationId);
+        var returnTarget = GetLocation(row.AddressLocationId);
+        if (returnSource.IsSameFunction(returnTarget) && !IsRecursiveReturn(state, returnSource))
+        {
+            IgnoredReturns++;
+            return;
+        }
+
+        var frameIndex = FindReturningFrame(state, row.IpLocationId);
+        if (frameIndex < 0)
+        {
+            DroppedFrames += checked((ulong)state.OpenFrames.Count);
+            Resyncs++;
+            state.OpenFrames.Clear();
+            SkippedReturns++;
+            return;
+        }
+
+        if (frameIndex != state.OpenFrames.Count - 1)
+        {
+            var dropped = state.OpenFrames.Count - frameIndex - 1;
+            state.OpenFrames.RemoveRange(frameIndex + 1, dropped);
+            DroppedFrames += checked((ulong)dropped);
+            Resyncs++;
+        }
+
+        var frame = state.OpenFrames[frameIndex];
+        state.OpenFrames.RemoveAt(frameIndex);
+        WriteFrame(frame, checked((uint)frameIndex), row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
+    }
+
+    void SynchronizeCaller(ThreadStackState state, TraceRow row)
+    {
+        var caller = GetLocation(row.IpLocationId);
+        var callee = GetLocation(row.AddressLocationId);
+        if ((caller.Symbol == "main" || callee.Symbol == "main") && state.OpenFrames.Count != 0)
+        {
+            DroppedFrames += checked((ulong)state.OpenFrames.Count);
+            Resyncs++;
+            state.OpenFrames.Clear();
+            return;
+        }
+
+        if (caller.IsSameFunction(callee))
+            return;
+
+        var callerIndex = FindReturningFrame(state, row.IpLocationId);
+        if (callerIndex >= 0)
+        {
+            if (callerIndex != state.OpenFrames.Count - 1)
+            {
+                var dropped = state.OpenFrames.Count - callerIndex - 1;
+                state.OpenFrames.RemoveRange(callerIndex + 1, dropped);
+                DroppedFrames += checked((ulong)dropped);
+                Resyncs++;
+            }
+
+            return;
+        }
+
+        if (caller.Symbol == "main" || string.IsNullOrEmpty(caller.Symbol))
+            return;
+
+        state.OpenFrames.Add(new OpenStackFrame(
+            Tid: row.Tid,
+            LocationId: row.IpLocationId,
+            ActiveStartTime: row.Time,
+            ActiveStartTrace: row.Id,
+            ActiveStartCpu: row.Cpu,
+            StartReason: StackFrameBoundaryReason.Call));
+        Resyncs++;
+    }
+
+    bool IsRecursiveReturn(ThreadStackState state, SourceLocationKey returnLocation)
+    {
+        if (state.OpenFrames.Count < 2)
+            return false;
+
+        var top = GetLocation(state.OpenFrames[^1].LocationId);
+        var parent = GetLocation(state.OpenFrames[^2].LocationId);
+        return top.IsSameFunction(returnLocation) && parent.IsSameFunction(returnLocation);
+    }
+
+    int FindReturningFrame(ThreadStackState state, ulong returnLocationId)
+    {
+        for (var i = state.OpenFrames.Count - 1; i >= 0; i--)
+        {
+            if (IsSameFunction(state.OpenFrames[i].LocationId, returnLocationId))
+                return i;
+        }
+
+        return -1;
+    }
+
+    bool IsSameFunction(ulong frameLocationId, ulong returnLocationId)
+    {
+        if (frameLocationId == 0 || returnLocationId == 0)
+            return frameLocationId == returnLocationId;
+
+        if (frameLocationId == returnLocationId)
+            return true;
+
+        var frameLocation = GetLocation(frameLocationId);
+        var returnLocation = GetLocation(returnLocationId);
+        return frameLocation.IsSameFunction(returnLocation);
+    }
+
+    SourceLocationKey GetLocation(ulong locationId)
+        => _sourceLocations.TryGetValue(locationId, out var location) ? location : default;
 
     void ResumeTrace(ThreadStackState state)
     {
@@ -179,19 +359,6 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
 
         TraceClips++;
         state.TraceActive = false;
-        CloseActiveIntervals(state, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.TraceEnd);
-
-        for (var i = 0; i < state.OpenFrames.Count; i++)
-        {
-            var frame = state.OpenFrames[i];
-            state.OpenFrames[i] = frame with
-            {
-                ActiveStartTime = row.Time,
-                ActiveStartTrace = row.Id,
-                ActiveStartCpu = row.Cpu,
-                StartReason = StackFrameBoundaryReason.TraceResume
-            };
-        }
     }
 
     void CloseActiveIntervals(
@@ -204,33 +371,71 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
         for (var i = state.OpenFrames.Count - 1; i >= 0; i--)
         {
             var frame = state.OpenFrames[i];
-            WriteFrame(frame, endTime, endTrace, endCpu, endReason);
+            WriteFrame(frame, checked((uint)i), endTime, endTrace, endCpu, endReason);
         }
     }
 
-    void WriteFrame(OpenStackFrame frame, ulong endTime, ulong endTrace, uint endCpu, StackFrameBoundaryReason endReason)
+    void WriteFrame(
+        OpenStackFrame frame,
+        uint depth,
+        ulong endTime,
+        ulong endTrace,
+        uint endCpu,
+        StackFrameBoundaryReason endReason)
     {
         if (endTime < frame.ActiveStartTime)
             endTime = frame.ActiveStartTime;
         if (endTrace == 0)
             endTrace = frame.ActiveStartTrace;
 
-        var row = writer.GetRow();
-        row.FrameId = _nextFrameId++;
-        row.Tid = frame.Tid;
-        row.Depth = frame.Depth;
-        row.StartTime = frame.ActiveStartTime;
-        row.EndTime = endTime;
-        row.StartTrace = frame.ActiveStartTrace;
-        row.EndTrace = endTrace;
-        row.LocationId = frame.LocationId;
-        row.StartCpu = frame.ActiveStartCpu;
-        row.EndCpu = endCpu;
-        row.StartReason = (byte)frame.StartReason;
-        row.EndReason = (byte)endReason;
-        writer.Next();
+        if (endReason != StackFrameBoundaryReason.Return)
+            return;
+
+        _frames.Add(new StackFrameOutput(
+            FrameId: _nextFrameId++,
+            Tid: frame.Tid,
+            Depth: depth,
+            StartTime: frame.ActiveStartTime,
+            EndTime: endTime,
+            StartTrace: frame.ActiveStartTrace,
+            EndTrace: endTrace,
+            LocationId: frame.LocationId,
+            StartCpu: frame.ActiveStartCpu,
+            EndCpu: endCpu,
+            StartReason: frame.StartReason,
+            EndReason: endReason));
         Frames++;
     }
+
+    static IEnumerable<StackFrameOutput> NormalizeDepths(IEnumerable<StackFrameOutput> frames)
+    {
+        foreach (var group in frames.GroupBy(static frame => frame.Tid).OrderBy(static group => group.Key))
+        {
+            var active = new List<StackFrameOutput>();
+            foreach (var frame in group.OrderBy(static frame => frame, StackFrameStartComparer.Instance))
+            {
+                active.RemoveAll(open => EndsBeforeOrAt(open, frame));
+                active.RemoveAll(open => !Contains(open, frame));
+
+                var usedDepths = active.Select(static open => open.Depth).ToHashSet();
+                var depth = 0u;
+                while (usedDepths.Contains(depth))
+                    depth++;
+
+                var normalized = frame with { Depth = depth };
+                active.Add(normalized);
+                yield return normalized;
+            }
+        }
+    }
+
+    static bool EndsBeforeOrAt(StackFrameOutput open, StackFrameOutput next)
+        => open.EndTime < next.StartTime ||
+           (open.EndTime == next.StartTime && open.EndTrace <= next.StartTrace);
+
+    static bool Contains(StackFrameOutput outer, StackFrameOutput inner)
+        => outer.EndTime > inner.EndTime ||
+           (outer.EndTime == inner.EndTime && outer.EndTrace >= inner.EndTrace);
 
     static IReadOnlyList<ThreadBranchFiles> DiscoverBranchFiles(string inputDirectory)
     {
@@ -298,14 +503,40 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
 
     readonly record struct AuxLossRow(ulong Time, uint Tid, uint Cpu);
 
+    readonly record struct FunctionKey(string Dso, string Symbol);
+
+    readonly record struct SourceLocationKey(string Dso, ulong RelativeAddress, string Symbol)
+    {
+        public FunctionKey Function => new(Dso, Symbol);
+
+        public bool IsSameFunction(SourceLocationKey other)
+            => !string.IsNullOrEmpty(Dso) &&
+               !string.IsNullOrEmpty(Symbol) &&
+               string.Equals(Dso, other.Dso, StringComparison.Ordinal) &&
+               string.Equals(Symbol, other.Symbol, StringComparison.Ordinal);
+    }
+
     readonly record struct OpenStackFrame(
         uint Tid,
-        uint Depth,
         ulong LocationId,
         ulong ActiveStartTime,
         ulong ActiveStartTrace,
         uint ActiveStartCpu,
         StackFrameBoundaryReason StartReason);
+
+    readonly record struct StackFrameOutput(
+        ulong FrameId,
+        uint Tid,
+        uint Depth,
+        ulong StartTime,
+        ulong EndTime,
+        ulong StartTrace,
+        ulong EndTrace,
+        ulong LocationId,
+        uint StartCpu,
+        uint EndCpu,
+        StackFrameBoundaryReason StartReason,
+        StackFrameBoundaryReason EndReason);
 
     sealed class ThreadStackState(uint tid)
     {
@@ -350,6 +581,32 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
                         AddressLocationId: addressLocationIds[i]);
                 }
             }
+        }
+    }
+
+    sealed class StackFrameStartComparer : IComparer<StackFrameOutput>
+    {
+        public static StackFrameStartComparer Instance { get; } = new();
+
+        public int Compare(StackFrameOutput left, StackFrameOutput right)
+        {
+            var compare = left.StartTime.CompareTo(right.StartTime);
+            if (compare != 0)
+                return compare;
+
+            compare = left.StartTrace.CompareTo(right.StartTrace);
+            if (compare != 0)
+                return compare;
+
+            compare = right.EndTime.CompareTo(left.EndTime);
+            if (compare != 0)
+                return compare;
+
+            compare = right.EndTrace.CompareTo(left.EndTrace);
+            if (compare != 0)
+                return compare;
+
+            return left.FrameId.CompareTo(right.FrameId);
         }
     }
 
@@ -406,5 +663,58 @@ sealed class StackReconstructionProcessor(StackFrameRowSchema.PipelineWriter wri
                     yield return new AuxLossRow(times[i], tids[i], cpus[i]);
             }
         }
+    }
+
+    static class SourceLocationParquetReader
+    {
+        public static IReadOnlyDictionary<ulong, SourceLocationKey> Read(string inputDirectory)
+        {
+            var path = Path.Combine(inputDirectory, "source_locations.parquet");
+            if (!File.Exists(path))
+                return new Dictionary<ulong, SourceLocationKey>();
+
+            var rows = new Dictionary<ulong, SourceLocationKey>();
+            using var stream = File.OpenRead(path);
+            using var reader = SourceLocationRowSchema.Schema.CreateReader(stream);
+
+            foreach (var token in reader.EnumerateRowGroups())
+            {
+                using var rowGroup = reader.OpenRowGroup(stream, token);
+                var ids = ReadColumn<ulong>(rowGroup, SourceLocationRowSchema.Schema.Columns[0]);
+                var dsos = ReadColumn<byte[]>(rowGroup, SourceLocationRowSchema.Schema.Columns[2]);
+                var relativeAddresses = ReadColumn<ulong>(rowGroup, SourceLocationRowSchema.Schema.Columns[3]);
+                var symbols = ReadColumn<byte[]?>(rowGroup, SourceLocationRowSchema.Schema.Columns[4]);
+
+                ValidateRowGroupLengths(path, ids.Length, dsos, relativeAddresses, symbols);
+
+                for (var i = 0; i < ids.Length; i++)
+                    rows[ids[i]] = new SourceLocationKey(
+                        ToUtf8String(dsos[i]),
+                        relativeAddresses[i],
+                        ToUtf8String(symbols[i]));
+            }
+
+            return rows;
+        }
+
+        public static IReadOnlyDictionary<FunctionKey, ulong> GetFunctionEntries(IEnumerable<SourceLocationKey> locations)
+        {
+            var entries = new Dictionary<FunctionKey, ulong>();
+            foreach (var location in locations)
+            {
+                if (string.IsNullOrEmpty(location.Dso) || string.IsNullOrEmpty(location.Symbol))
+                    continue;
+
+                ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(entries, location.Function, out var exists);
+                if (!exists || location.RelativeAddress < entry)
+                    entry = location.RelativeAddress;
+            }
+
+            return entries;
+        }
+
+        static string ToUtf8String(byte[]? value)
+            => value is { Length: > 0 } ? System.Text.Encoding.UTF8.GetString(value) : string.Empty;
+
     }
 }

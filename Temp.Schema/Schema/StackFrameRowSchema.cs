@@ -11,7 +11,7 @@ public sealed partial class StackFrameRowSchema
     [ParquetColumn("tid", Encodings = [EncodingKind.RleDictionary])]
     public uint Tid { get; set; }
 
-    [ParquetColumn("depth", Encodings = [EncodingKind.RleDictionary])]
+    [ParquetColumn("depth", Encodings = [EncodingKind.DeltaBinaryPacked])]
     public uint Depth { get; set; }
 
     [ParquetColumn("startTime", Encodings = [EncodingKind.DeltaBinaryPacked])]

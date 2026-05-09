@@ -132,8 +132,11 @@ public sealed class IntelPtPipelineE2ETests
                 }
 
                 Assert.That(stack, Is.Not.Empty, $"tid={group.Key} ended frame {endpoint.FrameId} with an empty stack.");
-                stack.Pop();
-
+                var open = stack.Pop();
+                Assert.That(
+                    open.FrameId,
+                    Is.EqualTo(endpoint.FrameId),
+                    $"tid={group.Key} ended frame {endpoint.FrameId} while frame {open.FrameId} was on top.");
             }
 
             Assert.That(maxOpenFrames, Is.LessThan(512), $"tid={group.Key} opened an unexpectedly deep visible Perfetto stack.");
@@ -165,6 +168,14 @@ public sealed class IntelPtPipelineE2ETests
 
             var frameCount = frames.Count(frame => locationIds.Contains(frame.LocationId));
             TestContext.Progress.WriteLine($"{target.Name}: {expectedSymbol} sourceLocations={locationIds.Count} stackFrames={frameCount}");
+            Assert.That(frameCount, Is.GreaterThan(0), $"{target.Name}: no reconstructed stack frame was emitted for {expectedSymbol}.\n{DescribeFrames(frames, locationIds)}");
+
+            var maxDepth = frames
+                .Where(frame => locationIds.Contains(frame.LocationId))
+                .Select(static frame => frame.Depth)
+                .DefaultIfEmpty()
+                .Max();
+            Assert.That(maxDepth, Is.LessThan(32), $"{target.Name}: reconstructed stack depth drifted for {expectedSymbol}.\n{DescribeFrames(frames, locationIds)}");
         }
     }
 
