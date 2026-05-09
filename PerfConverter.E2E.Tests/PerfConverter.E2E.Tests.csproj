@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="Targets\e2e_stack_target.c" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Targets\*.c" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

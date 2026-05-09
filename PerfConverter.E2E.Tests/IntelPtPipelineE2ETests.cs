@@ -10,18 +10,26 @@ namespace PerfConverter.E2E.Tests;
 [Category("E2E")]
 public sealed class IntelPtPipelineE2ETests
 {
-    [Test]
-    public async Task IntelPtPipeline_ReconstructsKnownCStack()
+    static readonly IntelPtTarget[] Targets =
+    [
+        new("01_leaf", "e2e_01_leaf.c", ["e2e_leaf"]),
+        new("02_chain", "e2e_02_chain.c", ["e2e_root", "e2e_mid", "e2e_leaf"]),
+        new("03_branching", "e2e_03_branching.c", ["e2e_root", "e2e_branch", "e2e_left_leaf", "e2e_right_leaf"]),
+        new("04_recursion", "e2e_04_recursion.c", ["e2e_root", "e2e_recursive"])
+    ];
+
+    [TestCaseSource(nameof(Targets))]
+    public async Task IntelPtPipeline_ReconstructsKnownCStack(IntelPtTarget target)
     {
         Log("checking Linux perf tooling");
         await RequireLinuxToolingAsync();
 
         var repoRoot = FindRepoRoot();
-        using var work = new LocalTempDirectory("perfconverter-e2e-");
+        using var work = new LocalTempDirectory($"perfconverter-e2e-{target.Name}-");
         Log($"repo={repoRoot}");
         Log($"work={work.Path}");
-        var targetSource = Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", "e2e_stack_target.c");
-        var targetBinary = Path.Combine(work.Path, "e2e_stack_target");
+        var targetSource = Path.Combine(TestContext.CurrentContext.TestDirectory, "Targets", target.SourceFile);
+        var targetBinary = Path.Combine(work.Path, Path.GetFileNameWithoutExtension(target.SourceFile));
         var perfData = Path.Combine(work.Path, "perf.data");
         var outputPath = Path.Combine(work.Path, "parquet_output");
         var tracePath = Path.Combine(work.Path, "trace.perfetto-trace");
@@ -81,7 +89,7 @@ public sealed class IntelPtPipelineE2ETests
         Assert.That(stackFrames, Is.Not.Empty);
         Assert.That(new FileInfo(tracePath).Length, Is.GreaterThan(0));
         AssertStackEventsAreWellNested(stackFrames);
-        AssertKnownCallChainIsNested(stackFrames, sourceLocations);
+        AssertExpectedSymbols(target, stackFrames, sourceLocations);
     }
 
     static void Log(string message)
@@ -141,7 +149,8 @@ public sealed class IntelPtPipelineE2ETests
             yield return new StackEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, frame.FrameId, IsBegin: false, frame);
     }
 
-    static void AssertKnownCallChainIsNested(
+    static void AssertExpectedSymbols(
+        IntelPtTarget target,
         IReadOnlyList<StackFrame> frames,
         IReadOnlyDictionary<ulong, SourceLocation> sourceLocations)
     {
@@ -149,21 +158,14 @@ public sealed class IntelPtPipelineE2ETests
             static pair => pair.Key,
             static pair => pair.Value.Symbol ?? string.Empty);
 
-        var rootIds = FindLocationIds(symbolByLocationId, "e2e_root");
-        var midIds = FindLocationIds(symbolByLocationId, "e2e_mid");
-        var leafIds = FindLocationIds(symbolByLocationId, "e2e_leaf");
+        foreach (var expectedSymbol in target.ExpectedSymbols)
+        {
+            var locationIds = FindLocationIds(symbolByLocationId, expectedSymbol);
+            Assert.That(locationIds, Is.Not.Empty, $"{target.Name}: no source location was resolved for {expectedSymbol}.");
 
-        Assert.That(
-            rootIds.Count + midIds.Count + leafIds.Count,
-            Is.GreaterThan(0),
-            "No source location was resolved for any known E2E target symbol.");
-
-        TestContext.Progress.WriteLine($"""
-            Resolved known target source locations:
-            e2e_root={rootIds.Count}
-            e2e_mid={midIds.Count}
-            e2e_leaf={leafIds.Count}
-            """);
+            var frameCount = frames.Count(frame => locationIds.Contains(frame.LocationId));
+            TestContext.Progress.WriteLine($"{target.Name}: {expectedSymbol} sourceLocations={locationIds.Count} stackFrames={frameCount}");
+        }
     }
 
     static string DescribeFrames(IReadOnlyList<StackFrame> frames, IReadOnlySet<ulong> locationIds)
@@ -451,6 +453,12 @@ public sealed class IntelPtPipelineE2ETests
     readonly record struct CommandResult(int ExitCode, string StandardOutput, string StandardError);
 
     readonly record struct PublishedTools(string CliDll, string StackFixerDll, string PerfToPerfettoDll);
+
+    public sealed record IntelPtTarget(string Name, string SourceFile, string[] ExpectedSymbols)
+    {
+        public override string ToString()
+            => Name;
+    }
 
     readonly record struct StackFrame(
         ulong FrameId,
