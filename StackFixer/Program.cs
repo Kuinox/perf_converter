@@ -161,7 +161,8 @@ sealed class StackReconstructionProcessor
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN) != 0)
             ResumeTrace(state);
 
-        if (IsCallBranch(row, flags))
+        var isCall = IsCallBranch(row, flags);
+        if (isCall)
         {
             Calls++;
             if (!IsStackCall(row))
@@ -182,7 +183,7 @@ sealed class StackReconstructionProcessor
             state.OpenFrames.Add(frame);
         }
 
-        if (IsReturnBranch(row, flags))
+        if (!isCall && IsReturnBranch(row, flags))
         {
             Returns++;
             ProcessReturn(state, row);
@@ -245,9 +246,16 @@ sealed class StackReconstructionProcessor
         var frameIndex = FindReturningFrame(state, row.IpLocationId);
         if (frameIndex < 0)
         {
-            DroppedFrames += checked((ulong)state.OpenFrames.Count);
-            Resyncs++;
-            state.OpenFrames.Clear();
+            if (state.OpenFrames.Count > 1)
+            {
+                var topIndex = state.OpenFrames.Count - 1;
+                var unmatchedFrame = state.OpenFrames[topIndex];
+                state.OpenFrames.RemoveAt(topIndex);
+                WriteFrame(unmatchedFrame, checked((uint)topIndex), row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
+                Resyncs++;
+                return;
+            }
+
             SkippedReturns++;
             return;
         }
@@ -269,14 +277,6 @@ sealed class StackReconstructionProcessor
     {
         var caller = GetLocation(row.IpLocationId);
         var callee = GetLocation(row.AddressLocationId);
-        if ((caller.Symbol == "main" || callee.Symbol == "main") && state.OpenFrames.Count != 0)
-        {
-            DroppedFrames += checked((ulong)state.OpenFrames.Count);
-            Resyncs++;
-            state.OpenFrames.Clear();
-            return;
-        }
-
         if (caller.IsSameFunction(callee))
             return;
 
@@ -294,7 +294,7 @@ sealed class StackReconstructionProcessor
             return;
         }
 
-        if (caller.Symbol == "main" || string.IsNullOrEmpty(caller.Symbol))
+        if (string.IsNullOrEmpty(caller.Symbol))
             return;
 
         state.OpenFrames.Add(new OpenStackFrame(
@@ -388,7 +388,10 @@ sealed class StackReconstructionProcessor
         if (endTrace == 0)
             endTrace = frame.ActiveStartTrace;
 
-        if (endReason != StackFrameBoundaryReason.Return)
+        if (endReason is not StackFrameBoundaryReason.Return and not StackFrameBoundaryReason.EndOfInput)
+            return;
+
+        if (endReason == StackFrameBoundaryReason.EndOfInput && GetLocation(frame.LocationId).Symbol != "main")
             return;
 
         _frames.Add(new StackFrameOutput(

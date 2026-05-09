@@ -106,7 +106,7 @@ public sealed class IntelPtPipelineE2ETests
         Log("reading stack parquet");
         var stackFrames = StackFrameReader.Read(Path.Combine(outputPath, "stack_frames.parquet"));
         var sourceLocations = SourceLocationReader.Read(Path.Combine(outputPath, "source_locations.parquet"));
-        var sampledStacks = ParseSampledStacks(sampledScript.StandardOutput, target.ExpectedSymbols);
+        var sampledStacks = ParseSampledStacks(sampledScript.StandardOutput, GetRequiredReconstructedSymbols(target));
         var sampledReportPath = WriteSampledStackReport(target, sampledStacks, stackFrames, sourceLocations);
         TestContext.AddTestAttachment(sampledReportPath, $"{target.Name} sampled stack comparison");
         CopyInspectionArtifacts(repoRoot, target, sampledReportPath, tracePath);
@@ -227,7 +227,8 @@ public sealed class IntelPtPipelineE2ETests
     {
         Assert.That(samples, Is.Not.Empty, $"{target.Name}: perf sampling did not capture any expected target stack.");
 
-        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
+        var requiredSymbols = GetRequiredReconstructedSymbols(target);
+        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, requiredSymbols);
         foreach (var sample in samples)
         {
             var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
@@ -250,7 +251,7 @@ public sealed class IntelPtPipelineE2ETests
             .Distinct()
             .ToArray();
 
-        if (target.ExpectedSymbols.Length < 2)
+        if (requiredSymbols.Count < 2)
             return;
 
         Assert.That(observedPairs, Is.Not.Empty, $"{target.Name}: sampled stacks did not include an expected parent/child pair.");
@@ -263,6 +264,12 @@ public sealed class IntelPtPipelineE2ETests
         }
     }
 
+    static IReadOnlyList<string> GetRequiredReconstructedSymbols(IntelPtTarget target)
+        => new[] { "main" }
+            .Concat(target.ExpectedSymbols)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
     static string WriteSampledStackReport(
         IntelPtTarget target,
         IReadOnlyList<SampledStack> samples,
@@ -270,7 +277,8 @@ public sealed class IntelPtPipelineE2ETests
         IReadOnlyDictionary<ulong, SourceLocation> sourceLocations)
     {
         var path = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"{target.Name}-sampled-stack-report.md");
-        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
+        var requiredSymbols = GetRequiredReconstructedSymbols(target);
+        var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, requiredSymbols);
         var uniqueSamples = samples
             .GroupBy(static sample => string.Join(" -> ", sample.FullSymbols), StringComparer.Ordinal)
             .OrderByDescending(static group => group.Count())
@@ -306,7 +314,7 @@ public sealed class IntelPtPipelineE2ETests
         writer.WriteLine();
         writer.WriteLine("| Symbol | Frames |");
         writer.WriteLine("| --- | ---: |");
-        foreach (var symbol in target.ExpectedSymbols)
+        foreach (var symbol in requiredSymbols)
             writer.WriteLine($"| `{symbol}` | {framesBySymbol.GetValueOrDefault(symbol)?.Count ?? 0} |");
 
         writer.WriteLine();
@@ -589,13 +597,18 @@ public sealed class IntelPtPipelineE2ETests
 
             foreach (var (expectedSymbol, matches) in result)
             {
-                if (location.Symbol.Contains(expectedSymbol, StringComparison.Ordinal))
+                if (SymbolMatches(location.Symbol, expectedSymbol))
                     matches.Add(frame);
             }
         }
 
         return result;
     }
+
+    static bool SymbolMatches(string actualSymbol, string expectedSymbol)
+        => expectedSymbol == "main"
+            ? actualSymbol.Equals(expectedSymbol, StringComparison.Ordinal)
+            : actualSymbol.Contains(expectedSymbol, StringComparison.Ordinal);
 
     static bool HasOverlappingOrderedFrames(IReadOnlyList<StackFrame> parents, IReadOnlyList<StackFrame> children)
         => parents.Any(parent => children.Any(child => parent.Depth < child.Depth && Overlaps(parent, child)));
@@ -622,7 +635,7 @@ public sealed class IntelPtPipelineE2ETests
 
     static HashSet<ulong> FindLocationIds(IReadOnlyDictionary<ulong, string> symbols, string expectedSymbol)
         => symbols
-            .Where(pair => pair.Value.Contains(expectedSymbol, StringComparison.Ordinal))
+            .Where(pair => SymbolMatches(pair.Value, expectedSymbol))
             .Select(static pair => pair.Key)
             .ToHashSet();
 
