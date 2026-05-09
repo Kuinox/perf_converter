@@ -234,10 +234,10 @@ public sealed class IntelPtPipelineE2ETests
             Assert.That(
                 reconstructed.All(static frame => frame is not null),
                 Is.True,
-                $"{target.Name}: sampled stack at time={sample.Time} ip={sample.Ip ?? "?"} was not reconstructed at the same timestamp. sampled={string.Join(" -> ", sample.Symbols)} reconstructed={FormatReconstructedStack(sample.Symbols, reconstructed)}");
+                $"{target.Name}: sampled stack at time={sample.Time} ip={sample.Ip ?? "?"} was not reconstructed at the same timestamp. sampled={string.Join(" -> ", sample.TargetSymbols)} reconstructed={FormatReconstructedStack(sample.TargetSymbols, reconstructed)}");
         }
 
-        foreach (var symbol in samples.SelectMany(static sample => sample.Symbols).Distinct(StringComparer.Ordinal))
+        foreach (var symbol in samples.SelectMany(static sample => sample.TargetSymbols).Distinct(StringComparer.Ordinal))
         {
             Assert.That(
                 framesBySymbol.GetValueOrDefault(symbol),
@@ -246,7 +246,7 @@ public sealed class IntelPtPipelineE2ETests
         }
 
         var observedPairs = samples
-            .SelectMany(static sample => sample.Symbols.Zip(sample.Symbols.Skip(1), static (parent, child) => (Parent: parent, Child: child)))
+            .SelectMany(static sample => sample.TargetSymbols.Zip(sample.TargetSymbols.Skip(1), static (parent, child) => (Parent: parent, Child: child)))
             .Distinct()
             .ToArray();
 
@@ -272,7 +272,7 @@ public sealed class IntelPtPipelineE2ETests
         var path = Path.Combine(TestContext.CurrentContext.WorkDirectory, $"{target.Name}-sampled-stack-report.md");
         var framesBySymbol = BuildFramesBySymbol(frames, sourceLocations, target.ExpectedSymbols);
         var uniqueSamples = samples
-            .GroupBy(static sample => string.Join(" -> ", sample.Symbols), StringComparer.Ordinal)
+            .GroupBy(static sample => string.Join(" -> ", sample.FullSymbols), StringComparer.Ordinal)
             .OrderByDescending(static group => group.Count())
             .ThenBy(static group => group.Key, StringComparer.Ordinal)
             .ToArray();
@@ -298,7 +298,7 @@ public sealed class IntelPtPipelineE2ETests
             var sample = group.First();
             var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
             writer.WriteLine(
-                $"| {group.Count()} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.Symbols, reconstructed))} |");
+                $"| {group.Count()} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.TargetSymbols, reconstructed))} |");
         }
 
         writer.WriteLine();
@@ -319,7 +319,7 @@ public sealed class IntelPtPipelineE2ETests
             var sample = samples[index];
             var reconstructed = FindRepresentativeReconstructedStack(sample, framesBySymbol);
             writer.WriteLine(
-                $"| {index + 1} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.Symbols, reconstructed))} |");
+                $"| {index + 1} | {EscapeMarkdownCell(FormatStack(sample))} | {EscapeMarkdownCell(FormatReconstructedStack(sample.TargetSymbols, reconstructed))} |");
         }
 
         return path;
@@ -337,7 +337,7 @@ public sealed class IntelPtPipelineE2ETests
         SampledStack sample,
         IReadOnlyDictionary<string, List<StackFrame>> framesBySymbol)
     {
-        var symbols = sample.Symbols;
+        var symbols = sample.TargetSymbols;
         var chain = new StackFrame?[symbols.Count];
         if (symbols.Count == 0)
             return chain;
@@ -412,7 +412,7 @@ public sealed class IntelPtPipelineE2ETests
 
     static string FormatStack(SampledStack sample)
         => $"time={sample.Time} ip={sample.Ip ?? "?"}<br>" +
-           string.Join("<br>", sample.Symbols.Select(static symbol => $"`{symbol}`"));
+           string.Join("<br>", sample.FullSymbols.Select(static symbol => $"`{symbol}`"));
 
     static string FormatReconstructedStack(IReadOnlyList<string> sample, IReadOnlyList<StackFrame?> frames)
         => string.Join("<br>", sample.Zip(frames, static (symbol, frame) => frame is null
@@ -426,7 +426,8 @@ public sealed class IntelPtPipelineE2ETests
     {
         var expected = expectedSymbols.ToHashSet(StringComparer.Ordinal);
         var samples = new List<SampledStack>();
-        var current = new List<string>();
+        var currentFull = new List<string>();
+        var currentTarget = new List<string>();
         ulong currentTime = 0;
         string? currentIp = null;
         var acceptCurrentSample = false;
@@ -449,8 +450,8 @@ public sealed class IntelPtPipelineE2ETests
 
                 currentTime = header.Time;
                 currentIp = header.Ip;
-                if (header.Symbol is not null && expected.Contains(header.Symbol))
-                    current.Add(header.Symbol);
+                if (header.Symbol is not null)
+                    AddSymbol(header.Symbol);
                 continue;
             }
 
@@ -458,8 +459,8 @@ public sealed class IntelPtPipelineE2ETests
                 continue;
 
             var symbol = TryParsePerfScriptSymbol(line);
-            if (symbol is not null && expected.Contains(symbol) && current.LastOrDefault() != symbol)
-                current.Add(symbol);
+            if (symbol is not null)
+                AddSymbol(symbol);
         }
 
         AddCurrentSample();
@@ -467,12 +468,26 @@ public sealed class IntelPtPipelineE2ETests
 
         void AddCurrentSample()
         {
-            if (current.Count != 0)
-                samples.Add(new SampledStack(currentTime, currentIp, current.AsEnumerable().Reverse().ToArray()));
-            current.Clear();
+            if (currentTarget.Count != 0)
+                samples.Add(new SampledStack(
+                    currentTime,
+                    currentIp,
+                    currentFull.AsEnumerable().Reverse().ToArray(),
+                    currentTarget.AsEnumerable().Reverse().ToArray()));
+            currentFull.Clear();
+            currentTarget.Clear();
             currentTime = 0;
             currentIp = null;
             acceptCurrentSample = false;
+        }
+
+        void AddSymbol(string symbol)
+        {
+            if (currentFull.LastOrDefault() != symbol)
+                currentFull.Add(symbol);
+
+            if (expected.Contains(symbol) && currentTarget.LastOrDefault() != symbol)
+                currentTarget.Add(symbol);
         }
     }
 
@@ -932,7 +947,8 @@ public sealed class IntelPtPipelineE2ETests
     readonly record struct SampledStack(
         ulong Time,
         string? Ip,
-        IReadOnlyList<string> Symbols);
+        IReadOnlyList<string> FullSymbols,
+        IReadOnlyList<string> TargetSymbols);
 
     readonly record struct StackEndpoint(
         ulong Time,
