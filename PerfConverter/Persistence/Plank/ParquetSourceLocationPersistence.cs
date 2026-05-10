@@ -330,9 +330,14 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
     sealed class LlvmSourceLineResolver : IDisposable
     {
         readonly string[] _toolPaths = GetToolPaths();
-        readonly int _maxProcessesPerDso = GetMaxProcessesPerDso();
-        readonly ConcurrentDictionary<string, Lazy<SymbolizerPool?>> _symbolizers = new(StringComparer.Ordinal);
+        readonly int _processCount = GetProcessCount();
+        readonly Lazy<SymbolizerPool?> _symbolizers;
         bool _toolUnavailable;
+
+        public LlvmSourceLineResolver()
+            => _symbolizers = new Lazy<SymbolizerPool?>(
+                StartSymbolizerPool,
+                LazyThreadSafetyMode.ExecutionAndPublication);
 
         public SourceLine Resolve(ReadOnlyMemory<byte> dso, ulong relativeAddress)
         {
@@ -343,41 +348,29 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
             if (dsoPath.Length == 0 || dsoPath[0] == '[' || !File.Exists(dsoPath))
                 return default;
 
-            var symbolizer = _symbolizers.GetOrAdd(
-                dsoPath,
-                static (path, resolver) => new Lazy<SymbolizerPool?>(
-                    () => resolver.StartSymbolizerPool(path),
-                    LazyThreadSafetyMode.ExecutionAndPublication),
-                this);
-
-            return symbolizer.Value?.Resolve(relativeAddress) ?? default;
+            return _symbolizers.Value?.Resolve(dsoPath, relativeAddress) ?? default;
         }
 
         public void Dispose()
         {
-            foreach (var symbolizer in _symbolizers.Values)
-            {
-                if (symbolizer.IsValueCreated)
-                    symbolizer.Value?.Dispose();
-            }
-
-            _symbolizers.Clear();
+            if (_symbolizers.IsValueCreated)
+                _symbolizers.Value?.Dispose();
         }
 
-        SymbolizerPool? StartSymbolizerPool(string dsoPath)
+        SymbolizerPool? StartSymbolizerPool()
         {
             foreach (var toolPath in _toolPaths)
             {
                 try
                 {
-                    return SymbolizerPool.Start(toolPath, dsoPath, _maxProcessesPerDso);
+                    return SymbolizerPool.Start(toolPath, _processCount);
                 }
                 catch (Win32Exception)
                 {
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"SOURCE_LOCATION_SYMBOLIZER_FAILED|Tool={toolPath}|Dso={dsoPath}|Error={ex.Message}");
+                    Console.Error.WriteLine($"SOURCE_LOCATION_SYMBOLIZER_FAILED|Tool={toolPath}|Error={ex.Message}");
                     return null;
                 }
             }
@@ -399,43 +392,44 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
                 : [configuredTool];
         }
 
-        static int GetMaxProcessesPerDso()
+        static int GetProcessCount()
         {
-            var configuredValue = Environment.GetEnvironmentVariable("PERFCONVERTER_SYMBOLIZER_PROCESSES_PER_DSO");
+            var configuredValue = Environment.GetEnvironmentVariable("PERFCONVERTER_SYMBOLIZER_PROCESSES");
             if (int.TryParse(configuredValue, out var configured) && configured > 0)
                 return configured;
 
             var workerValue = Environment.GetEnvironmentVariable("PERFCONVERTER_SYMBOL_RESOLUTION_WORKERS");
             if (int.TryParse(workerValue, out var workers) && workers > 0)
-                return Math.Min(4, workers);
+                return workers;
 
-            return Math.Min(4, Math.Max(1, Environment.ProcessorCount));
+            return Math.Max(1, Environment.ProcessorCount);
         }
     }
 
     sealed class SymbolizerPool : IDisposable
     {
         readonly string _toolPath;
-        readonly string _dsoPath;
         readonly SemaphoreSlim _semaphore;
         readonly System.Collections.Concurrent.ConcurrentBag<SymbolizerProcess> _available = [];
         readonly List<SymbolizerProcess> _all = [];
         readonly object _gate = new();
         bool _disposed;
 
-        SymbolizerPool(string toolPath, string dsoPath, int maxProcesses, SymbolizerProcess firstProcess)
+        SymbolizerPool(string toolPath, int processCount)
         {
             _toolPath = toolPath;
-            _dsoPath = dsoPath;
-            _semaphore = new SemaphoreSlim(maxProcesses, maxProcesses);
-            _available.Add(firstProcess);
-            _all.Add(firstProcess);
+            _semaphore = new SemaphoreSlim(processCount, processCount);
+            for (var i = 0; i < processCount; i++)
+            {
+                var symbolizer = CreateProcess();
+                _available.Add(symbolizer);
+            }
         }
 
-        public static SymbolizerPool Start(string toolPath, string dsoPath, int maxProcesses)
-            => new(toolPath, dsoPath, maxProcesses, new SymbolizerProcess(toolPath, dsoPath));
+        public static SymbolizerPool Start(string toolPath, int processCount)
+            => new(toolPath, processCount);
 
-        public SourceLine Resolve(ulong relativeAddress)
+        public SourceLine Resolve(string dsoPath, ulong relativeAddress)
         {
             _semaphore.Wait();
             SymbolizerProcess? symbolizer = null;
@@ -456,7 +450,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
                 if (symbolizer is null)
                     symbolizer = CreateProcess();
 
-                return symbolizer.Resolve(relativeAddress);
+                return symbolizer.Resolve(dsoPath, relativeAddress);
             }
             finally
             {
@@ -469,7 +463,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
 
         SymbolizerProcess CreateProcess()
         {
-            var symbolizer = new SymbolizerProcess(_toolPath, _dsoPath);
+            var symbolizer = new SymbolizerProcess(_toolPath);
             lock (_gate)
                 _all.Add(symbolizer);
             return symbolizer;
@@ -505,7 +499,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         readonly Process _process;
         bool _disposed;
 
-        public SymbolizerProcess(string toolPath, string dsoPath)
+        public SymbolizerProcess(string toolPath)
         {
             var startInfo = new ProcessStartInfo
             {
@@ -519,8 +513,6 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
             startInfo.ArgumentList.Add("--output-style=GNU");
             startInfo.ArgumentList.Add("--functions=none");
             startInfo.ArgumentList.Add("--no-inlines");
-            startInfo.ArgumentList.Add("--obj");
-            startInfo.ArgumentList.Add(dsoPath);
 
             _process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start LLVM symbolizer.");
             _process.ErrorDataReceived += static (_, _) => { };
@@ -529,7 +521,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
 
         public bool IsUsable => !_disposed && !_process.HasExited;
 
-        public SourceLine Resolve(ulong relativeAddress)
+        public SourceLine Resolve(string dsoPath, ulong relativeAddress)
         {
             lock (_lock)
             {
@@ -538,7 +530,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
 
                 try
                 {
-                    _process.StandardInput.WriteLine($"0x{relativeAddress:x}");
+                    _process.StandardInput.WriteLine($"{dsoPath} 0x{relativeAddress:x}");
                     _process.StandardInput.Flush();
                     return ParseSourceLine(_process.StandardOutput.ReadLine());
                 }
