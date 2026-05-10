@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using PropertyChanged;
 
 namespace CLI;
@@ -12,6 +13,9 @@ public class PerfMonitorViewModel
     readonly Lock _rateHistorySync = new();
     readonly Queue<RateSample> _totalRateHistory = new();
     readonly Lock _eventTimingSync = new();
+    readonly Lock _pipelineSync = new();
+    readonly Dictionary<string, PipelineStageState> _pipelineStages = new(StringComparer.Ordinal);
+    readonly Dictionary<string, PipelineQueueState> _pipelineQueues = new(StringComparer.Ordinal);
     DateTime? _firstEventObservedUtc;
     DateTime? _lastEventObservedUtc;
 
@@ -51,6 +55,8 @@ public class PerfMonitorViewModel
     public double TotalGcTimeMs { get; set; }
     public DateTime ProcessStartTime { get; set; } = DateTime.UtcNow;
     public string StatusMessage { get; set; } = string.Empty;
+    public string PipelineBottleneck { get; set; } = "No pipeline metrics yet";
+    public string PipelineQueues { get; set; } = "-";
 
     public ConcurrentDictionary<string, FileStatus> FileStatuses { get; } = new();
     public ConcurrentQueue<string> OutputLines { get; } = new();
@@ -150,6 +156,52 @@ public class PerfMonitorViewModel
         }
     }
 
+    public void UpdatePipelineMetrics(
+        IReadOnlyList<PipelineStageMetricsSnapshot> stages,
+        IReadOnlyList<PipelineQueueMetricsSnapshot> queues,
+        DateTime observedAtUtc)
+    {
+        lock (_pipelineSync)
+        {
+            var bottleneckStage = string.Empty;
+            var bottleneckMsPerSecond = 0.0;
+
+            foreach (var stage in stages)
+            {
+                ref var state = ref CollectionsMarshal.GetValueRefOrAddDefault(_pipelineStages, stage.Stage, out var exists);
+                state ??= new PipelineStageState();
+
+                var deltaMs = exists ? Math.Max(0, stage.ElapsedMs - state.ElapsedMs) : 0;
+                var elapsedSeconds = exists ? Math.Max((observedAtUtc - state.ObservedAtUtc).TotalSeconds, 0) : 0;
+                var msPerSecond = elapsedSeconds > 0 ? deltaMs / elapsedSeconds : 0;
+
+                state.ElapsedMs = stage.ElapsedMs;
+                state.Count = stage.Count;
+                state.ObservedAtUtc = observedAtUtc;
+
+                if (msPerSecond > bottleneckMsPerSecond)
+                {
+                    bottleneckMsPerSecond = msPerSecond;
+                    bottleneckStage = stage.Stage;
+                }
+            }
+
+            foreach (var queue in queues)
+            {
+                _pipelineQueues[queue.Queue] = new PipelineQueueState(queue.Depth, queue.Capacity);
+            }
+
+            PipelineBottleneck = string.IsNullOrEmpty(bottleneckStage)
+                ? "No active pipeline pressure"
+                : $"{bottleneckStage} ({bottleneckMsPerSecond:F0} ms/s)";
+            PipelineQueues = _pipelineQueues.Count == 0
+                ? "-"
+                : string.Join(", ", _pipelineQueues
+                    .OrderBy(static x => x.Key)
+                    .Select(static x => $"{x.Key} {x.Value.Depth}/{x.Value.Capacity}"));
+        }
+    }
+
     public double[] GetTotalRateHistorySnapshot()
     {
         lock (_rateHistorySync)
@@ -184,4 +236,14 @@ public class PerfMonitorViewModel
     }
 
     readonly record struct RateSample(DateTime TimestampUtc, double Value);
+    sealed class PipelineStageState
+    {
+        public long Count;
+        public double ElapsedMs;
+        public DateTime ObservedAtUtc;
+    }
+
+    readonly record struct PipelineQueueState(int Depth, int Capacity);
+    public readonly record struct PipelineStageMetricsSnapshot(string Stage, long Count, double ElapsedMs);
+    public readonly record struct PipelineQueueMetricsSnapshot(string Queue, int Depth, int Capacity);
 }

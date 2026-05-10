@@ -93,6 +93,38 @@ sealed class MetricsPipeReporter : IDisposable
             builder.Append(file.Status);
         }
 
+        builder.Append('|');
+        for (var i = 0; i < snapshot.PipelineStages.Length; i++)
+        {
+            var stage = snapshot.PipelineStages[i];
+            if (i > 0)
+            {
+                builder.Append(';');
+            }
+
+            builder.Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(stage.Stage)));
+            builder.Append(',');
+            builder.Append(stage.Count.ToString(CultureInfo.InvariantCulture));
+            builder.Append(',');
+            builder.Append(stage.ElapsedMs.ToString("F3", CultureInfo.InvariantCulture));
+        }
+
+        builder.Append('|');
+        for (var i = 0; i < snapshot.PipelineQueues.Length; i++)
+        {
+            var queue = snapshot.PipelineQueues[i];
+            if (i > 0)
+            {
+                builder.Append(';');
+            }
+
+            builder.Append(Convert.ToBase64String(Encoding.UTF8.GetBytes(queue.Queue)));
+            builder.Append(',');
+            builder.Append(queue.Depth.ToString(CultureInfo.InvariantCulture));
+            builder.Append(',');
+            builder.Append(queue.Capacity.ToString(CultureInfo.InvariantCulture));
+        }
+
         return builder.ToString();
     }
 }

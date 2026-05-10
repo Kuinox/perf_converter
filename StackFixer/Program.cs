@@ -153,13 +153,19 @@ sealed class StackReconstructionProcessor
         var endCpu = state.SeenRows ? state.LastCpu : loss.Cpu;
         CloseActiveIntervals(state, loss.Time, endTrace, endCpu, StackFrameBoundaryReason.AuxLoss);
         foreach (var stack in state.Stacks)
+        {
             stack.OpenFrames.Clear();
+            stack.IsActive = false;
+        }
+        state.ActiveKind = null;
     }
 
     void ProcessBranchRow(ThreadStackState state, TraceRow row)
     {
         var flags = (DLFilterFlag)row.Flags;
-        var stack = state.GetStack(GetStackKind(row));
+        var kind = GetStackKind(row);
+        SwitchActiveStack(state, row, kind);
+        var stack = state.GetStack(kind);
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN) != 0)
             ResumeTrace(state);
@@ -233,6 +239,55 @@ sealed class StackReconstructionProcessor
 
     static StackFrameKind GetStackKind(TraceRow row)
         => row.CpuMode == PerfCpuMode.User ? StackFrameKind.User : StackFrameKind.Kernel;
+
+    void SwitchActiveStack(ThreadStackState state, TraceRow row, StackFrameKind kind)
+    {
+        if (state.ActiveKind == kind)
+            return;
+
+        if (state.ActiveKind is { } activeKind)
+        {
+            var activeStack = state.GetStack(activeKind);
+            SuspendStack(activeStack, row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.TraceEnd);
+            activeStack.IsActive = false;
+        }
+
+        state.ActiveKind = kind;
+        ResumeStack(state.GetStack(kind), row.Time, row.Id, row.Cpu);
+    }
+
+    void SuspendStack(
+        StackDomainState stack,
+        ulong endTime,
+        ulong endTrace,
+        uint endCpu,
+        StackFrameBoundaryReason endReason)
+    {
+        if (!stack.IsActive)
+            return;
+
+        for (var i = stack.OpenFrames.Count - 1; i >= 0; i--)
+        {
+            var frame = stack.OpenFrames[i];
+            WriteFrame(frame, checked((uint)i), endTime, endTrace, endCpu, endReason);
+        }
+    }
+
+    static void ResumeStack(StackDomainState stack, ulong startTime, ulong startTrace, uint startCpu)
+    {
+        stack.IsActive = true;
+        for (var i = 0; i < stack.OpenFrames.Count; i++)
+        {
+            var frame = stack.OpenFrames[i];
+            stack.OpenFrames[i] = frame with
+            {
+                ActiveStartTime = startTime,
+                ActiveStartTrace = startTrace,
+                ActiveStartCpu = startCpu,
+                StartReason = StackFrameBoundaryReason.TraceResume
+            };
+        }
+    }
 
     void ProcessReturn(StackDomainState state, TraceRow row)
     {
@@ -378,11 +433,7 @@ sealed class StackReconstructionProcessor
     {
         foreach (var stack in state.Stacks)
         {
-            for (var i = stack.OpenFrames.Count - 1; i >= 0; i--)
-            {
-                var frame = stack.OpenFrames[i];
-                WriteFrame(frame, checked((uint)i), endTime, endTrace, endCpu, endReason);
-            }
+            SuspendStack(stack, endTime, endTrace, endCpu, endReason);
         }
     }
 
@@ -399,7 +450,10 @@ sealed class StackReconstructionProcessor
         if (endTrace == 0)
             endTrace = frame.ActiveStartTrace;
 
-        if (endReason is not StackFrameBoundaryReason.Return and not StackFrameBoundaryReason.EndOfInput)
+        if (endReason is not StackFrameBoundaryReason.Return
+            and not StackFrameBoundaryReason.TraceEnd
+            and not StackFrameBoundaryReason.AuxLoss
+            and not StackFrameBoundaryReason.EndOfInput)
             return;
 
         if (endReason == StackFrameBoundaryReason.EndOfInput && GetLocation(frame.LocationId).Symbol != "main")
@@ -563,6 +617,7 @@ sealed class StackReconstructionProcessor
         public StackDomainState KernelStack { get; } = new(StackFrameKind.Kernel);
         public StackDomainState[] Stacks => [UserStack, KernelStack];
         public bool TraceActive { get; set; } = true;
+        public StackFrameKind? ActiveKind { get; set; }
         public bool SeenRows { get; set; }
         public ulong LastTime { get; set; }
         public ulong LastTrace { get; set; }
@@ -575,6 +630,7 @@ sealed class StackReconstructionProcessor
     sealed class StackDomainState(StackFrameKind kind)
     {
         public StackFrameKind Kind { get; } = kind;
+        public bool IsActive { get; set; }
         public List<OpenStackFrame> OpenFrames { get; } = [];
     }
 

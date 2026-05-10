@@ -168,6 +168,8 @@ public sealed class PerfMonitorDisplay
             ("Events", _viewModel.EventCount.ToString("N0", CultureInfo.InvariantCulture)),
             ("Current rate", $"{_viewModel.CurrentRate.ToString("N0", CultureInfo.InvariantCulture)}/s"),
             ("Overall rate", $"{_viewModel.OverallRate.ToString("N0", CultureInfo.InvariantCulture)}/s"),
+            ("Pipeline bottleneck", _viewModel.PipelineBottleneck),
+            ("Pipeline queues", _viewModel.PipelineQueues),
             ("Memory", $"{_viewModel.MemoryMB.ToString("F1", CultureInfo.InvariantCulture)} MB"),
             ("GC", $"{_viewModel.Gen0Count.ToString("N0", CultureInfo.InvariantCulture)}/{_viewModel.Gen1Count.ToString("N0", CultureInfo.InvariantCulture)}/{_viewModel.Gen2Count.ToString("N0", CultureInfo.InvariantCulture)} ({_viewModel.GcPercentage.ToString("F1", CultureInfo.InvariantCulture)}%)"),
             ("GC Status", _viewModel.GcStatus)

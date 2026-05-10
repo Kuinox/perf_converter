@@ -91,11 +91,15 @@ public sealed class Processor : IDisposable
         var endpoints = new List<StackFrameEndpoint>();
         foreach (var frame in frames)
         {
-            if (frame.StartReason != StackFrameBoundaryReason.TraceResume)
-                endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
+            endpoints.Add(new StackFrameEndpoint(frame.StartTime, frame.StartTrace, frame.Depth, IsBegin: true, frame));
 
-            if (frame.EndReason == StackFrameBoundaryReason.Return)
+            if (frame.EndReason is StackFrameBoundaryReason.Return
+                or StackFrameBoundaryReason.TraceEnd
+                or StackFrameBoundaryReason.AuxLoss
+                or StackFrameBoundaryReason.EndOfInput)
+            {
                 endpoints.Add(new StackFrameEndpoint(frame.EndTime, frame.EndTrace, frame.Depth, IsBegin: false, frame));
+            }
         }
 
         endpoints.Sort(StackFrameEndpointComparer.Instance);
@@ -428,7 +432,7 @@ public sealed class Processor : IDisposable
         ulong LocationId,
         StackFrameBoundaryReason StartReason,
         StackFrameBoundaryReason EndReason,
-        StackFrameKind Kind);
+        StackFrameKind Kind = StackFrameKind.User);
 
     public readonly record struct SliceEndpoint(ulong Time, ulong Trace, uint Depth, ulong FrameId, bool IsBegin);
 

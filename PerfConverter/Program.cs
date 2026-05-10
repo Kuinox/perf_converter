@@ -1,6 +1,5 @@
 using PerfConverter.PerfStructs;
-using PerfConverter.Persistence;
-using PerfConverter.Persistence.Plank;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Temp.Schema.Entry;
 
@@ -66,11 +65,17 @@ public unsafe class PerfDlFilter
             PerfConverterMetrics.IncrementProcessedEvents(sample->time);
 
             var fns = get_perf_dlfilter_fns();
+            var start = Stopwatch.GetTimestamp();
             var ip = ResolvedLocation.From(fns->resolve_ip(ctx))!;
+            PerfConverterMetrics.PipelineStageElapsed("perf.resolve_ip", Stopwatch.GetTimestamp() - start);
 
             ResolvedLocation? address = null;
             if (sample->addr_correlates_sym != 0)
+            {
+                start = Stopwatch.GetTimestamp();
                 address = ResolvedLocation.From(fns->resolve_addr(ctx));
+                PerfConverterMetrics.PipelineStageElapsed("perf.resolve_addr", Stopwatch.GetTimestamp() - start);
+            }
 
             _traceProcessingPipeline.Enqueue(OwnedPerfSample.From(sample), ip, address);
 

@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using System.Diagnostics;
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.Plank;
 
@@ -15,13 +16,17 @@ public sealed class TraceProcessingPipeline : IDisposable
     readonly Task[] _resolverTasks;
     readonly Task _commitTask;
     readonly object _exceptionGate = new();
+    readonly int _capacity;
     Exception? _exception;
+    int _pendingDepth;
+    int _resolvedDepth;
     ulong _nextSequence;
     bool _disposed;
 
     TraceProcessingPipeline(ParquetPersistenceLifetime persistenceLifetime, int capacity, int resolverCount)
     {
         _persistenceLifetime = persistenceLifetime;
+        _capacity = capacity;
         _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
         _pendingSamples = Channel.CreateBounded<PendingTraceSample>(new BoundedChannelOptions(capacity)
         {
@@ -66,7 +71,10 @@ public sealed class TraceProcessingPipeline : IDisposable
             Ip: ip,
             Address: address);
 
+        var start = Stopwatch.GetTimestamp();
         _pendingSamples.Writer.WriteAsync(pending).AsTask().GetAwaiter().GetResult();
+        PerfConverterMetrics.PipelineStageElapsed("enqueue.pending", Stopwatch.GetTimestamp() - start);
+        PerfConverterMetrics.PipelineQueueDepth("pending", Interlocked.Increment(ref _pendingDepth), _capacity);
         ThrowIfFaulted();
     }
 
@@ -102,11 +110,21 @@ public sealed class TraceProcessingPipeline : IDisposable
         {
             await foreach (var pending in _pendingSamples.Reader.ReadAllAsync())
             {
-                var ipLocationId = _persistenceLifetime.GetOrAddSourceLocation(pending.Ip);
-                var addressLocationId = pending.Address is null
-                    ? 0
-                    : _persistenceLifetime.GetOrAddSourceLocation(pending.Address);
+                PerfConverterMetrics.PipelineQueueDepth("pending", Interlocked.Decrement(ref _pendingDepth), _capacity);
 
+                var start = Stopwatch.GetTimestamp();
+                var ipLocationId = _persistenceLifetime.GetOrAddSourceLocation(pending.Ip);
+                PerfConverterMetrics.PipelineStageElapsed("source.ip", Stopwatch.GetTimestamp() - start);
+
+                var addressLocationId = 0UL;
+                if (pending.Address is not null)
+                {
+                    start = Stopwatch.GetTimestamp();
+                    addressLocationId = _persistenceLifetime.GetOrAddSourceLocation(pending.Address);
+                    PerfConverterMetrics.PipelineStageElapsed("source.addr", Stopwatch.GetTimestamp() - start);
+                }
+
+                start = Stopwatch.GetTimestamp();
                 await _resolvedSamples.Writer.WriteAsync(new ResolvedTraceSample(
                     pending.Sequence,
                     pending.Sample,
@@ -114,6 +132,8 @@ public sealed class TraceProcessingPipeline : IDisposable
                     pending.Address,
                     ipLocationId,
                     addressLocationId));
+                PerfConverterMetrics.PipelineStageElapsed("enqueue.resolved", Stopwatch.GetTimestamp() - start);
+                PerfConverterMetrics.PipelineQueueDepth("resolved", Interlocked.Increment(ref _resolvedDepth), _capacity);
             }
         }
         catch (Exception ex)
@@ -133,10 +153,12 @@ public sealed class TraceProcessingPipeline : IDisposable
         {
             await foreach (var resolved in _resolvedSamples.Reader.ReadAllAsync())
             {
+                PerfConverterMetrics.PipelineQueueDepth("resolved", Interlocked.Decrement(ref _resolvedDepth), _capacity);
                 pendingBySequence.Add(resolved.Sequence, resolved);
 
                 while (pendingBySequence.Remove(nextSequence, out var ready))
                 {
+                    var start = Stopwatch.GetTimestamp();
                     _traceProcessor.ProcessData(
                         ready.Sample,
                         ready.Ip,
@@ -145,6 +167,7 @@ public sealed class TraceProcessingPipeline : IDisposable
                         ready.AddressLocationId,
                         null,
                         0);
+                    PerfConverterMetrics.PipelineStageElapsed("commit.trace", Stopwatch.GetTimestamp() - start);
                     nextSequence++;
                 }
             }

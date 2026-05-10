@@ -51,6 +51,7 @@ sealed class PerfMetricsPipeServer : IDisposable
                 viewModel.LastTraceTimestampNs = snapshot.LastTraceTimestampNs;
 
                 var observedAtUtc = DateTime.UtcNow;
+                viewModel.UpdatePipelineMetrics(snapshot.PipelineStages, snapshot.PipelineQueues, observedAtUtc);
 
                 foreach (var file in snapshot.Files)
                 {
@@ -111,7 +112,7 @@ sealed class PerfMetricsPipeServer : IDisposable
 
     static PerfMetricsSnapshot? ParseSnapshot(string line)
     {
-        var topLevelParts = line.Split('|', 5);
+        var topLevelParts = line.Split('|', 7);
         if (topLevelParts.Length < 2)
             return null;
 
@@ -124,6 +125,8 @@ sealed class PerfMetricsPipeServer : IDisposable
         long? firstTraceTimestampNs = null;
         long? lastTraceTimestampNs = null;
         var filesPart = string.Empty;
+        var pipelineStagesPart = string.Empty;
+        var pipelineQueuesPart = string.Empty;
 
         if (topLevelParts.Length >= 5)
         {
@@ -138,6 +141,15 @@ sealed class PerfMetricsPipeServer : IDisposable
             }
 
             filesPart = topLevelParts[4];
+            if (topLevelParts.Length >= 6)
+            {
+                pipelineStagesPart = topLevelParts[5];
+            }
+
+            if (topLevelParts.Length >= 7)
+            {
+                pipelineQueuesPart = topLevelParts[6];
+            }
         }
         else if (topLevelParts.Length >= 3)
         {
@@ -172,7 +184,78 @@ sealed class PerfMetricsPipeServer : IDisposable
             }
         }
 
-        return new PerfMetricsSnapshot(totalEvents, currentRate, firstTraceTimestampNs, lastTraceTimestampNs, files);
+        return new PerfMetricsSnapshot(
+            totalEvents,
+            currentRate,
+            firstTraceTimestampNs,
+            lastTraceTimestampNs,
+            files,
+            ParsePipelineStages(pipelineStagesPart),
+            ParsePipelineQueues(pipelineQueuesPart));
+    }
+
+    static PerfMonitorViewModel.PipelineStageMetricsSnapshot[] ParsePipelineStages(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return [];
+
+        var parts = value.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var stages = new PerfMonitorViewModel.PipelineStageMetricsSnapshot[parts.Length];
+        var count = 0;
+
+        foreach (var part in parts)
+        {
+            var fields = part.Split(',', 3);
+            if (fields.Length != 3)
+                continue;
+
+            var stage = Encoding.UTF8.GetString(Convert.FromBase64String(fields[0]));
+            if (!long.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var stageCount))
+                continue;
+            if (!double.TryParse(fields[2], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var elapsedMs))
+                continue;
+
+            stages[count++] = new PerfMonitorViewModel.PipelineStageMetricsSnapshot(stage, stageCount, elapsedMs);
+        }
+
+        if (count != stages.Length)
+        {
+            Array.Resize(ref stages, count);
+        }
+
+        return stages;
+    }
+
+    static PerfMonitorViewModel.PipelineQueueMetricsSnapshot[] ParsePipelineQueues(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return [];
+
+        var parts = value.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var queues = new PerfMonitorViewModel.PipelineQueueMetricsSnapshot[parts.Length];
+        var count = 0;
+
+        foreach (var part in parts)
+        {
+            var fields = part.Split(',', 3);
+            if (fields.Length != 3)
+                continue;
+
+            var queue = Encoding.UTF8.GetString(Convert.FromBase64String(fields[0]));
+            if (!int.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var depth))
+                continue;
+            if (!int.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var capacity))
+                continue;
+
+            queues[count++] = new PerfMonitorViewModel.PipelineQueueMetricsSnapshot(queue, depth, capacity);
+        }
+
+        if (count != queues.Length)
+        {
+            Array.Resize(ref queues, count);
+        }
+
+        return queues;
     }
 
     sealed record PerfMetricsSnapshot(
@@ -180,6 +263,8 @@ sealed class PerfMetricsPipeServer : IDisposable
         double CurrentRate,
         long? FirstTraceTimestampNs,
         long? LastTraceTimestampNs,
-        FileMetricsSnapshot[] Files);
+        FileMetricsSnapshot[] Files,
+        PerfMonitorViewModel.PipelineStageMetricsSnapshot[] PipelineStages,
+        PerfMonitorViewModel.PipelineQueueMetricsSnapshot[] PipelineQueues);
     sealed record FileMetricsSnapshot(string FileName, long BufferedEntries, long FlushedEntries, string Status);
 }

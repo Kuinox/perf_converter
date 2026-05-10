@@ -177,7 +177,7 @@ public sealed class PerfettoSliceOrderingTests
     }
 
     [Test]
-    public void SyntheticFrameEndIsLeftOpenForPerfetto()
+    public void TraceEndEmitsBeginAndEndForVisibleSegment()
     {
         var frame = new Processor.StackFrameRow(
             FrameId: 1,
@@ -193,12 +193,13 @@ public sealed class PerfettoSliceOrderingTests
 
         var endpoints = Processor.CreateStackFrameEndpoints([frame]);
 
-        Assert.That(endpoints, Has.Count.EqualTo(1));
+        Assert.That(endpoints, Has.Count.EqualTo(2));
         Assert.That(endpoints[0].IsBegin, Is.True);
+        Assert.That(endpoints[1].IsBegin, Is.False);
     }
 
     [Test]
-    public void TraceResumeFrameDoesNotEmitDuplicateBegin()
+    public void TraceResumeEmitsBeginForResumedVisibleSegment()
     {
         var frame = new Processor.StackFrameRow(
             FrameId: 2,
@@ -214,8 +215,9 @@ public sealed class PerfettoSliceOrderingTests
 
         var endpoints = Processor.CreateStackFrameEndpoints([frame]);
 
-        Assert.That(endpoints, Has.Count.EqualTo(1));
-        Assert.That(endpoints[0].IsBegin, Is.False);
+        Assert.That(endpoints, Has.Count.EqualTo(2));
+        Assert.That(endpoints[0].IsBegin, Is.True);
+        Assert.That(endpoints[1].IsBegin, Is.False);
     }
 
     [Test]
