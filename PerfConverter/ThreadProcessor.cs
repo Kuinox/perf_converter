@@ -1,8 +1,6 @@
 using PerfConverter.Entry;
-using PerfConverter.PerfStructs;
 using PerfConverter.Persistence;
 using System.Runtime.InteropServices;
-using Temp.Schema.Entry;
 
 namespace PerfConverter;
 
@@ -13,8 +11,8 @@ class ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory) : I
 
     ulong _currentEntryId = 1;
 
-    public unsafe void ProcessData(
-        PerfDlFilterSample* sample,
+    public void ProcessData(
+        OwnedPerfSample sample,
         ResolvedLocation ip,
         ResolvedLocation? address,
         ulong ipLocationId,
@@ -22,12 +20,12 @@ class ThreadProcessor(Func<string, ITracePersister> tracePersistenceFactory) : I
         ReadOnlyMemory<byte>? srcFilePath,
         uint lineNumber)
     {
-        var @event = EntryContentPool.Shared.GetByteMemoryFromNullTerminatedPtr((nint)sample->@event);
+        var @event = sample.EventName;
         ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_eventMapping, @event, out var exists);
         if (!exists)
         {
             var eventName = GetEventFileComponent(@event.Span);
-            var traceKey = $"pid={sample->pid}/tid={sample->tid}/{eventName}.parquet";
+            var traceKey = $"pid={sample.Pid}/tid={sample.Tid}/{eventName}.parquet";
             var tracePersister = tracePersistenceFactory(traceKey);
             _tracePersisters.Add(tracePersister);
 

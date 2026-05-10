@@ -9,7 +9,7 @@ public unsafe interface ITracePersister : IDisposable
 {
     void Persist(
         ulong entryId,
-        PerfConverter.PerfStructs.PerfDlFilterSample* sample,
+        PerfConverter.OwnedPerfSample sample,
         PerfConverter.ResolvedLocation ip,
         PerfConverter.ResolvedLocation? address,
         ulong ipLocationId,

@@ -13,8 +13,7 @@ public unsafe class PerfDlFilter
     [DllImport("__Internal", EntryPoint = "get_perf_dlfilter_fns")]
     static extern unsafe PerfDlfilterFns* get_perf_dlfilter_fns();
 
-    static TraceProcessor _traceProcessor = null!;
-    static ParquetPersistenceLifetime _persistenceLifetime = null!;
+    static TraceProcessingPipeline _traceProcessingPipeline = null!;
     static MetricsPipeReporter? _metricsPipeReporter;
 
     class State
@@ -41,9 +40,7 @@ public unsafe class PerfDlFilter
             *data = (void*)GCHandle.ToIntPtr(GCHandle.Alloc(state));
 
             _metricsPipeReporter = MetricsPipeReporter.TryStart();
-            _persistenceLifetime = PersistenceFactory.CreatePersistence();
-
-            _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
+            _traceProcessingPipeline = TraceProcessingPipeline.Create();
 
             return 0;
         }
@@ -70,16 +67,12 @@ public unsafe class PerfDlFilter
 
             var fns = get_perf_dlfilter_fns();
             var ip = ResolvedLocation.From(fns->resolve_ip(ctx))!;
-            var ipLocationId = _persistenceLifetime.GetOrAddSourceLocation(ip);
 
             ResolvedLocation? address = null;
-            var addressLocationId = 0UL;
             if (sample->addr_correlates_sym != 0)
-            {
                 address = ResolvedLocation.From(fns->resolve_addr(ctx));
-                addressLocationId = _persistenceLifetime.GetOrAddSourceLocation(address);
-            }
-            _traceProcessor.ProcessData(sample, ip, address, ipLocationId, addressLocationId, null, 0);
+
+            _traceProcessingPipeline.Enqueue(OwnedPerfSample.From(sample), ip, address);
 
         }
         catch (Exception ex)
@@ -101,7 +94,7 @@ public unsafe class PerfDlFilter
 
             _metricsPipeReporter?.Dispose();
             _metricsPipeReporter = null;
-            _persistenceLifetime.Dispose();
+            _traceProcessingPipeline.Dispose();
             EntryContentPool.Shared.Dispose();
             Console.Error.WriteLine("Done.");
             Console.Error.WriteLine("EXIT_MESSAGE");

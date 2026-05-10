@@ -65,19 +65,22 @@ public sealed class EntryContentPool : IDisposable
         if (source.IsEmpty)
             return ReadOnlyMemory<byte>.Empty;
 
-        var hash = GetHash(source);
-        ref var bucket = ref CollectionsMarshal.GetValueRefOrAddDefault(_entries, hash, out _);
-        bucket ??= [];
-
-        for (var i = 0; i < bucket.Count; i++)
+        lock (_entries)
         {
-            if (bucket[i].Matches(source))
-                return bucket[i].Memory;
-        }
+            var hash = GetHash(source);
+            ref var bucket = ref CollectionsMarshal.GetValueRefOrAddDefault(_entries, hash, out _);
+            bucket ??= [];
 
-        var entry = MemoryEntry.Create(source);
-        bucket.Add(entry);
-        return entry.Memory;
+            for (var i = 0; i < bucket.Count; i++)
+            {
+                if (bucket[i].Matches(source))
+                    return bucket[i].Memory;
+            }
+
+            var entry = MemoryEntry.Create(source);
+            bucket.Add(entry);
+            return entry.Memory;
+        }
     }
 
     public ReadOnlyMemory<byte> CopyByteMemory(ReadOnlySpan<byte> source)
@@ -102,15 +105,18 @@ public sealed class EntryContentPool : IDisposable
 
     public void Tick()
     {
-        if (_entries.Count == 0)
-            return;
-
-        if ((_entries.Count & 1023) == 0)
+        lock (_entries)
         {
-            var entryCount = 0;
-            foreach (var bucket in _entries.Values)
-                entryCount += bucket.Count;
-            Console.Error.WriteLine($"POOL_SIZE|Entries={entryCount:N0}|Buckets={_entries.Count:N0}");
+            if (_entries.Count == 0)
+                return;
+
+            if ((_entries.Count & 1023) == 0)
+            {
+                var entryCount = 0;
+                foreach (var bucket in _entries.Values)
+                    entryCount += bucket.Count;
+                Console.Error.WriteLine($"POOL_SIZE|Entries={entryCount:N0}|Buckets={_entries.Count:N0}");
+            }
         }
     }
 
@@ -119,14 +125,17 @@ public sealed class EntryContentPool : IDisposable
         if (_disposed)
             return;
 
-        foreach (var bucket in _entries.Values)
+        lock (_entries)
         {
-            for (var i = 0; i < bucket.Count; i++)
-                bucket[i].Dispose();
-        }
+            foreach (var bucket in _entries.Values)
+            {
+                for (var i = 0; i < bucket.Count; i++)
+                    bucket[i].Dispose();
+            }
 
-        _entries.Clear();
-        _disposed = true;
+            _entries.Clear();
+            _disposed = true;
+        }
     }
 
     static int GetHash(ReadOnlySpan<byte> bytes)

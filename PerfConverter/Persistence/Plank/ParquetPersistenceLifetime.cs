@@ -70,7 +70,7 @@ public class ParquetPersistenceLifetime(
     {
         public unsafe void Persist(
             ulong entryId,
-            PerfStructs.PerfDlFilterSample* sample,
+            OwnedPerfSample sample,
             ResolvedLocation ip,
             ResolvedLocation? address,
             ulong ipLocationId,

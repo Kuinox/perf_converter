@@ -1,5 +1,4 @@
 ﻿using PerfConverter.Entry;
-using PerfConverter.PerfStructs;
 using System.Runtime.InteropServices;
 using PerfConverter.Persistence;
 
@@ -10,7 +9,7 @@ public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenc
     readonly Dictionary<(uint, uint), ThreadProcessor> _processors = [];
 
     public void ProcessData(
-        PerfDlFilterSample* sample,
+        OwnedPerfSample sample,
         ResolvedLocation ip,
         ResolvedLocation? address,
         ulong ipLocationId,
@@ -18,7 +17,7 @@ public unsafe class TraceProcessor(Func<string, ITracePersister> tracePersistenc
         ReadOnlyMemory<byte>? srcFileName,
         uint lineNumber)
     {
-        ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample->pid, sample->tid), out _);
+        ref var processor = ref CollectionsMarshal.GetValueRefOrAddDefault(_processors, (sample.Pid, sample.Tid), out _);
         processor ??= new ThreadProcessor(tracePersistenceFactory);
         processor.ProcessData(sample, ip, address, ipLocationId, addressLocationId, srcFileName, lineNumber);
     }

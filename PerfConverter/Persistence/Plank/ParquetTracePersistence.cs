@@ -1,4 +1,3 @@
-using PerfConverter.PerfStructs;
 using Temp.Schema.Entry;
 using Temp.Schema.Schema;
 
@@ -8,9 +7,9 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
 {
     bool _disposed;
 
-    public unsafe void Persist(
+    public void Persist(
         ulong entryId,
-        PerfDlFilterSample* sample,
+        OwnedPerfSample sample,
         ResolvedLocation ip,
         ResolvedLocation? address,
         ulong ipLocationId,
@@ -21,25 +20,25 @@ public sealed class ParquetTracePersistence(TraceSampleRowSchema.PipelineWriter 
     {
         var row = writer.GetRow();
         row.Id = entryId;
-        row.PerfId = sample->id;
-        row.Pid = sample->pid;
-        row.Tid = sample->tid;
-        row.Time = sample->time;
-        row.Cpu = (uint)sample->cpu;
-        row.Flags = sample->flags;
+        row.PerfId = sample.Id;
+        row.Pid = sample.Pid;
+        row.Tid = sample.Tid;
+        row.Time = sample.Time;
+        row.Cpu = (uint)sample.Cpu;
+        row.Flags = sample.Flags;
         row.Ip = ip.Address;
         row.IpLocationId = ipLocationId;
         row.Addr = address?.Address ?? 0UL;
         row.AddressLocationId = addressLocationId;
-        row.Period = sample->period;
-        row.InsnCnt = sample->insn_cnt;
-        row.CycCnt = sample->cyc_cnt;
-        row.Weight = sample->weight;
-        row.Cpumode = sample->cpumode;
-        row.AddrCorrelatesSym = sample->addr_correlates_sym;
+        row.Period = sample.Period;
+        row.InsnCnt = sample.InsnCount;
+        row.CycCnt = sample.CycleCount;
+        row.Weight = sample.Weight;
+        row.Cpumode = sample.CpuMode;
+        row.AddrCorrelatesSym = sample.AddressCorrelatesSymbol;
         row.Event = eventName;
-        row.MachinePid = (uint)sample->machine_pid;
-        row.Vcpu = (uint)sample->vcpu;
+        row.MachinePid = (uint)sample.MachinePid;
+        row.Vcpu = (uint)sample.Vcpu;
         row.SourceFileName = srcFilePath;
         row.SourceLineNumber = lineNumber;
 
