@@ -52,7 +52,7 @@ public sealed class Processor : IDisposable
             }
 
             var stackTrackUuid = StackTrackUuid(info.Pid, info.Tid, group.Key.Kind);
-            WriteStackTrack(info.TrackUuid, stackTrackUuid, group.Key.Kind);
+            WriteStackTrack(info.TrackUuid, stackTrackUuid, info.ThreadName, group.Key.Kind);
             Console.WriteLine($"Writing Perfetto {group.Key.Kind.ToString().ToLowerInvariant()} stack slices for tid={group.Key.Tid}...");
             WriteStackFrames(stackTrackUuid, group);
         }
@@ -191,7 +191,7 @@ public sealed class Processor : IDisposable
         });
     }
 
-    void WriteStackTrack(ulong parentTrackUuid, ulong trackUuid, StackFrameKind kind)
+    void WriteStackTrack(ulong parentTrackUuid, ulong trackUuid, string threadName, StackFrameKind kind)
     {
         WritePacket(new TracePacket
         {
@@ -199,7 +199,7 @@ public sealed class Processor : IDisposable
             {
                 Uuid = trackUuid,
                 ParentUuid = parentTrackUuid,
-                Name = kind == StackFrameKind.Kernel ? "kernel stack" : "user stack"
+                Name = $"{threadName} / {(kind == StackFrameKind.Kernel ? "kernel" : "user")}"
             }
         });
     }
