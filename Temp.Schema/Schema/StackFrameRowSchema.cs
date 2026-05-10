@@ -40,4 +40,7 @@ public sealed partial class StackFrameRowSchema
 
     [ParquetColumn("endReason", Encodings = [EncodingKind.RleDictionary])]
     public byte EndReason { get; set; }
+
+    [ParquetColumn("kind", Encodings = [EncodingKind.RleDictionary])]
+    public byte Kind { get; set; }
 }

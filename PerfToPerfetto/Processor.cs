@@ -42,17 +42,19 @@ public sealed class Processor : IDisposable
 
         WriteAuxLossMarkers(inputDirectory);
 
-        foreach (var group in StackFrameParquetReader.ReadRows(stackFrameFile).GroupBy(static row => row.Tid).OrderBy(static group => group.Key))
+        foreach (var group in StackFrameParquetReader.ReadRows(stackFrameFile).GroupBy(static row => (row.Tid, row.Kind)).OrderBy(static group => group.Key.Tid).ThenBy(static group => group.Key.Kind))
         {
-            if (!threadInfos.TryGetValue(group.Key, out var info))
+            if (!threadInfos.TryGetValue(group.Key.Tid, out var info))
             {
-                info = new ThreadInfo(0, group.Key, [], ThreadTrackUuid(0, group.Key), $"Thread {group.Key}");
+                info = new ThreadInfo(0, group.Key.Tid, [], ThreadTrackUuid(0, group.Key.Tid), $"Thread {group.Key.Tid}");
                 WriteProcessTrack(info.Pid);
                 WriteThreadTrack(info.Pid, info.Tid, info.TrackUuid, info.ThreadName);
             }
 
-            Console.WriteLine($"Writing Perfetto stack slices for tid={group.Key}...");
-            WriteStackFrames(info.TrackUuid, group);
+            var stackTrackUuid = StackTrackUuid(info.Pid, info.Tid, group.Key.Kind);
+            WriteStackTrack(info.TrackUuid, stackTrackUuid, group.Key.Kind);
+            Console.WriteLine($"Writing Perfetto {group.Key.Kind.ToString().ToLowerInvariant()} stack slices for tid={group.Key.Tid}...");
+            WriteStackFrames(stackTrackUuid, group);
         }
 
         _output.Flush();
@@ -185,6 +187,19 @@ public sealed class Processor : IDisposable
                     Tid = (int)tid,
                     ThreadName = threadName
                 }
+            }
+        });
+    }
+
+    void WriteStackTrack(ulong parentTrackUuid, ulong trackUuid, StackFrameKind kind)
+    {
+        WritePacket(new TracePacket
+        {
+            TrackDescriptor = new TrackDescriptor
+            {
+                Uuid = trackUuid,
+                ParentUuid = parentTrackUuid,
+                Name = kind == StackFrameKind.Kernel ? "kernel stack" : "user stack"
             }
         });
     }
@@ -364,6 +379,9 @@ public sealed class Processor : IDisposable
     static ulong ThreadTrackUuid(uint pid, uint tid)
         => 0x2000_0000_0000_0000UL | ((ulong)pid << 32) | tid;
 
+    static ulong StackTrackUuid(uint pid, uint tid, StackFrameKind kind)
+        => 0x3000_0000_0000_0000UL | ((ulong)(byte)kind << 56) | ((ulong)pid << 32) | tid;
+
     static string? BytesToString(byte[]? bytes)
     {
         if (bytes is not { Length: > 0 })
@@ -409,7 +427,8 @@ public sealed class Processor : IDisposable
         ulong EndTrace,
         ulong LocationId,
         StackFrameBoundaryReason StartReason,
-        StackFrameBoundaryReason EndReason);
+        StackFrameBoundaryReason EndReason,
+        StackFrameKind Kind);
 
     public readonly record struct SliceEndpoint(ulong Time, ulong Trace, uint Depth, ulong FrameId, bool IsBegin);
 
@@ -558,8 +577,9 @@ public sealed class Processor : IDisposable
                 var locationIds = ReadColumn<ulong>(rowGroup, StackFrameRowSchema.Schema.Columns[7]);
                 var startReasons = ReadColumn<byte>(rowGroup, StackFrameRowSchema.Schema.Columns[10]);
                 var endReasons = ReadColumn<byte>(rowGroup, StackFrameRowSchema.Schema.Columns[11]);
+                var kinds = ReadColumn<byte>(rowGroup, StackFrameRowSchema.Schema.Columns[12]);
 
-                ValidateRowGroupLengths(path, frameIds.Length, tids, depths, startTimes, endTimes, startTraces, endTraces, locationIds, startReasons, endReasons);
+                ValidateRowGroupLengths(path, frameIds.Length, tids, depths, startTimes, endTimes, startTraces, endTraces, locationIds, startReasons, endReasons, kinds);
 
                 for (var i = 0; i < frameIds.Length; i++)
                 {
@@ -573,7 +593,8 @@ public sealed class Processor : IDisposable
                         EndTrace: endTraces[i],
                         LocationId: locationIds[i],
                         StartReason: (StackFrameBoundaryReason)startReasons[i],
-                        EndReason: (StackFrameBoundaryReason)endReasons[i]);
+                        EndReason: (StackFrameBoundaryReason)endReasons[i],
+                        Kind: (StackFrameKind)kinds[i]);
                 }
             }
         }

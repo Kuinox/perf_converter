@@ -101,6 +101,7 @@ sealed class StackReconstructionProcessor
             row.EndCpu = frame.EndCpu;
             row.StartReason = (byte)frame.StartReason;
             row.EndReason = (byte)frame.EndReason;
+            row.Kind = (byte)frame.Kind;
             writer.Next();
         }
     }
@@ -151,12 +152,14 @@ sealed class StackReconstructionProcessor
         var endTrace = state.SeenRows ? state.LastTrace : 0;
         var endCpu = state.SeenRows ? state.LastCpu : loss.Cpu;
         CloseActiveIntervals(state, loss.Time, endTrace, endCpu, StackFrameBoundaryReason.AuxLoss);
-        state.OpenFrames.Clear();
+        foreach (var stack in state.Stacks)
+            stack.OpenFrames.Clear();
     }
 
     void ProcessBranchRow(ThreadStackState state, TraceRow row)
     {
         var flags = (DLFilterFlag)row.Flags;
+        var stack = state.GetStack(GetStackKind(row));
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_BEGIN) != 0)
             ResumeTrace(state);
@@ -171,22 +174,23 @@ sealed class StackReconstructionProcessor
                 return;
             }
 
-            SynchronizeCaller(state, row);
+            SynchronizeCaller(stack, row);
             var locationId = row.AddressLocationId != 0 ? row.AddressLocationId : row.IpLocationId;
             var frame = new OpenStackFrame(
                 Tid: row.Tid,
+                Kind: stack.Kind,
                 LocationId: locationId,
                 ActiveStartTime: row.Time,
                 ActiveStartTrace: row.Id,
                 ActiveStartCpu: row.Cpu,
                 StartReason: StackFrameBoundaryReason.Call);
-            state.OpenFrames.Add(frame);
+            stack.OpenFrames.Add(frame);
         }
 
         if (!isCall && IsReturnBranch(row, flags))
         {
             Returns++;
-            ProcessReturn(state, row);
+            ProcessReturn(stack, row);
         }
 
         if ((flags & DLFilterFlag.PERF_DLFILTER_FLAG_TRACE_END) != 0)
@@ -227,7 +231,10 @@ sealed class StackReconstructionProcessor
         => _functionEntries.TryGetValue(location.Function, out var entryAddress) &&
            location.RelativeAddress == entryAddress;
 
-    void ProcessReturn(ThreadStackState state, TraceRow row)
+    static StackFrameKind GetStackKind(TraceRow row)
+        => row.CpuMode == PerfCpuMode.User ? StackFrameKind.User : StackFrameKind.Kernel;
+
+    void ProcessReturn(StackDomainState state, TraceRow row)
     {
         if (state.OpenFrames.Count == 0)
         {
@@ -273,7 +280,7 @@ sealed class StackReconstructionProcessor
         WriteFrame(frame, checked((uint)frameIndex), row.Time, row.Id, row.Cpu, StackFrameBoundaryReason.Return);
     }
 
-    void SynchronizeCaller(ThreadStackState state, TraceRow row)
+    void SynchronizeCaller(StackDomainState state, TraceRow row)
     {
         var caller = GetLocation(row.IpLocationId);
         var callee = GetLocation(row.AddressLocationId);
@@ -299,6 +306,7 @@ sealed class StackReconstructionProcessor
 
         state.OpenFrames.Add(new OpenStackFrame(
             Tid: row.Tid,
+            Kind: state.Kind,
             LocationId: row.IpLocationId,
             ActiveStartTime: row.Time,
             ActiveStartTrace: row.Id,
@@ -307,7 +315,7 @@ sealed class StackReconstructionProcessor
         Resyncs++;
     }
 
-    bool IsRecursiveReturn(ThreadStackState state, SourceLocationKey returnLocation)
+    bool IsRecursiveReturn(StackDomainState state, SourceLocationKey returnLocation)
     {
         if (state.OpenFrames.Count < 2)
             return false;
@@ -317,7 +325,7 @@ sealed class StackReconstructionProcessor
         return top.IsSameFunction(returnLocation) && parent.IsSameFunction(returnLocation);
     }
 
-    int FindReturningFrame(ThreadStackState state, ulong returnLocationId)
+    int FindReturningFrame(StackDomainState state, ulong returnLocationId)
     {
         for (var i = state.OpenFrames.Count - 1; i >= 0; i--)
         {
@@ -368,10 +376,13 @@ sealed class StackReconstructionProcessor
         uint endCpu,
         StackFrameBoundaryReason endReason)
     {
-        for (var i = state.OpenFrames.Count - 1; i >= 0; i--)
+        foreach (var stack in state.Stacks)
         {
-            var frame = state.OpenFrames[i];
-            WriteFrame(frame, checked((uint)i), endTime, endTrace, endCpu, endReason);
+            for (var i = stack.OpenFrames.Count - 1; i >= 0; i--)
+            {
+                var frame = stack.OpenFrames[i];
+                WriteFrame(frame, checked((uint)i), endTime, endTrace, endCpu, endReason);
+            }
         }
     }
 
@@ -397,6 +408,7 @@ sealed class StackReconstructionProcessor
         _frames.Add(new StackFrameOutput(
             FrameId: _nextFrameId++,
             Tid: frame.Tid,
+            Kind: frame.Kind,
             Depth: depth,
             StartTime: frame.ActiveStartTime,
             EndTime: endTime,
@@ -412,7 +424,7 @@ sealed class StackReconstructionProcessor
 
     static IEnumerable<StackFrameOutput> NormalizeDepths(IEnumerable<StackFrameOutput> frames)
     {
-        foreach (var group in frames.GroupBy(static frame => frame.Tid).OrderBy(static group => group.Key))
+        foreach (var group in frames.GroupBy(static frame => (frame.Tid, frame.Kind)).OrderBy(static group => group.Key.Tid).ThenBy(static group => group.Key.Kind))
         {
             var active = new List<StackFrameOutput>();
             foreach (var frame in group.OrderBy(static frame => frame, StackFrameStartComparer.Instance))
@@ -501,6 +513,7 @@ sealed class StackReconstructionProcessor
         ulong Time,
         uint Cpu,
         uint Flags,
+        PerfCpuMode CpuMode,
         ulong IpLocationId,
         ulong AddressLocationId);
 
@@ -521,6 +534,7 @@ sealed class StackReconstructionProcessor
 
     readonly record struct OpenStackFrame(
         uint Tid,
+        StackFrameKind Kind,
         ulong LocationId,
         ulong ActiveStartTime,
         ulong ActiveStartTrace,
@@ -530,6 +544,7 @@ sealed class StackReconstructionProcessor
     readonly record struct StackFrameOutput(
         ulong FrameId,
         uint Tid,
+        StackFrameKind Kind,
         uint Depth,
         ulong StartTime,
         ulong EndTime,
@@ -544,12 +559,29 @@ sealed class StackReconstructionProcessor
     sealed class ThreadStackState(uint tid)
     {
         public uint Tid { get; } = tid;
-        public List<OpenStackFrame> OpenFrames { get; } = [];
+        public StackDomainState UserStack { get; } = new(StackFrameKind.User);
+        public StackDomainState KernelStack { get; } = new(StackFrameKind.Kernel);
+        public StackDomainState[] Stacks => [UserStack, KernelStack];
         public bool TraceActive { get; set; } = true;
         public bool SeenRows { get; set; }
         public ulong LastTime { get; set; }
         public ulong LastTrace { get; set; }
         public uint LastCpu { get; set; }
+
+        public StackDomainState GetStack(StackFrameKind kind)
+            => kind == StackFrameKind.Kernel ? KernelStack : UserStack;
+    }
+
+    sealed class StackDomainState(StackFrameKind kind)
+    {
+        public StackFrameKind Kind { get; } = kind;
+        public List<OpenStackFrame> OpenFrames { get; } = [];
+    }
+
+    enum PerfCpuMode : byte
+    {
+        Kernel = 1,
+        User = 2
     }
 
     static class TraceParquetReader
@@ -567,10 +599,11 @@ sealed class StackReconstructionProcessor
                 var times = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[4]);
                 var cpus = ReadColumn<uint>(rowGroup, TraceSampleRowSchema.Schema.Columns[5]);
                 var flags = ReadColumn<uint>(rowGroup, TraceSampleRowSchema.Schema.Columns[6]);
+                var cpuModes = ReadColumn<byte>(rowGroup, TraceSampleRowSchema.Schema.Columns[15]);
                 var ipLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[8]);
                 var addressLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[10]);
 
-                ValidateRowGroupLengths(path, ids.Length, tids, times, cpus, flags, ipLocationIds, addressLocationIds);
+                ValidateRowGroupLengths(path, ids.Length, tids, times, cpus, flags, cpuModes, ipLocationIds, addressLocationIds);
 
                 for (var i = 0; i < ids.Length; i++)
                 {
@@ -580,6 +613,7 @@ sealed class StackReconstructionProcessor
                         Time: times[i],
                         Cpu: cpus[i],
                         Flags: flags[i],
+                        CpuMode: (PerfCpuMode)cpuModes[i],
                         IpLocationId: ipLocationIds[i],
                         AddressLocationId: addressLocationIds[i]);
                 }
