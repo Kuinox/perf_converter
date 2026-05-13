@@ -16,6 +16,7 @@ public sealed class Processor : IDisposable
 
     readonly CodedOutputStream _output;
     readonly Dictionary<ulong, SourceLocationInfo> _sourceLocations = [];
+    readonly Dictionary<ulong, string> _traceLocationNames = [];
     readonly HashSet<ulong> _writtenProcessTracks = [];
     bool _disposed;
 
@@ -254,6 +255,9 @@ public sealed class Processor : IDisposable
                 return name;
         }
 
+        if (locationId != 0 && _traceLocationNames.TryGetValue(locationId, out var traceName) && !string.IsNullOrEmpty(traceName))
+            return traceName;
+
         return locationId == 0 ? "Unknown" : $"location:{locationId}";
     }
 
@@ -351,9 +355,12 @@ public sealed class Processor : IDisposable
         var comms = new List<string>();
         foreach (var traceFile in traceFiles)
         {
-            foreach (var (ipComm, addressComm) in TraceParquetReader.TryReadComms(traceFile))
+            foreach (var hint in TraceParquetReader.TryReadHints(traceFile))
             {
-                var comm = BytesToString(ipComm) ?? BytesToString(addressComm);
+                AddTraceLocationName(hint.IpLocationId, hint.IpSym);
+                AddTraceLocationName(hint.AddressLocationId, hint.AddressSym);
+
+                var comm = BytesToString(hint.IpComm) ?? BytesToString(hint.AddressComm);
                 if (string.IsNullOrEmpty(comm) || comms.LastOrDefault() == comm)
                     continue;
 
@@ -364,6 +371,16 @@ public sealed class Processor : IDisposable
         }
 
         return comms.Count == 0 ? $"Thread {tid}" : string.Join(" -> ", comms);
+    }
+
+    void AddTraceLocationName(ulong locationId, byte[]? symbol)
+    {
+        if (locationId == 0 || symbol is not { Length: > 0 } || _traceLocationNames.ContainsKey(locationId))
+            return;
+
+        var name = BytesToString(symbol);
+        if (!string.IsNullOrEmpty(name))
+            _traceLocationNames[locationId] = name;
     }
 
     static uint? TryParsePrefixedUInt(string? value, string prefix)
@@ -606,7 +623,7 @@ public sealed class Processor : IDisposable
 
     static class TraceParquetReader
     {
-        public static IEnumerable<(byte[]? IpComm, byte[]? AddressComm)> TryReadComms(string path)
+        public static IEnumerable<TraceHint> TryReadHints(string path)
         {
             using var stream = File.OpenRead(path);
             using var reader = TraceSampleRowSchema.Schema.CreateReader(stream);
@@ -615,11 +632,25 @@ public sealed class Processor : IDisposable
             {
                 using var rowGroup = reader.OpenRowGroup(stream, token);
                 var ids = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[0]);
+                var ipLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[8]);
+                var addressLocationIds = ReadColumn<ulong>(rowGroup, TraceSampleRowSchema.Schema.Columns[10]);
+                var ipSyms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[23], ids.Length);
                 var ipComms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[32], ids.Length);
+                var addressSyms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[35], ids.Length);
                 var addressComms = ReadOptionalColumn<byte[]>(rowGroup, TraceSampleRowSchema.Schema.Columns[44], ids.Length);
 
+                ValidateRowGroupLengths(path, ids.Length, ipLocationIds, addressLocationIds);
+
                 for (var i = 0; i < ids.Length; i++)
-                    yield return (ipComms[i], addressComms[i]);
+                {
+                    yield return new TraceHint(
+                        IpLocationId: ipLocationIds[i],
+                        AddressLocationId: addressLocationIds[i],
+                        IpSym: ipSyms[i],
+                        AddressSym: addressSyms[i],
+                        IpComm: ipComms[i],
+                        AddressComm: addressComms[i]);
+                }
             }
         }
 
@@ -636,6 +667,14 @@ public sealed class Processor : IDisposable
             return new T?[expected];
         }
     }
+
+    readonly record struct TraceHint(
+        ulong IpLocationId,
+        ulong AddressLocationId,
+        byte[]? IpSym,
+        byte[]? AddressSym,
+        byte[]? IpComm,
+        byte[]? AddressComm);
 
     static class SourceLocationParquetReader
     {

@@ -309,7 +309,7 @@ public sealed unsafe class ParquetSourceLocationPersistence : IDisposable
         static bool TryParseSymbol(string line, out SymbolEntry entry)
         {
             entry = default;
-            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var parts = line.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 3 ||
                 !ulong.TryParse(parts[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var address) ||
                 !IsCodeSymbol(parts[1]))

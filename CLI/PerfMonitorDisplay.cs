@@ -11,6 +11,8 @@ public sealed class PerfMonitorDisplay
 {
     const int MaxLogLines = 12;
     const int MaxFileRows = 16;
+    const int SummaryValueWidth = 18;
+    const int MinimumDynamicTextWidth = 12;
     readonly PerfMonitorViewModel _viewModel;
     readonly Action _requestShutdown;
     readonly Table _summaryTable;
@@ -182,7 +184,7 @@ public sealed class PerfMonitorDisplay
         _summaryTable.RowCells.Clear();
         foreach (var (metric, value) in rows)
         {
-            _summaryTable.AddRow(new TextBlock(metric), new TextBlock(value));
+            _summaryTable.AddRow(new TextBlock(metric), new TextBlock(TrimForDisplay(value, SummaryValueWidth)));
         }
     }
 
@@ -196,6 +198,7 @@ public sealed class PerfMonitorDisplay
 
     void UpdateFileTable()
     {
+        var fileNameWidth = GetDynamicWidth(reservedColumnsWidth: 56);
         var rows = _viewModel.FileStatuses
             .OrderByDescending(x => x.Value.LastActivity ?? x.Value.LastUpdated)
             .ThenBy(x => x.Key)
@@ -207,7 +210,7 @@ public sealed class PerfMonitorDisplay
                 {
                     new TextBlock(pid),
                     new TextBlock(tid),
-                    new TextBlock(fileName),
+                    new TextBlock(TrimForDisplay(fileName, fileNameWidth)),
                     new TextBlock(kvp.Value.Status),
                     new TextBlock(kvp.Value.CurrentRate.ToString("N0", CultureInfo.InvariantCulture)),
                     CreateSparkline(kvp.Value.GetRateHistorySnapshot()),
@@ -245,6 +248,7 @@ public sealed class PerfMonitorDisplay
     void UpdateLogs()
     {
         var elapsed = GetDisplayElapsed();
+        var logLineWidth = GetDynamicWidth(reservedColumnsWidth: 50);
         var lines = _viewModel.OutputLines
             .Concat(_viewModel.ErrorLines)
             .TakeLast(MaxLogLines)
@@ -252,7 +256,7 @@ public sealed class PerfMonitorDisplay
 
         _logsText.Text = lines.Length == 0
             ? $"Waiting for perf output...{Environment.NewLine}Process uptime: {elapsed:hh\\:mm\\:ss}"
-            : string.Join(Environment.NewLine, lines);
+            : string.Join(Environment.NewLine, lines.Select(line => TrimForDisplay(line, logLineWidth)));
     }
 
     TimeSpan GetDisplayElapsed()
@@ -283,5 +287,28 @@ public sealed class PerfMonitorDisplay
         }
 
         return ("-", "-", key);
+    }
+
+    static int GetDynamicWidth(int reservedColumnsWidth)
+    {
+        try
+        {
+            return Math.Max(MinimumDynamicTextWidth, Console.WindowWidth - reservedColumnsWidth);
+        }
+        catch (IOException)
+        {
+            return MinimumDynamicTextWidth;
+        }
+    }
+
+    static string TrimForDisplay(string value, int maxLength)
+    {
+        if (maxLength <= 1 || string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            return value;
+
+        if (maxLength <= 4)
+            return value[..maxLength];
+
+        return value[..(maxLength - 3)] + "...";
     }
 }
