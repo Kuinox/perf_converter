@@ -13,6 +13,7 @@ public sealed class PerfMonitorDisplay
     const int MaxFileRows = 16;
     const int SummaryValueWidth = 18;
     const int MinimumDynamicTextWidth = 12;
+    const int MinimumSparklineWidth = 20;
     readonly PerfMonitorViewModel _viewModel;
     readonly Action _requestShutdown;
     readonly Table _summaryTable;
@@ -26,7 +27,7 @@ public sealed class PerfMonitorDisplay
         _viewModel = viewModel;
         _requestShutdown = requestShutdown;
         _summaryTable = new Table { ShowHeaderSeparator = true };
-        _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(20);
+        _totalRateSparkline = new Sparkline().MinHeight(1).MaxHeight(1).MinWidth(MinimumSparklineWidth).MaxWidth(80);
         _fileTable = new Table { ShowHeaderSeparator = true };
         _logsText = new TextBlock { Wrap = false };
         _root = CreateRoot();
@@ -190,7 +191,10 @@ public sealed class PerfMonitorDisplay
 
     void UpdateThroughputChart()
     {
-        var history = _viewModel.GetTotalRateHistorySnapshot();
+        var history = LimitSparklinePoints(
+            _viewModel.GetTotalRateHistorySnapshot(),
+            GetDynamicWidth(reservedColumnsWidth: 60));
+
         SparklineExtensions.Values(_totalRateSparkline, history);
         _totalRateSparkline.Minimum = 0;
         _totalRateSparkline.Maximum = history.Length == 0 ? 1 : Math.Max(1, history.Max());
@@ -293,12 +297,36 @@ public sealed class PerfMonitorDisplay
     {
         try
         {
-            return Math.Max(MinimumDynamicTextWidth, Console.WindowWidth - reservedColumnsWidth);
+            return Math.Max(MinimumDynamicTextWidth, Math.Min(Console.WindowWidth, Console.BufferWidth) - reservedColumnsWidth);
         }
         catch (IOException)
         {
             return MinimumDynamicTextWidth;
         }
+    }
+
+    static double[] LimitSparklinePoints(double[] values, int maxPoints)
+    {
+        maxPoints = Math.Max(MinimumSparklineWidth, maxPoints);
+        if (values.Length <= maxPoints)
+            return values;
+
+        var result = new double[maxPoints];
+        for (var i = 0; i < maxPoints; i++)
+        {
+            var start = i * values.Length / maxPoints;
+            var end = Math.Max(start + 1, (i + 1) * values.Length / maxPoints);
+            var total = 0.0;
+
+            for (var j = start; j < end; j++)
+            {
+                total += values[j];
+            }
+
+            result[i] = total / (end - start);
+        }
+
+        return result;
     }
 
     static string TrimForDisplay(string value, int maxLength)
