@@ -42,6 +42,7 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfCapture.Tests", "PerfCapture.Tests\PerfCapture.Tests.csproj", "{40E24476-E0DD-4663-A0CB-1F59B7FB30DC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Plank.Fuzz", "Plank\Plank.Fuzz\Plank.Fuzz.csproj", "{D18DD943-7EFB-4E35-9F49-98EE02FF77CD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerfConverter.E2E.Tests", "PerfConverter.E2E.Tests\PerfConverter.E2E.Tests.csproj", "{202571B5-309A-B71D-7FEF-95E2929125DA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -221,6 +222,18 @@ Global
 		{D18DD943-7EFB-4E35-9F49-98EE02FF77CD}.Release|x64.Build.0 = Release|Any CPU
 		{D18DD943-7EFB-4E35-9F49-98EE02FF77CD}.Release|x86.ActiveCfg = Release|Any CPU
 		{D18DD943-7EFB-4E35-9F49-98EE02FF77CD}.Release|x86.Build.0 = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|x64.Build.0 = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Debug|x86.Build.0 = Debug|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|x64.ActiveCfg = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|x64.Build.0 = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|x86.ActiveCfg = Release|Any CPU
+		{202571B5-309A-B71D-7FEF-95E2929125DA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

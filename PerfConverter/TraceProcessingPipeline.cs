@@ -1,4 +1,4 @@
-using System.Threading.Channels;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using PerfConverter.Persistence;
 using PerfConverter.Persistence.Plank;
@@ -11,10 +11,10 @@ public sealed class TraceProcessingPipeline : IDisposable
 
     readonly ParquetPersistenceLifetime _persistenceLifetime;
     readonly TraceProcessor _traceProcessor;
-    readonly Channel<PendingTraceSample> _pendingSamples;
-    readonly Channel<ResolvedTraceSample> _resolvedSamples;
-    readonly Task[] _resolverTasks;
-    readonly Task _commitTask;
+    readonly BlockingCollection<PendingTraceSample> _pendingSamples;
+    readonly BlockingCollection<ResolvedTraceSample> _resolvedSamples;
+    readonly Thread[] _resolverThreads;
+    readonly Thread _commitThread;
     readonly object _exceptionGate = new();
     readonly int _capacity;
     Exception? _exception;
@@ -28,24 +28,26 @@ public sealed class TraceProcessingPipeline : IDisposable
         _persistenceLifetime = persistenceLifetime;
         _capacity = capacity;
         _traceProcessor = new TraceProcessor(_persistenceLifetime.CreateTraceBatcher);
-        _pendingSamples = Channel.CreateBounded<PendingTraceSample>(new BoundedChannelOptions(capacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = false,
-            SingleWriter = true
-        });
-        _resolvedSamples = Channel.CreateBounded<ResolvedTraceSample>(new BoundedChannelOptions(capacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false
-        });
+        _pendingSamples = new BlockingCollection<PendingTraceSample>(capacity);
+        _resolvedSamples = new BlockingCollection<ResolvedTraceSample>(capacity);
 
-        _resolverTasks = new Task[resolverCount];
-        for (var i = 0; i < _resolverTasks.Length; i++)
-            _resolverTasks[i] = Task.Run(ResolveLoop);
+        _resolverThreads = new Thread[resolverCount];
+        for (var i = 0; i < _resolverThreads.Length; i++)
+        {
+            _resolverThreads[i] = new Thread(ResolveLoop)
+            {
+                IsBackground = true,
+                Name = $"PerfConverterResolver{i}"
+            };
+            _resolverThreads[i].Start();
+        }
 
-        _commitTask = Task.Run(CommitLoop);
+        _commitThread = new Thread(CommitLoop)
+        {
+            IsBackground = true,
+            Name = "PerfConverterCommit"
+        };
+        _commitThread.Start();
     }
 
     public static TraceProcessingPipeline Create()
@@ -72,7 +74,7 @@ public sealed class TraceProcessingPipeline : IDisposable
             Address: address);
 
         var start = Stopwatch.GetTimestamp();
-        _pendingSamples.Writer.WriteAsync(pending).AsTask().GetAwaiter().GetResult();
+        _pendingSamples.Add(pending);
         PerfConverterMetrics.PipelineStageElapsed("enqueue.pending", Stopwatch.GetTimestamp() - start);
         PerfConverterMetrics.PipelineQueueDepth("pending", Interlocked.Increment(ref _pendingDepth), _capacity);
         ThrowIfFaulted();
@@ -83,13 +85,15 @@ public sealed class TraceProcessingPipeline : IDisposable
         if (_disposed)
             return;
 
-        _pendingSamples.Writer.TryComplete();
+        _pendingSamples.CompleteAdding();
 
         try
         {
-            Task.WaitAll(_resolverTasks);
-            _resolvedSamples.Writer.TryComplete();
-            _commitTask.GetAwaiter().GetResult();
+            foreach (var resolverThread in _resolverThreads)
+                resolverThread.Join();
+
+            _resolvedSamples.CompleteAdding();
+            _commitThread.Join();
         }
         catch (Exception ex)
         {
@@ -104,11 +108,11 @@ public sealed class TraceProcessingPipeline : IDisposable
         ThrowIfFaulted();
     }
 
-    async Task ResolveLoop()
+    void ResolveLoop()
     {
         try
         {
-            await foreach (var pending in _pendingSamples.Reader.ReadAllAsync())
+            foreach (var pending in _pendingSamples.GetConsumingEnumerable())
             {
                 PerfConverterMetrics.PipelineQueueDepth("pending", Interlocked.Decrement(ref _pendingDepth), _capacity);
 
@@ -125,7 +129,7 @@ public sealed class TraceProcessingPipeline : IDisposable
                 }
 
                 start = Stopwatch.GetTimestamp();
-                await _resolvedSamples.Writer.WriteAsync(new ResolvedTraceSample(
+                _resolvedSamples.Add(new ResolvedTraceSample(
                     pending.Sequence,
                     pending.Sample,
                     pending.Ip,
@@ -139,19 +143,19 @@ public sealed class TraceProcessingPipeline : IDisposable
         catch (Exception ex)
         {
             CaptureException(ex);
-            _pendingSamples.Writer.TryComplete(ex);
-            _resolvedSamples.Writer.TryComplete(ex);
+            _pendingSamples.CompleteAdding();
+            _resolvedSamples.CompleteAdding();
         }
     }
 
-    async Task CommitLoop()
+    void CommitLoop()
     {
         var nextSequence = 0UL;
         var pendingBySequence = new SortedDictionary<ulong, ResolvedTraceSample>();
 
         try
         {
-            await foreach (var resolved in _resolvedSamples.Reader.ReadAllAsync())
+            foreach (var resolved in _resolvedSamples.GetConsumingEnumerable())
             {
                 PerfConverterMetrics.PipelineQueueDepth("resolved", Interlocked.Decrement(ref _resolvedDepth), _capacity);
                 pendingBySequence.Add(resolved.Sequence, resolved);
@@ -175,8 +179,8 @@ public sealed class TraceProcessingPipeline : IDisposable
         catch (Exception ex)
         {
             CaptureException(ex);
-            _pendingSamples.Writer.TryComplete(ex);
-            _resolvedSamples.Writer.TryComplete(ex);
+            _pendingSamples.CompleteAdding();
+            _resolvedSamples.CompleteAdding();
         }
     }
 
